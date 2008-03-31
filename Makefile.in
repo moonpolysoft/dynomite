@@ -1,0 +1,60 @@
+# NOTE:
+#  You must implement the check and install targets for
+#  this package type.
+#
+
+.PHONY: check install
+	
+
+pkgconfigdir = $(libdir)/pkgconfig
+pkgconfig_DATA = @PACKAGE_NAME@-@MAJOR_VERSION@.pc
+
+@PACKAGE_NAME@-@MAJOR_VERSION@.pc: pkgconfig-template.pc
+	ln -f pkgconfig-template.pc @PACKAGE_NAME@-@MAJOR_VERSION@.pc
+
+package powerpack: $(wildcard *.yaml)
+	@if test "@prefix@" != "/p" ; then \
+	  echo "failed: prefix \"@prefix@\" invalid; make powerpack requires a prefix of /p" ; \
+	  exit 1 ; \
+	fi
+	@if test -d PowerPack ; then rm -rf PowerPack; fi
+	@if test -d .pkgtmp ; then rm -rf .pkgtmp; fi
+	$(MAKE) DESTDIR=`pwd`/.pkgtmp install
+	@for yaml_target in $^; do \
+	  pp_create.rb $$yaml_target --target=@cv_sys_path@ ; \
+	done
+
+package-upload powepack-upload: powerpack
+	@if svn status 2>/dev/null | @EGREP@ -q '^[ACDMR]' ; then \
+	  echo "failure: workarea has modified files; you must commit before upload" >&2; \
+	  exit 1; \
+	fi
+	@cur_loc=`svn info ChangeLog | @AWK@ '/^URL/ {print $$2}'` ; \
+  if echo $$cur_loc | @EGREP@ -vq 'release/[^/]+/ChangeLog$$'; then \
+	  if echo $$cur_loc | @EGREP@ -vq 'dev/ChangeLog$$'; then \
+      echo "failure: can only upload from dev or release branches" >&2 ; \
+      exit 1; \
+    fi ; \
+    release_loc=`echo $$cur_loc | sed 's,dev/ChangeLog,release/@PACKAGE_VERSION@,'` ; \
+    if svn info $$release_loc 2>/dev/null | @EGREP@ -q '^Path:'; then \
+      echo "failure: version @PACKAGE_VERSION@ has already been released" >&2 ; \
+      exit 1; \
+    fi ; \
+    if ! svn copy . $$release_loc -m '"release tag @PACKAGE_NAME@ (@PACKAGE_VERSION@)"' ; then \
+      echo "failure: unable to create release in $$release_loc" >&2 ; \
+      exit 1; \
+    fi ; \
+  fi
+	@for yaml in *.yaml; do \
+	  rpm_name=`@AWK@ '/^PKG_NAME/ {N=$$2} /^PKG_VERSION/ {V=$$2} /^PKG_RELEASE/ {R=$$2} END {print N"-"V"-"R}' $$yaml`.@cv_sys_path@.rpm ; \
+	  if test -e $$rpm_name; then \
+	    pp_add.rb $$rpm_name ; \
+	  fi ; \
+	done
+
+maintainer-clean-local:
+	-rm -f xle.spec *.pc
+	-rm -rf autom4te.cache
+	if test -d PowerPack ; then rm -rf PowerPack; fi
+	if test -d .pkgtmp ; then rm -rf .pkgtmp; fi
+

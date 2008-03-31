@@ -1,0 +1,189 @@
+#!/bin/sh
+
+# 
+# GNU Autotools bootstrap script
+# bones-0.0.79
+#
+
+datadir="/p/share"
+
+bones_home="${datadir}/bones"
+bones_version="0.0.79"
+
+include_dir="bones-common"
+link_common="yes"
+
+lt_flags="--automake"
+ah_flags="--force"
+am_flags="--add-missing"
+cf_flags="--config-cache"
+
+want_auto_configure=${BONES_AUTOCONF:+true}
+
+force_all=
+need_automake=
+need_configure=
+
+fail () { echo "$0: failure: $*" >&2; exit 1; }
+
+check_age ()
+{
+  for file in $*; do
+    if test -z "$need_automake" -a -e ${file}.am -a ${file}.am -nt ${file}.in ; then
+      need_automake=true
+      need_configure=true
+      break;
+    elif test -z "$need_configure" -a -e ${file}.in -a ${file}.in -nt ${file} -o ! -e ${file}.in ; then
+      need_configure=true
+    fi
+  done
+
+  if test -z "${need_configure}" -a -e "$1" ; then
+    dbpath=$(rpm --eval='%_dbpath' 2>/dev/null)
+
+    test -n "${dbpath}" || fail "unable to find rpm database directory"
+    if test "${dbpath}/Packages" -nt "$1" ; then
+      unlink config.cache 2>/dev/null
+      need_configure=true
+    fi
+  fi
+}
+
+try ()
+{
+  echo "+ $*"
+  $* || exit 1
+}
+
+
+find_exec ()
+{
+	var_name=$1
+	shift
+
+	while [ $# -ne 0 ]; do
+		exec_path=`which $1 | grep '^/'`
+		if test -n "$exec_path" -a -x "$exec_path" ; then
+			eval $var_name='$1'
+			break
+		fi
+		shift
+	done
+}
+
+
+usage ()
+{
+  cat <<-EOF
+	Usage: bootstrap [options]
+	Options:
+  -f   force regeneration of all needed files
+  -F   adds force flag to automake
+  -i   specify alternate include directory (currently ${include_dir})
+  -n   disable automatic execution of configure
+  -N   disable automatic include symbolic link generation
+EOF
+  exit 1
+}
+
+#
+# Process command line options
+#
+
+while getopts fFhnNi: opt; do
+  case "$opt" in
+    f) force_all=true
+       ;;
+    F) am_flags="${am_flags} --force-missing"
+       ;;
+    i) include_dir="$OPTARG"; 
+       ;;
+    n) unset want_auto_configure
+       ;;
+    N) unset link_common
+       ;;
+    h|*) usage
+       ;;
+  esac
+done
+
+shift $((OPTIND - 1))
+
+#
+# Create symbolic link to shared files area
+#
+
+if test -n "${link_common}"; then
+  bones_major="$(expr $bones_version : '\([^.]*\)')"
+  test -h ${include_dir} || ln -s ${bones_home}/common-${bones_major} ${include_dir}
+fi
+
+if test -x "${include_dir}/bootstrap-chain"; then
+  exec "${include_dir}/bootstrap-chain"
+elif test -r "${include_dir}/bootstrap-include"; then
+  source "${include_dir}/bootstrap-include"
+fi
+
+#
+# Find our configure template
+#
+
+if test -f configure.ac; then
+  configure_ac=configure.ac
+elif test -f configure.in; then
+  configure_ac=configure.in
+else
+  echo "$0: \`configure.ac' does not exist" 1>&2
+  exit 1
+fi
+
+if test -n "${force_all}"; then
+  rm -rf ./autom4te.cache 2>/dev/null
+  touch *.ac *.am 2>/dev/null
+fi
+  
+#
+# Use autoconf to determine what features this configure.ac requires
+# Execute those for which their output is stale
+#
+
+test -n "${force_all}" -o ${configure_ac} -nt aclocal.m4 && try aclocal -I ${include_dir} 
+
+autoconf -t AM_INIT_AUTOMAKE -t AC_CONFIG_HEADERS -t AM_PROG_LIBTOOL -t AC_CONFIG_FILES |
+  awk -F: '/AC_CONFIG_FILES/   { print "0 ca "$NF } \
+           /AM_PROG_LIBTOOL/   { print "1 lt "$NF } \
+           /AC_CONFIG_HEADERS/ { print "2 ah "$NF } \
+           /AM_INIT_AUTOMAKE/  { print "3 am "$NF }
+           END                 { print "9 en"     }' |
+  sort -un |
+  while read ord command args; do
+    case "$command" in
+      ca) check_age $args 
+          ;;
+      lt) find_exec my_libtoolize libtoolize glibtoolize
+          try ${my_libtoolize} ${lt_flags}
+          ;;
+      ah) if test -n "${force_all}" -o ${configure_ac} -nt "${args}.in" ; then
+            try autoheader ${ah_flags}
+            if test "${args}.in" -nt ${configure_ac} ; then
+              need_configure=true
+            elif test -e "${args}.in" ; then
+              touch "${args}.in"
+            fi
+          fi
+          ;;
+      am) test -n "${force_all}" -o -n "${need_automake}" && try automake ${am_flags}
+          ;;
+      en) if test -n "${force_all}" -o ${configure_ac} -nt configure ; then
+            try autoconf -I ${include_dir}
+            need_configure=true
+          fi
+          if test -n "${need_configure}" ; then
+            echo "* configure required"
+            test -n "${want_auto_configure}" && exec ./configure ${cf_flags} $*
+          fi
+          ;;
+    esac
+  done
+
+exit 0
