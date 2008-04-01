@@ -13,14 +13,18 @@
 
 -behaviour(gen_server).
 
+-define(SERVER, membership).
+-define(VIRTUALNODES, 100).
+
 %% API
--export([start_link/0]).
+-export([start_link/0, join_ring/1, hash_ring/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
 -record(membership, {hash_ring, member_table}).
+
 
 %%====================================================================
 %% API
@@ -31,7 +35,13 @@
 %% @end 
 %%--------------------------------------------------------------------
 start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+    gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
+
+join_ring(Node) ->
+	gen_server:call({global, ?SERVER}, {join_ring, Node}).
+	
+hash_ring() ->
+	gen_server:call({global, ?SERVER}, hash_ring).
 
 %%====================================================================
 %% gen_server callbacks
@@ -46,9 +56,10 @@ start_link() ->
 %% @end 
 %%--------------------------------------------------------------------
 init([]) ->
-		Table = dict:new(),
-		VirtualNodes = generate_nodes(),
-    {ok, #membership{hash_ring = [], member_table = Table}}.
+		VirtualNodes = virtual_nodes(node()),
+		Table = map_nodes_to_table(VirtualNodes, node(), dict:new()),
+		HashRing = add_nodes_to_ring(VirtualNodes, []),
+    {ok, #membership{hash_ring = HashRing, member_table = Table}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -61,9 +72,20 @@ init([]) ->
 %% @doc Handling call messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_call(_Request, _From, State) ->
-    Reply = ok,
-    {reply, Reply, State}. 
+
+handle_call({join_ring, Node}, _From, State) ->
+	case dict:is_key(Node, State#membership.member_table) of
+		true -> {reply, duplicate, State};
+		false -> 
+			VirtualNodes = virtual_nodes(Node),
+			{reply, added, #membership{
+				hash_ring=add_nodes_to_ring(VirtualNodes, State#membership.hash_ring),
+				member_table=map_nodes_to_table(VirtualNodes, Node, State#membership.member_table)
+			}}
+	end;
+
+handle_call(hash_ring, _From, State) ->
+	{reply, State#membership.hash_ring, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -107,3 +129,25 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+
+virtual_nodes(Node) ->
+	virtual_nodes(Node, 1).
+	
+virtual_nodes(Node, Bias) ->
+	lists:map(
+		fun(I) -> 
+			erlang:phash2([I|atom_to_list(Node)])
+		end,
+		lists:seq(1, ?VIRTUALNODES * Bias)
+	).
+	
+map_nodes_to_table(VirtualNodes, Node, Table) ->
+	lists:foldl(
+		fun(VirtualNode, AccTable) ->
+			dict:store(VirtualNode, Node, AccTable)
+		end, Table, VirtualNodes
+	).
+	
+add_nodes_to_ring(VirtualNodes, HashRing) ->
+	% HashRing should be pre-sorted
+	lists:merge(lists:sort(VirtualNodes), HashRing).

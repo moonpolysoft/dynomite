@@ -1,3 +1,3 @@
 The dynomite datastore protocol has two basic operations: get and put.
 
-packet_length get keyblah
+packet_length get key
