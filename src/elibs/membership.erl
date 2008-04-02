@@ -17,7 +17,7 @@
 -define(VIRTUALNODES, 100).
 
 %% API
--export([start_link/0, join_ring/1, hash_ring/0]).
+-export([start_link/0, join_ring/1, hash_ring/0, server_for_key/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -26,7 +26,7 @@
 -record(membership, {hash_ring, member_table}).
 
 %testing
--compile(export_all).
+% -compile(export_all).
 
 
 %%====================================================================
@@ -38,7 +38,7 @@
 %% @end 
 %%--------------------------------------------------------------------
 start_link() ->
-    gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
+  gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
 
 join_ring(Node) ->
 	gen_server:call({global, ?SERVER}, {join_ring, Node}).
@@ -80,15 +80,7 @@ init([]) ->
 %%--------------------------------------------------------------------
 
 handle_call({join_ring, Node}, _From, State) ->
-	case dict:is_key(Node, State#membership.member_table) of
-		true -> {reply, duplicate, State};
-		false -> 
-			VirtualNodes = virtual_nodes(Node),
-			{reply, added, #membership{
-				hash_ring=add_nodes_to_ring(VirtualNodes, State#membership.hash_ring),
-				member_table=map_nodes_to_table(VirtualNodes, Node, State#membership.member_table)
-			}}
-	end;
+	int_join_ring(Node, State);
 
 handle_call(hash_ring, _From, State) ->
 	{reply, State#membership.hash_ring, State};
@@ -139,6 +131,16 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+int_join_ring(Node, State) ->
+	case dict:is_key(Node, State#membership.member_table) of
+		true -> {reply, duplicate, State};
+		false -> 
+			VirtualNodes = virtual_nodes(Node),
+			{reply, added, #membership{
+				hash_ring=add_nodes_to_ring(VirtualNodes, State#membership.hash_ring),
+				member_table=map_nodes_to_table(VirtualNodes, Node, State#membership.member_table)
+			}}
+	end.
 
 virtual_nodes(Node) ->
 	virtual_nodes(Node, 1).
@@ -163,11 +165,11 @@ add_nodes_to_ring(VirtualNodes, HashRing) ->
 	lists:merge(lists:sort(VirtualNodes), HashRing).
 	
 nearest_server(Code, #membership{hash_ring=Ring, member_table=Table}) ->
-	case nearest_server(Code, Ring) of
-		first -> lists:head()
-	end
-	ServerCode = nearest_server(Code, Ring),
-	dict:fetch(ServerCode, Table).
+	ServerCode = case nearest_server(Code, Ring) of
+		first -> nearest_server(0, Ring);
+		FoundCode -> FoundCode
+	end,
+	dict:fetch(ServerCode, Table);
 	
 nearest_server(Code, [ServerKey|Tail]) ->
 	case Code < ServerKey of
@@ -175,4 +177,4 @@ nearest_server(Code, [ServerKey|Tail]) ->
 		false -> nearest_server(Code, Tail)
 	end;
 
-nearest_server(Code, []) -> first;
+nearest_server(_Code, []) -> first.
