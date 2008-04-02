@@ -9,7 +9,7 @@
 %%% @since 2008-03-30 by Cliff Moon
 %%%-------------------------------------------------------------------
 -module(membership).
--author('').
+-author('Cliff Moon').
 
 -behaviour(gen_server).
 
@@ -25,9 +25,9 @@
 
 -record(membership, {hash_ring, member_table}).
 
-%testing
-% -compile(export_all).
-
+-ifdef(TEST).
+-include("etest/membership_test.erl").
+-endif.
 
 %%====================================================================
 %% API
@@ -62,10 +62,7 @@ server_for_key(Key) ->
 %% @end 
 %%--------------------------------------------------------------------
 init([]) ->
-		VirtualNodes = virtual_nodes(node()),
-		Table = map_nodes_to_table(VirtualNodes, node(), dict:new()),
-		HashRing = add_nodes_to_ring(VirtualNodes, []),
-    {ok, #membership{hash_ring = HashRing, member_table = Table}}.
+		{ok, create_membership_state([node()])}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -131,6 +128,19 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+
+create_membership_state(Nodes) ->
+	create_membership_state(Nodes, [], dict:new()).
+
+create_membership_state([], HashRing, Table) ->
+	{ok, #membership{hash_ring=HashRing,member_table=Table}};
+
+create_membership_state([Node|Tail], HashRing, Table) ->
+	VirtualNodes = virtual_nodes(Node),
+	create_membership_state(Tail,
+		add_nodes_to_ring(VirtualNodes, HashRing),
+		map_nodes_to_table(VirtualNodes, Node, Table)).
+
 int_join_ring(Node, State) ->
 	case dict:is_key(Node, State#membership.member_table) of
 		true -> {reply, duplicate, State};
@@ -178,3 +188,11 @@ nearest_server(Code, [ServerKey|Tail]) ->
 	end;
 
 nearest_server(_Code, []) -> first.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% TESTES
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% int_join_ring_test() ->
+% 	State = create_membership_state([one, two, three]).
+	
