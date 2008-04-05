@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1]).
+-export([start_link/2, get/1, put/2, has_key/1, delete/1, close/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -22,7 +22,7 @@
 
 -define(SERVER, storage).
 
--record(storage, {module, token}).
+-record(storage, {module,table}).
 
 -ifdef(TEST).
 -include("etest/storage_server_test.erl").
@@ -36,14 +36,23 @@
 %% @doc Starts the server
 %% @end 
 %%--------------------------------------------------------------------
-start_link(StorageModule) ->
-   gen_server:start_link({global, ?SERVER}, ?MODULE, StorageModule, []).
+start_link(StorageModule, DbKey) ->
+   gen_server:start_link({global, ?SERVER}, ?MODULE, {StorageModule,DbKey}, []).
 
 get(Key) ->
 	gen_server:call({global, ?SERVER}, {get, Key}).
 	
 put(Key, Value) ->
 	gen_server:call({global, ?SERVER}, {put, Key, Value}).
+	
+has_key(Key) ->
+	gen_server:call({global, ?SERVER}, {has_key, Key}).
+	
+delete(Key) ->
+	gen_server:call({global, ?SERVER}, {delete, Key}).
+
+close() ->
+	gen_server:call({global, ?SERVER}, close).
 
 %%====================================================================
 %% gen_server callbacks
@@ -58,7 +67,7 @@ put(Key, Value) ->
 %% @end 
 %%--------------------------------------------------------------------
 init({StorageModule,DbKey}) ->
-   {ok, #storage{}}.
+   {ok, #storage{module=StorageModule,table=StorageModule:open(DbKey)}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -71,9 +80,20 @@ init({StorageModule,DbKey}) ->
 %% @doc Handling call messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_call(_Request, _From, State) ->
-  Reply = ok,
-  {reply, Reply, State}.
+handle_call({get, Key}, _From, State = #storage{module=Module,table=Table}) ->
+	{reply, Module:get(Key, Table), State};
+	
+handle_call({put, Key, Value}, _From, State = #storage{module=Module,table=Table}) ->
+	{reply, ok, State#storage{table=Module:put(Key,Value,Table)}};
+	
+handle_call({has_key, Key}, _From, State = #storage{module=Module,table=Table}) ->
+	{reply, Module:has_key(Key,Table), State};
+	
+handle_call({delete, Key}, _From, State = #storage{module=Module,table=Table}) ->
+	{reply, ok, State#storage{table=Module:delete(Key,Table)}};
+	
+handle_call(close, _From, State) ->
+	{stop, close, ok, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -103,8 +123,8 @@ handle_info(_Info, State) ->
 %% The return value is ignored.
 %% @end 
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
-  ok.
+terminate(_Reason, #storage{module=Module,table=Table}) ->
+  Module:close(Table).
 
 %%--------------------------------------------------------------------
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
