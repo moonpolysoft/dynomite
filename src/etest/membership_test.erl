@@ -6,7 +6,6 @@ nearest_server_test() ->
 	2 = nearest_server(1, [1,2,3]),
 	3 = nearest_server(2, [1,2,3]),
 	first = nearest_server(3, [1,2,3]),
-	io:format("ooga~n"),
 	State = mock_state([{1,one},{2,two},{3,three}]),
 	two = nearest_server(1, State),
 	one = nearest_server(6, State).

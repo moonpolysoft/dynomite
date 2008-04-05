@@ -1,68 +1,64 @@
 %%%-------------------------------------------------------------------
-%%% File:      untitled.erl
+%%% File:      storage_server.erl
 %%% @author    Cliff Moon <> []
 %%% @copyright 2008 Cliff Moon
-%%% @doc  Membership process keeps track of dynomite node membership.  Maintains a version history.
+%%% @doc  
 %%%
 %%% @end  
 %%%
-%%% @since 2008-03-30 by Cliff Moon
+%%% @since 2008-04-02 by Cliff Moon
 %%%-------------------------------------------------------------------
--module(membership).
+-module(storage_server).
 -author('Cliff Moon').
 
 -behaviour(gen_server).
 
--define(SERVER, membership).
--define(VIRTUALNODES, 100).
-
 %% API
--export([start_link/0, join_ring/1, hash_ring/0, server_for_key/1]).
+-export([start_link/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(membership, {hash_ring, member_table}).
+-define(SERVER, storage).
+
+-record(storage, {module, token}).
 
 -ifdef(TEST).
--include("etest/membership_test.erl").
+-include("etest/storage_server_test.erl").
 -endif.
 
 %%====================================================================
 %% API
 %%====================================================================
 %%--------------------------------------------------------------------
-%% @spec start_link() -> {ok,Pid} | ignore | {error,Error}
+%% @spec start_link(StorageModule) -> {ok,Pid} | ignore | {error,Error}
 %% @doc Starts the server
 %% @end 
 %%--------------------------------------------------------------------
-start_link() ->
-  gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
+start_link(StorageModule) ->
+   gen_server:start_link({global, ?SERVER}, ?MODULE, StorageModule, []).
 
-join_ring(Node) ->
-	gen_server:call({global, ?SERVER}, {join_ring, Node}).
+get(Key) ->
+	gen_server:call({global, ?SERVER}, {get, Key}).
 	
-hash_ring() ->
-	gen_server:call({global, ?SERVER}, hash_ring).
-	
-server_for_key(Key) ->
-	gen_server:call({global, ?SERVER}, {server_for_key, Key}).
+put(Key, Value) ->
+	gen_server:call({global, ?SERVER}, {put, Key, Value}).
 
 %%====================================================================
 %% gen_server callbacks
 %%====================================================================
 
 %%--------------------------------------------------------------------
-%% @spec init(Args) -> {ok, State} |
+%% @spec init({StorageModule,DbKey}) -> {ok, State} |
 %%                         {ok, State, Timeout} |
 %%                         ignore               |
 %%                         {stop, Reason}
 %% @doc Initiates the server
 %% @end 
 %%--------------------------------------------------------------------
-init([]) ->
-		{ok, create_membership_state([node()])}.
+init({StorageModule,DbKey}) ->
+   {ok, #storage{}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -75,16 +71,9 @@ init([]) ->
 %% @doc Handling call messages
 %% @end 
 %%--------------------------------------------------------------------
-
-handle_call({join_ring, Node}, _From, State) ->
-	int_join_ring(Node, State);
-
-handle_call(hash_ring, _From, State) ->
-	{reply, State#membership.hash_ring, State};
-	
-handle_call({server_for_key, Key}, _From, State) ->
-	KeyHash = erlang:phash2(Key),
-	{reply, nearest_server(KeyHash, State), State}.
+handle_call(_Request, _From, State) ->
+  Reply = ok,
+  {reply, Reply, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -94,7 +83,7 @@ handle_call({server_for_key, Key}, _From, State) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_cast(_Msg, State) ->
-    {noreply, State}.
+  {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_info(Info, State) -> {noreply, State} |
@@ -104,7 +93,7 @@ handle_cast(_Msg, State) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_info(_Info, State) ->
-    {noreply, State}.
+  {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @spec terminate(Reason, State) -> void()
@@ -115,7 +104,7 @@ handle_info(_Info, State) ->
 %% @end 
 %%--------------------------------------------------------------------
 terminate(_Reason, _State) ->
-    ok.
+  ok.
 
 %%--------------------------------------------------------------------
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
@@ -123,68 +112,8 @@ terminate(_Reason, _State) ->
 %% @end 
 %%--------------------------------------------------------------------
 code_change(_OldVsn, State, _Extra) ->
-    {ok, State}.
+  {ok, State}.
 
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
-
-create_membership_state(Nodes) ->
-	create_membership_state(Nodes, [], dict:new()).
-
-create_membership_state([], HashRing, Table) ->
-	{ok, #membership{hash_ring=HashRing,member_table=Table}};
-
-create_membership_state([Node|Tail], HashRing, Table) ->
-	VirtualNodes = virtual_nodes(Node),
-	create_membership_state(Tail,
-		add_nodes_to_ring(VirtualNodes, HashRing),
-		map_nodes_to_table(VirtualNodes, Node, Table)).
-
-int_join_ring(Node, State) ->
-	case dict:is_key(Node, State#membership.member_table) of
-		true -> {reply, duplicate, State};
-		false -> 
-			VirtualNodes = virtual_nodes(Node),
-			{reply, added, #membership{
-				hash_ring=add_nodes_to_ring(VirtualNodes, State#membership.hash_ring),
-				member_table=map_nodes_to_table(VirtualNodes, Node, State#membership.member_table)
-			}}
-	end.
-
-virtual_nodes(Node) ->
-	virtual_nodes(Node, 1).
-	
-virtual_nodes(Node, Bias) ->
-	lists:map(
-		fun(I) -> 
-			erlang:phash2([I|atom_to_list(Node)])
-		end,
-		lists:seq(1, ?VIRTUALNODES * Bias)
-	).
-	
-map_nodes_to_table(VirtualNodes, Node, Table) ->
-	lists:foldl(
-		fun(VirtualNode, AccTable) ->
-			dict:store(VirtualNode, Node, AccTable)
-		end, Table, VirtualNodes
-	).
-	
-add_nodes_to_ring(VirtualNodes, HashRing) ->
-	% HashRing should be pre-sorted
-	lists:merge(lists:sort(VirtualNodes), HashRing).
-	
-nearest_server(Code, #membership{hash_ring=Ring, member_table=Table}) ->
-	ServerCode = case nearest_server(Code, Ring) of
-		first -> nearest_server(0, Ring);
-		FoundCode -> FoundCode
-	end,
-	dict:fetch(ServerCode, Table);
-	
-nearest_server(Code, [ServerKey|Tail]) ->
-	case Code < ServerKey of
-		true -> ServerKey;
-		false -> nearest_server(Code, Tail)
-	end;
-
-nearest_server(_Code, []) -> first.
