@@ -14,15 +14,13 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/2, get/1, put/2, has_key/1, delete/1, close/0]).
+-export([start_link/3, get/2, put/3, has_key/2, delete/2, close/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--define(SERVER, storage).
-
--record(storage, {module,table}).
+-record(storage, {module,table,name}).
 
 -ifdef(TEST).
 -include("etest/storage_server_test.erl").
@@ -36,23 +34,23 @@
 %% @doc Starts the server
 %% @end 
 %%--------------------------------------------------------------------
-start_link(StorageModule, DbKey) ->
-   gen_server:start_link({global, ?SERVER}, ?MODULE, {StorageModule,DbKey}, []).
+start_link(StorageModule, DbKey, Name) ->
+   gen_server:start_link({global, Name}, ?MODULE, {StorageModule,DbKey,Name}, []).
 
-get(Key) ->
-	gen_server:call({global, ?SERVER}, {get, Key}).
+get(Name, Key) ->
+	gen_server:call({global, Name}, {get, Key}).
 	
-put(Key, Value) ->
-	gen_server:call({global, ?SERVER}, {put, Key, Value}).
+put(Name, Key, Value) ->
+	gen_server:call({global, Name}, {put, Key, Value}).
 	
-has_key(Key) ->
-	gen_server:call({global, ?SERVER}, {has_key, Key}).
+has_key(Name, Key) ->
+	gen_server:call({global, Name}, {has_key, Key}).
 	
-delete(Key) ->
-	gen_server:call({global, ?SERVER}, {delete, Key}).
+delete(Name, Key) ->
+	gen_server:call({global, Name}, {delete, Key}).
 
-close() ->
-	gen_server:call({global, ?SERVER}, close).
+close(Name) ->
+	gen_server:call({global, Name}, close).
 
 %%====================================================================
 %% gen_server callbacks
@@ -66,8 +64,8 @@ close() ->
 %% @doc Initiates the server
 %% @end 
 %%--------------------------------------------------------------------
-init({StorageModule,DbKey}) ->
-   {ok, #storage{module=StorageModule,table=StorageModule:open(DbKey)}}.
+init({StorageModule,DbKey,Name}) ->
+   {ok, #storage{module=StorageModule,table=StorageModule:open(DbKey),name=Name}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
