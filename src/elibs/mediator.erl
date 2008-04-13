@@ -1,71 +1,60 @@
 %%%-------------------------------------------------------------------
-%%% File:      storage_server.erl
+%%% File:			 mediator.erl
 %%% @author    Cliff Moon <> []
 %%% @copyright 2008 Cliff Moon
 %%% @doc  
 %%%
 %%% @end  
 %%%
-%%% @since 2008-04-02 by Cliff Moon
+%%% @since 2008-04-12 by Cliff Moon
 %%%-------------------------------------------------------------------
--module(storage_server).
--author('Cliff Moon').
+-module(mediator).
+-author('cliff moon').
 
 -behaviour(gen_server).
 
 %% API
--export([start_link/3, get/2, put/3, has_key/2, delete/2, close/1]).
+-export([start_link/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(storage, {module,table,name}).
-
--ifdef(TEST).
--include("etest/storage_server_test.erl").
--endif.
+-record(mediator, {
+		storage_servers
+	}).
 
 %%====================================================================
 %% API
 %%====================================================================
 %%--------------------------------------------------------------------
-%% @spec start_link(StorageModule) -> {ok,Pid} | ignore | {error,Error}
+%% @spec start_link() -> {ok,Pid} | ignore | {error,Error}
 %% @doc Starts the server
 %% @end 
 %%--------------------------------------------------------------------
-start_link(StorageModule, DbKey, Name) ->
-   gen_server:start_link({local, Name}, ?MODULE, {StorageModule,DbKey,Name}, []).
+start_link(_) ->
+    gen_server:start_link({global, {node(), mediator}}, ?MODULE, [], []).
 
-get(Name, Key) ->
-	gen_server:call(Name, {get, Key}).
-	
-put(Name, Key, Value) ->
-	gen_server:call(Name, {put, Key, Value}).
-	
-has_key(Name, Key) ->
-	gen_server:call(Name, {has_key, Key}).
-	
-delete(Name, Key) ->
-	gen_server:call(Name, {delete, Key}).
+join(Node) -> {}.
 
-close(Name) ->
-	gen_server:call(Name, close).
+get(Key) -> {}.
+
+set(Key, Value) -> {}.
 
 %%====================================================================
 %% gen_server callbacks
 %%====================================================================
 
 %%--------------------------------------------------------------------
-%% @spec init({StorageModule,DbKey}) -> {ok, State} |
+%% @spec init(Args) -> {ok, State} |
 %%                         {ok, State, Timeout} |
 %%                         ignore               |
 %%                         {stop, Reason}
 %% @doc Initiates the server
 %% @end 
 %%--------------------------------------------------------------------
-init({StorageModule,DbKey,Name}) ->
-   {ok, #storage{module=StorageModule,table=StorageModule:open(DbKey),name=Name}}.
+init([]) ->
+    {ok, #mediator{}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -78,20 +67,9 @@ init({StorageModule,DbKey,Name}) ->
 %% @doc Handling call messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_call({get, Key}, _From, State = #storage{module=Module,table=Table}) ->
-	{reply, Module:get(Key, Table), State};
-	
-handle_call({put, Key, Value}, _From, State = #storage{module=Module,table=Table}) ->
-	{reply, ok, State#storage{table=Module:put(Key,Value,Table)}};
-	
-handle_call({has_key, Key}, _From, State = #storage{module=Module,table=Table}) ->
-	{reply, Module:has_key(Key,Table), State};
-	
-handle_call({delete, Key}, _From, State = #storage{module=Module,table=Table}) ->
-	{reply, ok, State#storage{table=Module:delete(Key,Table)}};
-	
-handle_call(close, _From, State) ->
-	{stop, close, ok, State}.
+handle_call(_Request, _From, State) ->
+    Reply = ok,
+    {reply, Reply, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -101,7 +79,7 @@ handle_call(close, _From, State) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_cast(_Msg, State) ->
-  {noreply, State}.
+    {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_info(Info, State) -> {noreply, State} |
@@ -111,7 +89,7 @@ handle_cast(_Msg, State) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_info(_Info, State) ->
-  {noreply, State}.
+    {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @spec terminate(Reason, State) -> void()
@@ -121,8 +99,8 @@ handle_info(_Info, State) ->
 %% The return value is ignored.
 %% @end 
 %%--------------------------------------------------------------------
-terminate(_Reason, #storage{module=Module,table=Table}) ->
-  Module:close(Table).
+terminate(_Reason, _State) ->
+    ok.
 
 %%--------------------------------------------------------------------
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
@@ -130,7 +108,7 @@ terminate(_Reason, #storage{module=Module,table=Table}) ->
 %% @end 
 %%--------------------------------------------------------------------
 code_change(_OldVsn, State, _Extra) ->
-  {ok, State}.
+    {ok, State}.
 
 %%--------------------------------------------------------------------
 %%% Internal functions

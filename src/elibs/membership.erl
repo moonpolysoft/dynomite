@@ -12,8 +12,6 @@
 -author('Cliff Moon').
 
 -behaviour(gen_server).
-
--define(SERVER, membership).
 -define(VIRTUALNODES, 100).
 
 %% API
@@ -38,16 +36,16 @@
 %% @end 
 %%--------------------------------------------------------------------
 start_link() ->
-  gen_server:start_link({global, ?SERVER}, ?MODULE, [], []).
+  gen_server:start({local, membership}, ?MODULE, [], []).
 
 join_ring(Node) ->
-	gen_server:call({global, ?SERVER}, {join_ring, Node}).
+	gen_server:call(membership, {join_ring, Node}).
 	
 hash_ring() ->
-	gen_server:call({global, ?SERVER}, hash_ring).
+	gen_server:call(membership, hash_ring).
 	
 server_for_key(Key) ->
-	gen_server:call({global, ?SERVER}, {server_for_key, Key}).
+	gen_server:call(membership, {server_for_key, Key}).
 
 %%====================================================================
 %% gen_server callbacks
@@ -133,7 +131,7 @@ create_membership_state(Nodes) ->
 	create_membership_state(Nodes, [], dict:new()).
 
 create_membership_state([], HashRing, Table) ->
-	{ok, #membership{hash_ring=HashRing,member_table=Table}};
+	#membership{hash_ring=HashRing,member_table=Table};
 
 create_membership_state([Node|Tail], HashRing, Table) ->
 	VirtualNodes = virtual_nodes(Node),
