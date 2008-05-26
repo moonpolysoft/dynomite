@@ -60,7 +60,8 @@ server_for_key(Key) ->
 %% @end 
 %%--------------------------------------------------------------------
 init([]) ->
-		{ok, create_membership_state([])}.
+		join_up(nodes()),
+		{ok, create_membership_state([node() | nodes()])}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -75,7 +76,8 @@ init([]) ->
 %%--------------------------------------------------------------------
 
 handle_call({join_ring, Node}, _From, State) ->
-	int_join_ring(Node, State);
+	{Added, NewState} = int_join_ring(Node, State),
+	{reply, Added, NewState};
 
 handle_call(hash_ring, _From, State) ->
 	{reply, State#membership.hash_ring, State};
@@ -91,8 +93,9 @@ handle_call({server_for_key, Key}, _From, State) ->
 %% @doc Handling cast messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+handle_cast({join_ring, Node}, State) ->
+		{_Added, NewState} = int_join_ring(Node, State),
+    {noreply, NewState}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_info(Info, State) -> {noreply, State} |
@@ -126,6 +129,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+join_up([]) -> ok;
+
+join_up([Node|_Nodes]) ->
+	gen_server:cast({membership, Node}, {join_ring, node()}).
 
 create_membership_state(Nodes) ->
 	create_membership_state(Nodes, [], dict:new()).
@@ -141,10 +148,10 @@ create_membership_state([Node|Tail], HashRing, Table) ->
 
 int_join_ring(Node, State) ->
 	case dict:is_key(Node, State#membership.member_table) of
-		true -> {reply, duplicate, State};
+		true -> {duplicate, State};
 		false -> 
 			VirtualNodes = virtual_nodes(Node),
-			{reply, added, #membership{
+			{added, #membership{
 				hash_ring=add_nodes_to_ring(VirtualNodes, State#membership.hash_ring),
 				member_table=map_nodes_to_table(VirtualNodes, Node, State#membership.member_table)
 			}}

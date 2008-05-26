@@ -33,7 +33,7 @@ task :test => [:default] do
   end
   mod_directives = mods.map {|m| "-run #{m} test"}.join(" ")
   # -run #{ENV['MOD']} test
-  sh %Q{erl +K true -smp enable -pz ./etest -pz ./ebin/yaws -pz ./ebin/ -pa ./ebin/eunit -sname local_console_#{$$} -noshell #{mod_directives} -run erlang halt}
+  sh %Q{erl +K true -smp enable -pz ./etest -pz ./ebin/yaws -pz ./ebin/ -pa ./ebin/eunit -sname local_console_#{$$} -mnesia dir '"/tmp/mdb"' -noshell #{mod_directives} -run erlang halt}
 end
 
 task :docs do

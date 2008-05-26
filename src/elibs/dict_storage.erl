@@ -5,7 +5,7 @@
 open(_) -> dict:new().
 
 % noop
-close(Table) -> ok.
+close(_Table) -> ok.
 
 put(Key, Value, Table) ->
 	dict:store(Key, Value, Table).
