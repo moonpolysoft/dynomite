@@ -7,8 +7,9 @@ nearest_server_test() ->
 	3 = nearest_server(2, [1,2,3]),
 	first = nearest_server(3, [1,2,3]),
 	State = mock_state([{1,one},{2,two},{3,three}]),
-	two = nearest_server(1, State),
-	one = nearest_server(6, State).
+	[two] = nearest_server(1, 1, State),
+	[one, two] = nearest_server(6, 2, State),
+	[one, two, three] = nearest_server(6, 3, State).
 
 mock_state(Tuples) ->
 	mock_state(Tuples, [], dict:new()).

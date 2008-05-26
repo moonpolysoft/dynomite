@@ -79,13 +79,13 @@ init({StorageModule,DbKey,Name}) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_call({get, Key}, _From, State = #storage{module=Module,table=Table}) ->
-	{reply, Module:get(Key, Table), State};
+	{reply, {ok, Module:get(Key, Table)}, State};
 	
 handle_call({put, Key, Value}, _From, State = #storage{module=Module,table=Table}) ->
 	{reply, ok, State#storage{table=Module:put(Key,Value,Table)}};
 	
 handle_call({has_key, Key}, _From, State = #storage{module=Module,table=Table}) ->
-	{reply, Module:has_key(Key,Table), State};
+	{reply, {ok, Module:has_key(Key,Table)}, State};
 	
 handle_call({delete, Key}, _From, State = #storage{module=Module,table=Table}) ->
 	{reply, ok, State#storage{table=Module:delete(Key,Table)}};

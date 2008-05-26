@@ -15,7 +15,7 @@
 -define(VIRTUALNODES, 100).
 
 %% API
--export([start_link/0, join_ring/1, hash_ring/0, server_for_key/1]).
+-export([start_link/0, join_ring/1, hash_ring/0, server_for_key/1, server_for_key/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -45,7 +45,10 @@ hash_ring() ->
 	gen_server:call(membership, hash_ring).
 	
 server_for_key(Key) ->
-	gen_server:call(membership, {server_for_key, Key}).
+  gen_server:call(membership, {server_for_key, Key, 1}).
+	
+server_for_key(Key, N) ->
+	gen_server:call(membership, {server_for_key, Key, N}).
 
 %%====================================================================
 %% gen_server callbacks
@@ -82,9 +85,9 @@ handle_call({join_ring, Node}, _From, State) ->
 handle_call(hash_ring, _From, State) ->
 	{reply, State#membership.hash_ring, State};
 	
-handle_call({server_for_key, Key}, _From, State) ->
+handle_call({server_for_key, Key, N}, _From, State) ->
 	KeyHash = erlang:phash2(Key),
-	{reply, nearest_server(KeyHash, State), State}.
+	{reply, nearest_server(KeyHash, N, State), State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -179,15 +182,18 @@ add_nodes_to_ring(VirtualNodes, HashRing) ->
 	% HashRing should be pre-sorted
 	lists:merge(lists:sort(VirtualNodes), HashRing).
 	
-nearest_server(Code, #membership{hash_ring=Ring, member_table=Table}) ->
+nearest_server(_Code, 0, _State) -> [];
+	
+nearest_server(Code, N, State) ->
+  #membership{hash_ring=Ring, member_table=Table} = State,
 	ServerCode = case nearest_server(Code, Ring) of
 		first -> nearest_server(0, Ring);
 		FoundCode -> FoundCode
 	end,
-	dict:fetch(ServerCode, Table);
+	[dict:fetch(ServerCode, Table) | nearest_server(ServerCode, N-1, State)].
 	
 nearest_server(Code, [ServerKey|Tail]) ->
-	case Code < ServerKey of
+	case Code < ServerKey of 
 		true -> ServerKey;
 		false -> nearest_server(Code, Tail)
 	end;

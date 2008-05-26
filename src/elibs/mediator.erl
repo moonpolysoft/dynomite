@@ -1,5 +1,5 @@
 %%%-------------------------------------------------------------------
-%%% File:			 mediator.erl
+%%% File:      mediator.erl
 %%% @author    Cliff Moon <> []
 %%% @copyright 2008 Cliff Moon
 %%% @doc  
@@ -14,15 +14,19 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1]).
+-export([start_link/1, join/1, get/1, put/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
 -record(mediator, {
-		storage_servers
-	}).
+    n
+  }).
+  
+-ifdef(TEST).
+-include("etest/mediator_test.erl").
+-endif.
 
 %%====================================================================
 %% API
@@ -39,7 +43,9 @@ join(Node) -> {}.
 
 get(Key) -> {}.
 
-set(Key, Value) -> {}.
+put(Key, Value) -> {}.
+
+
 
 %%====================================================================
 %% gen_server callbacks
@@ -53,8 +59,8 @@ set(Key, Value) -> {}.
 %% @doc Initiates the server
 %% @end 
 %%--------------------------------------------------------------------
-init([]) ->
-    {ok, #mediator{}}.
+init({N}) ->
+    {ok, #mediator{n=N}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -113,3 +119,18 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+
+internal_put(Key, Value, #mediator{n=N}) ->
+  Servers = membership:server_for_key(Key),
+  MapFun = fun(Server) ->
+    storage_server:put(Server, Key, Value)
+  end,
+  lib_misc:pmap(MapFun, Servers, []).
+  
+internal_get(Key, #mediator{n=N}) ->
+  Servers = membership:server_for_key(Key),
+  MapFun = fun(Server) ->
+    storage_server:get(Server, Key)
+  end,
+  Responses = lib_misc:pmap(MapFun, Servers, []),
+  [Value|_] = lists:filter(fun(Resp) -> Resp =/= error end, Responses).
