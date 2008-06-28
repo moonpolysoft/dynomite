@@ -1,0 +1,2 @@
+{application, dynomite,
+  [{mod, {dynomite,[]}}]}.
