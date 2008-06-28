@@ -65,7 +65,8 @@ close(Name) ->
 %% @end 
 %%--------------------------------------------------------------------
 init({StorageModule,DbKey,Name}) ->
-   {ok, #storage{module=StorageModule,table=StorageModule:open(DbKey),name=Name}}.
+  membership:join_ring({Name,node()}),
+  {ok, #storage{module=StorageModule,table=StorageModule:open(DbKey),name=Name}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
