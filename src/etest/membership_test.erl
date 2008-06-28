@@ -10,6 +10,12 @@ nearest_server_test() ->
 	[two] = nearest_server(1, 1, State),
 	[one, two] = nearest_server(6, 2, State),
 	[one, two, three] = nearest_server(6, 3, State).
+	
+join_rings_test() ->
+  State = mock_state([{1,one},{2,two},{3,three}]),
+  SecondState = mock_state([{3,three},{4,four},{5,five}]),
+  Merged = int_merge_states(State, SecondState),
+  [one, two, three, four, five] = nearest_server(6, 5, Merged).
 
 mock_state(Tuples) ->
 	mock_state(Tuples, [], dict:new()).

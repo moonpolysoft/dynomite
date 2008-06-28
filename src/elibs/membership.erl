@@ -38,8 +38,8 @@
 start_link() ->
   gen_server:start({local, membership}, ?MODULE, [], []).
 
-join_ring(Node) ->
-	gen_server:call(membership, {join_ring, Node}).
+join_ring(Server) ->
+	gen_server:multi_call(membership, {join_ring, Server}).
 	
 hash_ring() ->
 	gen_server:call(membership, hash_ring).
@@ -63,8 +63,9 @@ server_for_key(Key, N) ->
 %% @end 
 %%--------------------------------------------------------------------
 init([]) ->
-		join_up(nodes()),
-		{ok, create_membership_state([node() | nodes()])}.
+    State = create_membership_state([]),
+    
+		{ok, create_membership_state([])}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -78,12 +79,15 @@ init([]) ->
 %% @end 
 %%--------------------------------------------------------------------
 
-handle_call({join_ring, Node}, _From, State) ->
-	{Added, NewState} = int_join_ring(Node, State),
+handle_call({join_ring, {Name, Node}}, _From, State) ->
+	{Added, NewState} = int_join_ring({Name, Node}, State),
 	{reply, Added, NewState};
 
 handle_call(hash_ring, _From, State) ->
 	{reply, State#membership.hash_ring, State};
+	
+handle_call({merge_rings, OutsideState}, _From, State) ->
+  {reply, State, int_merge_states(OutsideState, State)};
 	
 handle_call({server_for_key, Key, N}, _From, State) ->
 	KeyHash = erlang:phash2(Key),
@@ -132,11 +136,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
-join_up([]) -> ok;
-
-join_up([Node|_Nodes]) ->
-	gen_server:cast({membership, Node}, {join_ring, node()}).
-
 create_membership_state(Nodes) ->
 	create_membership_state(Nodes, [], dict:new()).
 
@@ -149,24 +148,36 @@ create_membership_state([Node|Tail], HashRing, Table) ->
 		add_nodes_to_ring(VirtualNodes, HashRing),
 		map_nodes_to_table(VirtualNodes, Node, Table)).
 
-int_join_ring(Node, State) ->
-	case dict:is_key(Node, State#membership.member_table) of
+int_join_ring({Name, Node}, State) ->
+  case server_in_ring({Name, Node}, State) of
 		true -> {duplicate, State};
 		false -> 
-			VirtualNodes = virtual_nodes(Node),
+			VirtualNodes = virtual_nodes({Name, Node}),
 			{added, #membership{
 				hash_ring=add_nodes_to_ring(VirtualNodes, State#membership.hash_ring),
-				member_table=map_nodes_to_table(VirtualNodes, Node, State#membership.member_table)
+				member_table=map_nodes_to_table(VirtualNodes, {Name, Node}, State#membership.member_table)
 			}}
 	end.
-
-virtual_nodes(Node) ->
-	virtual_nodes(Node, 1).
 	
-virtual_nodes(Node, Bias) ->
+int_merge_states(#membership{member_table=TableA,hash_ring=RingA}, #membership{member_table=TableB,hash_ring=RingB}) ->
+  MergedDict = dict:merge(fun(Key,Value1,Value2) -> 
+      Value1 
+    end, TableA, TableB),
+  MergedRing = lists:umerge(RingA,RingB),
+  #membership{member_table=MergedDict,hash_ring=MergedRing}.
+	
+server_in_ring({Name, Node}, #membership{member_table=Table}) ->
+  [ServerKey|_] = virtual_nodes({Name,Node}),
+  dict:is_key(ServerKey, Table).
+  
+virtual_nodes(NameNode) ->
+	virtual_nodes(NameNode, 1).
+	
+virtual_nodes({Name, Node}, Bias) ->
+  AbsName = lists:concat([Name, "/", Node]),
 	lists:map(
 		fun(I) -> 
-			erlang:phash2([I|atom_to_list(Node)])
+			erlang:phash2([I|AbsName])
 		end,
 		lists:seq(1, ?VIRTUALNODES * Bias)
 	).
