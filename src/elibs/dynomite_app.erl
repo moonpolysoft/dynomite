@@ -8,7 +8,7 @@
 %%%
 %%% @since 2008-06-27 by Cliff Moon
 %%%-------------------------------------------------------------------
--module(dynomite).
+-module(dynomite_app).
 -author('cliff moon').
 
 -behaviour(application).
@@ -45,8 +45,9 @@ start(_Type, StartArgs) ->
 %% should do any necessary cleaning up. The return value is ignored. 
 %% @end 
 %%--------------------------------------------------------------------
-stop(_State) ->
-    ok.
+stop({_, Sup}) ->
+  exit(Sup, shutdown),
+  ok.
 
 %%====================================================================
 %% Internal functions
