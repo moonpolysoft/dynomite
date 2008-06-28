@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1, join/1, get/1, put/2]).
+-export([start_link/1, get/1, put/2, has_key/1, delete/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -37,13 +37,19 @@
 %% @end 
 %%--------------------------------------------------------------------
 start_link(_) ->
-    gen_server:start_link({global, {node(), mediator}}, ?MODULE, [], []).
+  gen_server:start_link({local, mediator}, ?MODULE, [], []).
 
-join(Node) -> {}.
+get(Key) -> 
+  gen_server:call(mediator, {get, Key}).
 
-get(Key) -> {}.
+put(Key, Value) -> 
+  gen_server:call(mediator, {put, Key, Value}).
 
-put(Key, Value) -> {}.
+has_key(Key) -> 
+  gen_server:call(mediator, {has_key, Key}).
+
+delete(Key) ->
+  gen_server:call(mediator, {delete, Key}).
 
 
 
@@ -73,9 +79,17 @@ init({N}) ->
 %% @doc Handling call messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_call(_Request, _From, State) ->
-    Reply = ok,
-    {reply, Reply, State}.
+handle_call({get, Key}, _From, State) ->
+  {reply, {ok, internal_get(Key, State)}, State};
+  
+handle_call({put, Key, Value}, _From, State) ->
+  {reply, internal_put(Key, Value, State), State};
+  
+handle_call({has_key, Key}, _From, State) ->
+  {reply, {ok, internal_has_key(Key, State)}, State};
+  
+handle_call({delete, Key}, _From, State) ->
+  {reply, internal_delete(Key, State), State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -121,16 +135,36 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 
 internal_put(Key, Value, #mediator{n=N}) ->
-  Servers = membership:server_for_key(Key),
+  Servers = membership:server_for_key(Key, N),
   MapFun = fun(Server) ->
     storage_server:put(Server, Key, Value)
   end,
-  lib_misc:pmap(MapFun, Servers, []).
+  lib_misc:pmap(MapFun, Servers, []),
+  ok.
   
 internal_get(Key, #mediator{n=N}) ->
-  Servers = membership:server_for_key(Key),
+  Servers = membership:server_for_key(Key, N),
   MapFun = fun(Server) ->
     storage_server:get(Server, Key)
   end,
   Responses = lib_misc:pmap(MapFun, Servers, []),
-  [Value|_] = lists:filter(fun(Resp) -> Resp =/= error end, Responses).
+  [{ok,Value}|_] = lists:filter(fun(Resp) -> {ok,_} = Resp end, Responses),
+  Value.
+  
+internal_has_key(Key, #mediator{n=N}) ->
+  Servers = membership:server_for_key(Key, N),
+  MapFun = fun(Server) ->
+    storage_server:has_key(Server, Key)
+  end,
+  Responses = lib_misc:pmap(MapFun, Servers, []),
+  [{ok,Value}|_] = lists:filter(fun(Resp) -> {ok,_} = Resp end, Responses),
+  Value.
+  
+internal_delete(Key, #mediator{n=N}) ->
+  Servers = membership:server_for_key(key, N),
+  MapFun = fun(Server) ->
+    storage_server:delete(Server, Key)
+  end,
+  Responses = lib_misc:pmap(MapFun, Servers, []),
+  [ok|_] = lists:filter(fun(Resp) -> ok = Resp end, Responses),
+  ok.
