@@ -64,8 +64,9 @@ server_for_key(Key, N) ->
 %%--------------------------------------------------------------------
 init([]) ->
     State = create_membership_state([]),
-    
-		{ok, create_membership_state([])}.
+    {Replies,_BadNodes} = gen_server:multi_call(membership, {merge_rings, State}),
+    [{_Node, MergedState}|_] = Replies,
+		{ok, MergedState}.
 
 %%--------------------------------------------------------------------
 %% @spec 
