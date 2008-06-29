@@ -36,8 +36,8 @@
 %% @doc Starts the server
 %% @end 
 %%--------------------------------------------------------------------
-start_link(_) ->
-  gen_server:start_link({local, mediator}, ?MODULE, [], []).
+start_link(N) ->
+  gen_server:start_link({local, mediator}, ?MODULE, N, []).
 
 get(Key) -> 
   gen_server:call(mediator, {get, Key}).
@@ -65,7 +65,7 @@ delete(Key) ->
 %% @doc Initiates the server
 %% @end 
 %%--------------------------------------------------------------------
-init({N}) ->
+init(N) ->
     {ok, #mediator{n=N}}.
 
 %%--------------------------------------------------------------------

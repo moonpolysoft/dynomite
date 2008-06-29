@@ -48,7 +48,7 @@ start_link(Args) ->
 init(Args) ->
     {ok,{{one_for_all,0,1}, 
       lists:map(fun({Module, DbKey, Name}) ->
-          {Name, {storage_server,start_link,[Module, DbKey, Name]}, permanent, 1, worker, storage_server}
+          {Name, {storage_server,start_link,[Module, DbKey, Name]}, permanent, 1, worker, [storage_server]}
         end, Args)}}.
 
 %%====================================================================

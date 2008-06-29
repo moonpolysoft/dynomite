@@ -1,5 +1,7 @@
 -include_lib("include/eunit/eunit.hrl").
 
+start_server_test() ->
+  {ok, Pid} = membership:start_link().
 
 nearest_server_test() ->
 	1 = nearest_server(0, [1,2,3]),

@@ -92,7 +92,7 @@ handle_call({delete, Key}, _From, State = #storage{module=Module,table=Table}) -
 	{reply, ok, State#storage{table=Module:delete(Key,Table)}};
 	
 handle_call(close, _From, State) ->
-	{stop, close, ok, State}.
+	{stop, shutdown, ok, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |

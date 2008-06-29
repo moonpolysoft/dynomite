@@ -1,7 +1,7 @@
 -include_lib("include/eunit/eunit.hrl").
 
 dict_storage_test() ->
-	storage_server:start_link(dict_storage, ok, store),
+  storage_server:start_link(dict_storage, ok, store),
 	storage_server:put(store, key, value),
 	storage_server:put(store, two, value2),
 	{ok, value} = storage_server:get(store, key),

@@ -45,11 +45,11 @@ start_link(Args) ->
 %% specifications.
 %% @end 
 %%--------------------------------------------------------------------
-init(Args) ->
+init({N,FsArgs}) ->
     {ok,{{one_for_all,0,1}, [
-      {membership, {membership,start_link,[]}, permanent, 1, worker, membership},
-      {mediator, {mediator,start_link,[]}, permanent, 1, worker, mediator},
-      {storage_server_sup, {storage_server_sup,start_link,Args}, permanent, infinity, supervisor, storage_server_sup}
+      {membership, {membership,start_link,[]}, permanent, 1, worker, [membership]},
+      {mediator, {mediator,start_link,[N]}, permanent, 1, worker, [mediator]},
+      {storage_server_sup, {storage_server_sup,start_link,[FsArgs]}, permanent, infinity, supervisor, [storage_server_sup]}
     ]}}.
 
 %%====================================================================
