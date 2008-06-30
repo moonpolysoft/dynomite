@@ -4,7 +4,6 @@ class Dynomite
   DEFAULTS = {
     :port => 11211,
     :host => 'localhost',
-    :test => 'test',
   }
   
   
