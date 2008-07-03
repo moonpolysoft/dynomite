@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1, get/1, put/2, has_key/1, delete/1]).
+-export([start_link/1, get/1, put/3, has_key/1, delete/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -42,8 +42,8 @@ start_link(N) ->
 get(Key) -> 
   gen_server:call(mediator, {get, Key}).
 
-put(Key, Value) -> 
-  gen_server:call(mediator, {put, Key, Value}).
+put(Key, Context, Value) -> 
+  gen_server:call(mediator, {put, Key, Context, Value}).
 
 has_key(Key) -> 
   gen_server:call(mediator, {has_key, Key}).
@@ -82,8 +82,8 @@ init(N) ->
 handle_call({get, Key}, _From, State) ->
   {reply, {ok, internal_get(Key, State)}, State};
   
-handle_call({put, Key, Value}, _From, State) ->
-  {reply, internal_put(Key, Value, State), State};
+handle_call({put, Key, Context, Value}, _From, State) ->
+  {reply, internal_put(Key, Context, Value, State), State};
   
 handle_call({has_key, Key}, _From, State) ->
   {reply, {ok, internal_has_key(Key, State)}, State};
@@ -134,10 +134,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 
-internal_put(Key, Value, #mediator{n=N}) ->
+internal_put(Key, Context, Value, #mediator{n=N}) ->
   Servers = membership:server_for_key(Key, N),
   MapFun = fun(Server) ->
-    storage_server:put(Server, Key, Value)
+    storage_server:put(Server, Key, Context, Value)
   end,
   lib_misc:pmap(MapFun, Servers, []),
   ok.
@@ -148,8 +148,9 @@ internal_get(Key, #mediator{n=N}) ->
     storage_server:get(Server, Key)
   end,
   Responses = lib_misc:pmap(MapFun, Servers, []),
-  lists:map(fun({ok, Value}) -> Value end, 
-    lists:filter(fun(Resp) -> {ok,_} = Resp end, Responses)).
+  resolve_read(
+    lists:map(fun({ok, Value}) -> Value end, 
+      lists:filter(fun(Resp) -> {ok,_} = Resp end, Responses))).
   
 internal_has_key(Key, #mediator{n=N}) ->
   Servers = membership:server_for_key(Key, N),
@@ -168,3 +169,34 @@ internal_delete(Key, #mediator{n=N}) ->
   Responses = lib_misc:pmap(MapFun, Servers, []),
   [ok|_] = lists:filter(fun(Resp) -> ok = Resp end, Responses),
   ok.
+  
+resolve_read(Responses) ->
+  [First|Rest] = Responses,
+  resolve_read([First], Rest).
+  
+resolve_read(Maximal, []) ->
+  Maximal;
+
+resolve_read(Maximal, [{NextClock,Next}|Responses]) ->
+  NewMax = lists:dropwhile(fun({ClockMax, _}) -> 
+    left == vector_clock:compare(NextClock, ClockMax)
+  end, Maximal),
+  Unresolvable = lists:any(fun({ClockMax, _}) ->
+    unresolvable == vector_clock:compare(NextClock, ClockMax)
+  end, newMax),
+  if
+    length(NewMax) < length(Maximal) or Unresolvable ->
+      FinalMax = [{NextClock,Next}|NewMax];
+    true ->
+      FinalMax = NewMax
+  end,
+  resolve_read(FinalMax, Responses).
+  
+  
+  
+  
+  
+  
+  
+  
+  
