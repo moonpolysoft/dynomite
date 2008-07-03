@@ -172,31 +172,11 @@ internal_delete(Key, #mediator{n=N}) ->
   
 resolve_read(Responses) ->
   [First|Rest] = Responses,
-  resolve_read([First], Rest).
+  resolve_read(First, Rest).
   
-resolve_read(Maximal, []) ->
-  Maximal;
+resolve_read(Resolved, []) ->
+  Resolved;
 
-resolve_read(Maximal, [{NextClock,Next}|Responses]) ->
-  NewMax = lists:dropwhile(fun({ClockMax, _}) -> 
-    left == vector_clock:compare(NextClock, ClockMax)
-  end, Maximal),
-  Unresolvable = lists:any(fun({ClockMax, _}) ->
-    unresolvable == vector_clock:compare(NextClock, ClockMax)
-  end, newMax),
-  if
-    length(NewMax) < length(Maximal) or Unresolvable ->
-      FinalMax = [{NextClock,Next}|NewMax];
-    true ->
-      FinalMax = NewMax
-  end,
-  resolve_read(FinalMax, Responses).
-  
-  
-  
-  
-  
-  
-  
-  
+resolve_read(Resolved, [Next|Responses]) ->
+  resolve_read(vector_clock:resolve(Resolved, Next), Responses).
   
