@@ -164,7 +164,7 @@ int_join_ring({Name, Node}, State) ->
 	end.
 	
 int_merge_states(#membership{member_table=TableA,hash_ring=RingA}, #membership{member_table=TableB,hash_ring=RingB}) ->
-  MergedDict = dict:merge(fun(Key,Value1,Value2) -> 
+  MergedDict = dict:merge(fun(_Key,Value1,_Value2) -> 
       Value1 
     end, TableA, TableB),
   MergedRing = lists:umerge(RingA,RingB),

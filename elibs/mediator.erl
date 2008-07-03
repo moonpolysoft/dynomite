@@ -148,8 +148,8 @@ internal_get(Key, #mediator{n=N}) ->
     storage_server:get(Server, Key)
   end,
   Responses = lib_misc:pmap(MapFun, Servers, []),
-  [{ok,Value}|_] = lists:filter(fun(Resp) -> {ok,_} = Resp end, Responses),
-  Value.
+  lists:map(fun({ok, Value}) -> Value end, 
+    lists:filter(fun(Resp) -> {ok,_} = Resp end, Responses)).
   
 internal_has_key(Key, #mediator{n=N}) ->
   Servers = membership:server_for_key(Key, N),

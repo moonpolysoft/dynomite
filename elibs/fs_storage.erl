@@ -1,9 +1,10 @@
 -module (fs_storage).
--export ([open/1, close/1, get/2, put/3, has_key/2, delete/2, create_filename/2]).
+-export ([open/1, close/1, get/2, put/4, has_key/2, delete/2, create_filename/2]).
 
 -record(file, {
   name,
-  path
+  path,
+  context
 }).
 
 % open with the name of the fs directory
@@ -17,28 +18,25 @@ open(Directory) ->
 % noop
 close({_Directory, Table}) -> dets:close(Table), crypto:stop().
 
-put(Key, Value, {Directory, Table}) ->
+put(Key, Context, Value, {Directory, Table}) ->
   case dets:lookup(Table, Key) of
     [Record] -> #file{path=HashedFilename} = Record;
     [] -> HashedFilename = create_filename(Directory, Key),
-      Record = not_found
+      _Record = not_found
   end,
   {ok, Io} = file:open(HashedFilename, [write]),
   ok = file:write(Io, Value),
   ok = file:close(Io),
-	case Record of
-	  #file{_='_'} -> noop;
-	  _ -> dets:insert(Table, [#file{name=Key, path=HashedFilename}])
-  end,
+  dets:insert(Table, [#file{name=Key, path=HashedFilename, context=Context}]),
   {Directory, Table}.
 	
 	
 get(Key, {_Directory, Table}) ->
   case dets:lookup(Table, Key) of
 	  [] -> not_found;
-	  [#file{path=Path}] -> 
+	  [#file{path=Path,context=Context}] -> 
 	    {ok, Binary} = file:read_file(Path),
-	    Binary
+	    {Context, Binary}
   end.
 	
 has_key(Key, {_Directory, Table}) ->
