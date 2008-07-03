@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/3, get/2, put/3, has_key/2, delete/2, close/1]).
+-export([start_link/3, get/2, put/4, has_key/2, delete/2, close/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -40,8 +40,8 @@ start_link(StorageModule, DbKey, Name) ->
 get(Name, Key) ->
 	gen_server:call(Name, {get, Key}).
 	
-put(Name, Key, Value) ->
-	gen_server:call(Name, {put, Key, Value}).
+put(Name, Key, Context, Value) ->
+	gen_server:call(Name, {put, Key, Context, Value}).
 	
 has_key(Name, Key) ->
 	gen_server:call(Name, {has_key, Key}).
@@ -82,8 +82,8 @@ init({StorageModule,DbKey,Name}) ->
 handle_call({get, Key}, _From, State = #storage{module=Module,table=Table}) ->
 	{reply, {ok, Module:get(Key, Table)}, State};
 	
-handle_call({put, Key, Value}, _From, State = #storage{module=Module,table=Table}) ->
-	{reply, ok, State#storage{table=Module:put(Key,Value,Table)}};
+handle_call({put, Key, Context, Value}, _From, State = #storage{module=Module,table=Table}) ->
+	{reply, ok, State#storage{table=Module:put(Key, Context, Value, Table)}};
 	
 handle_call({has_key, Key}, _From, State = #storage{module=Module,table=Table}) ->
 	{reply, {ok, Module:has_key(Key,Table)}, State};
