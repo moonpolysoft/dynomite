@@ -136,6 +136,7 @@ code_change(_OldVsn, State, _Extra) ->
 
 internal_put(Key, Context, Value, #mediator{n=N}) ->
   Servers = membership:server_for_key(Key, N),
+  Incremented = vector_clock:increment(Node, Context),
   MapFun = fun(Server) ->
     storage_server:put(Server, Key, Context, Value)
   end,
@@ -170,13 +171,5 @@ internal_delete(Key, #mediator{n=N}) ->
   [ok|_] = lists:filter(fun(Resp) -> ok = Resp end, Responses),
   ok.
   
-resolve_read(Responses) ->
-  [First|Rest] = Responses,
-  resolve_read(First, Rest).
-  
-resolve_read(Resolved, []) ->
-  Resolved;
-
-resolve_read(Resolved, [Next|Responses]) ->
-  resolve_read(vector_clock:resolve(Resolved, Next), Responses).
-  
+resolve_read([First|Responses]) ->
+  lists:foldr({vector_clock, resolve}, First, Responses).
