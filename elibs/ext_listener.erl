@@ -27,11 +27,41 @@ execute_command("get", Socket) ->
   case mediator:get(Key) of
     {failure, Reason} -> send_failure(Socket, Reason);
     {Context, Values} -> send_get(Socket, Context, Values)
+  end;
+  
+execute_command("put", Socket) ->
+  Key = read_length_data(Socket),
+  Context = binary_to_term(read_length_data(Socket)),
+  Data = read_length_data(Socket),
+  case mediator:put(Key, Context, Data) of
+    {failure, Reason} -> send_failure(Socket, Reason);
+    {ok, N} -> send_msg(Socket, "succ", N)
+  end;
+  
+execute_command("has", Socket) ->
+  Key = read_length_data(Socket),
+  case mediator:has(Key) of
+    {true, N} -> send_msg(Socket, "yes", N);
+    {false, N} -> send_msg(Socket, "no", N);
+    {failure, Reason} -> send_failure(Socket, Reason)
+  end;
+  
+execute_command("del", Socket) ->
+  Key = read_length_data(Socket),
+  case mediator:delete(Key) of
+    {ok, N} -> send_msg(Socket, "succ", N);
+    {failure, Reason} -> send_failure(Socket, Reason)
   end.
   
 send_failure(Socket, Reason) ->
   gen_tcp:send(Socket, "fail "),
   gen_tcp:send(Socket, Reason),
+  gen_tcp:send(Socket, $\n).
+  
+send_msg(Socket, Msg, N) ->
+  gen_tcp:send(Socket, Msg),
+  gen_tcp:send(Socket, " "),
+  gen_tcp:send(Socket, integer_to_list(N)),
   gen_tcp:send(Socket, $\n).
   
 send_get(Socket, Context, Values) ->
@@ -45,6 +75,10 @@ send_get(Socket, Context, Values) ->
     end,
     Acc+1
   end, 0, Values).
+  
+read_length_data(Socket) ->
+  Length = read_length(Socket),
+  read_data(Socket, Length).
   
 read_data(Socket, Length) ->
   Data = gen_tcp:read(Socket, Length),
