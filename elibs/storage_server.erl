@@ -62,10 +62,10 @@ delete(Name, Key, Timeout) ->
 	gen_server:call(Name, {delete, Key}, Timeout).
 
 close(Name) ->
-  close(Name, close, 1000).
+  close(Name, 1000).
   
 close(Name, Timeout) ->
-  gen_server:call(Name, {close}, Timeout).
+  gen_server:call(Name, close, Timeout).
 
 %%====================================================================
 %% gen_server callbacks
@@ -95,16 +95,25 @@ init({StorageModule,DbKey,Name}) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_call({get, Key}, _From, State = #storage{module=Module,table=Table}) ->
-	{reply, {ok, Module:get(Key, Table)}, State};
+	{reply, catch Module:get(Key, Table), State};
 	
 handle_call({put, Key, Context, Value}, _From, State = #storage{module=Module,table=Table}) ->
-	{reply, ok, State#storage{table=Module:put(Key, Context, Value, Table)}};
+  case catch Module:put(Key, Context, Value, Table) of
+    {ok, ModifiedTable} -> {reply, ok, State#storage{table=ModifiedTable}};
+    Failure -> {reply, Failure, State}
+  end;
 	
 handle_call({has_key, Key}, _From, State = #storage{module=Module,table=Table}) ->
-	{reply, {ok, Module:has_key(Key,Table)}, State};
+	{reply, catch Module:has_key(Key,Table), State};
 	
 handle_call({delete, Key}, _From, State = #storage{module=Module,table=Table}) ->
-	{reply, ok, State#storage{table=Module:delete(Key,Table)}};
+  case catch Module:delete(Key, Table) of
+    {ok, ModifiedTable} -> {reply, ok, State#storage{table=ModifiedTable}};
+    Failure -> {reply, {failure, Failure}, State}
+  end;
+  
+handle_call(info, _From, State = #storage{module=Module, table=Table}) ->
+  {reply, Module:info(Table), State};
 	
 handle_call(close, _From, State) ->
 	{stop, shutdown, ok, State}.

@@ -16,7 +16,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1, get/1, put/3, has_key/1, delete/1]).
+-export([start_link/1, get/1, put/3, has_key/1, delete/1, stop/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -52,6 +52,9 @@ has_key(Key) ->
 
 delete(Key) ->
   gen_server:call(mediator, {delete, Key}).
+  
+stop() ->
+  gen_server:call(mediator, stop).
 
 
 
@@ -91,7 +94,10 @@ handle_call({has_key, Key}, _From, State) ->
   {reply, {ok, internal_has_key(Key, State)}, State};
   
 handle_call({delete, Key}, _From, State) ->
-  {reply, internal_delete(Key, State), State}.
+  {reply, internal_delete(Key, State), State};
+  
+handle_call(stop, _From, State) ->
+  {stop, shutdown, ok, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -142,9 +148,9 @@ internal_put(Key, Context, Value, #mediator{n=N,w=W}) ->
   MapFun = fun(Server) ->
     storage_server:put(Server, Key, Incremented, Value)
   end,
-  {Good, Bad} = pcall(MapFun, Servers),
+  {Good, _Bad} = pcall(MapFun, Servers),
   if
-    length(Good) => W -> {ok, length(Good)};
+    length(Good) >= W -> {ok, length(Good)};
     true -> {failure, error_message(Good, N, W)}
   end.
   
@@ -153,9 +159,9 @@ internal_get(Key, #mediator{n=N,r=R}) ->
   MapFun = fun(Server) ->
     storage_server:get(Server, Key)
   end,
-  {Good, Bad} = pcall(MapFun, Servers),
+  {Good, _Bad} = pcall(MapFun, Servers),
     if
-    length(Good) => R -> resolve_read(Good);
+    length(Good) >= R -> resolve_read(Good);
     true -> {failure, error_message(Good, N, R)}
   end.
   
@@ -164,20 +170,22 @@ internal_has_key(Key, #mediator{n=N,r=R}) ->
   MapFun = fun(Server) ->
     storage_server:has_key(Server, Key)
   end,
-  {Good, Bad} = pcall(MapFun, Servers),
+  {Good, _Bad} = pcall(MapFun, Servers),
   if
-    length(Good) => R -> resolve_has_key(Good);
+    length(Good) >= R -> resolve_has_key(Good);
     true -> {failure, error_message(Good, N, R)}
   end.
   
 internal_delete(Key, #mediator{n=N,w=W}) ->
   Servers = membership:server_for_key(key, N),
   MapFun = fun(Server) ->
-    storage_server:delete(Server, Key)
+    storage_server:delete(Server, Key, 10000)
   end,
-  {Good, Bad} = pcall(MapFun, Servers),
+  Blah = pcall(MapFun, Servers),
+  {Good, _Bad} = Blah,
+  % ok = Blah,
   if
-    length(Good) => W -> {ok, length(Good)};
+    length(Good) >= W -> {ok, length(Good)};
     true -> {failure, error_message(Good, N, W)}
   end.
   
@@ -192,7 +200,9 @@ resolve_has_key(Good) ->
   end.
   
 pcall(MapFun, Servers) ->
-  Replies = lib_misc:pmap(MapFun, Servers),
+  % Replies = lib_misc:pmap(MapFun, Servers),
+  % getting rid of pmap to try and track down a problem
+  Replies = lists:map(MapFun, Servers),
   {GoodReplies, Bad} = lists:partition(fun valid/1, Replies),
   Good = lists:map(fun strip_ok/1, GoodReplies),
   {Good, Bad}.

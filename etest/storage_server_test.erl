@@ -14,11 +14,11 @@ local_fs_storage_test() ->
   State = fs_storage:open("/Users/cliff/data/storage_test"),
   fs_storage:put("key_one", context, <<"value one">>, State),
   fs_storage:put("key_two", context, <<"value two">>, State),
-  {context, <<"value one">>} = fs_storage:get("key_one", State),
-  true = fs_storage:has_key("key_one", State),
+  {ok, {context, <<"value one">>}} = fs_storage:get("key_one", State),
+  {ok, true} = fs_storage:has_key("key_one", State),
   fs_storage:delete("key_one", State),
-  false = fs_storage:has_key("key_one", State),
-  true = fs_storage:has_key("key_two", State),
+  {ok, false} = fs_storage:has_key("key_one", State),
+  {ok, true} = fs_storage:has_key("key_two", State),
   fs_storage:delete("key_two", State),
   fs_storage:close(State).
 	
