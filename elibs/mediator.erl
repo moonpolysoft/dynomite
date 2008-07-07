@@ -3,7 +3,9 @@
 %%% @author    Cliff Moon <> []
 %%% @copyright 2008 Cliff Moon
 %%% @doc  
-%%%
+%%% N = Replication factor of data.
+%%% R = Number of hosts that need to participate in a successful read operation
+%%% W = Number of hosts that need to participate in a successful write operation
 %%% @end  
 %%%
 %%% @since 2008-04-12 by Cliff Moon
@@ -21,7 +23,7 @@
          terminate/2, code_change/3]).
 
 -record(mediator, {
-    n
+    r, w, n
   }).
   
 -ifdef(TEST).
@@ -36,15 +38,15 @@
 %% @doc Starts the server
 %% @end 
 %%--------------------------------------------------------------------
-start_link(N) ->
-  gen_server:start_link({local, mediator}, ?MODULE, N, []).
+start_link({R, W, N}) ->
+  gen_server:start_link({local, mediator}, ?MODULE, {R, W, N}, []).
 
 get(Key) -> 
   gen_server:call(mediator, {get, Key}).
-
+  
 put(Key, Context, Value) -> 
   gen_server:call(mediator, {put, Key, Context, Value}).
-
+  
 has_key(Key) -> 
   gen_server:call(mediator, {has_key, Key}).
 
@@ -65,8 +67,8 @@ delete(Key) ->
 %% @doc Initiates the server
 %% @end 
 %%--------------------------------------------------------------------
-init(N) ->
-    {ok, #mediator{n=N}}.
+init({R, W, N}) ->
+    {ok, #mediator{n=N,r=R,w=W}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -134,42 +136,73 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 
-internal_put(Key, Context, Value, #mediator{n=N}) ->
+internal_put(Key, Context, Value, #mediator{n=N,w=W}) ->
   Servers = membership:server_for_key(Key, N),
-  Incremented = vector_clock:increment(Node, Context),
+  Incremented = vector_clock:increment(node(), Context),
   MapFun = fun(Server) ->
-    storage_server:put(Server, Key, Context, Value)
+    storage_server:put(Server, Key, Incremented, Value)
   end,
-  lib_misc:pmap(MapFun, Servers, []),
-  ok.
+  {Good, Bad} = pcall(MapFun, Servers),
+  if
+    length(Good) => W -> {ok, length(Good)};
+    true -> {failure, error_message(Good, N, W)}
+  end.
   
-internal_get(Key, #mediator{n=N}) ->
+internal_get(Key, #mediator{n=N,r=R}) ->
   Servers = membership:server_for_key(Key, N),
   MapFun = fun(Server) ->
     storage_server:get(Server, Key)
   end,
-  Responses = lib_misc:pmap(MapFun, Servers, []),
-  resolve_read(
-    lists:map(fun({ok, Value}) -> Value end, 
-      lists:filter(fun(Resp) -> {ok,_} = Resp end, Responses))).
+  {Good, Bad} = pcall(MapFun, Servers),
+    if
+    length(Good) => R -> resolve_read(Good);
+    true -> {failure, error_message(Good, N, R)}
+  end.
   
-internal_has_key(Key, #mediator{n=N}) ->
+internal_has_key(Key, #mediator{n=N,r=R}) ->
   Servers = membership:server_for_key(Key, N),
   MapFun = fun(Server) ->
     storage_server:has_key(Server, Key)
   end,
-  Responses = lib_misc:pmap(MapFun, Servers, []),
-  [{ok,Value}|_] = lists:filter(fun(Resp) -> {ok,_} = Resp end, Responses),
-  Value.
+  {Good, Bad} = pcall(MapFun, Servers),
+  if
+    length(Good) => R -> resolve_has_key(Good);
+    true -> {failure, error_message(Good, N, R)}
+  end.
   
-internal_delete(Key, #mediator{n=N}) ->
+internal_delete(Key, #mediator{n=N,w=W}) ->
   Servers = membership:server_for_key(key, N),
   MapFun = fun(Server) ->
     storage_server:delete(Server, Key)
   end,
-  Responses = lib_misc:pmap(MapFun, Servers, []),
-  [ok|_] = lists:filter(fun(Resp) -> ok = Resp end, Responses),
-  ok.
+  {Good, Bad} = pcall(MapFun, Servers),
+  if
+    length(Good) => W -> {ok, length(Good)};
+    true -> {failure, error_message(Good, N, W)}
+  end.
   
 resolve_read([First|Responses]) ->
   lists:foldr({vector_clock, resolve}, First, Responses).
+  
+resolve_has_key(Good) ->
+  {True, False} = lists:partition(fun(E) -> E end, Good),
+  if
+    length(True) > length(False) -> true;
+    true -> false
+  end.
+  
+pcall(MapFun, Servers) ->
+  Replies = lib_misc:pmap(MapFun, Servers),
+  {GoodReplies, Bad} = lists:partition(fun valid/1, Replies),
+  Good = lists:map(fun strip_ok/1, GoodReplies),
+  {Good, Bad}.
+  
+valid({ok, _}) -> true;
+valid(ok) -> true;
+valid(_) -> false.
+
+strip_ok({ok, Val}) -> Val;
+strip_ok(Val) -> Val.
+
+error_message(Good, N, T) ->
+  io_lib:format("contacted ~p of ~p servers.  Needed ~p.", [length(Good), N, T]).

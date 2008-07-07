@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/3, get/2, put/4, has_key/2, delete/2, close/1]).
+-export([start_link/3, get/2, get/3, put/4, put/5, has_key/2, has_key/3, delete/2, delete/3, close/1, close/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -38,19 +38,34 @@ start_link(StorageModule, DbKey, Name) ->
    gen_server:start_link({local, Name}, ?MODULE, {StorageModule,DbKey,Name}, []).
 
 get(Name, Key) ->
-	gen_server:call(Name, {get, Key}).
+	get(Name, Key, 1000).
+	
+get(Name, Key, Timeout) ->
+  gen_server:call(Name, {get, Key}, Timeout).
 	
 put(Name, Key, Context, Value) ->
-	gen_server:call(Name, {put, Key, Context, Value}).
+	put(Name, Key, Context, Value, 1000).
+	
+put(Name, Key, Context, Value, Timeout) ->
+	gen_server:call(Name, {put, Key, Context, Value}, Timeout).
 	
 has_key(Name, Key) ->
-	gen_server:call(Name, {has_key, Key}).
+	has_key(Name, Key, 1000).
+	
+has_key(Name, Key, Timeout) ->
+	gen_server:call(Name, {has_key, Key}, Timeout).
 	
 delete(Name, Key) ->
-	gen_server:call(Name, {delete, Key}).
+  delete(Name, Key, 1000).
+	
+delete(Name, Key, Timeout) ->
+	gen_server:call(Name, {delete, Key}, Timeout).
 
 close(Name) ->
-	gen_server:call(Name, close).
+  close(Name, close, 1000).
+  
+close(Name, Timeout) ->
+  gen_server:call(Name, {close}, Timeout).
 
 %%====================================================================
 %% gen_server callbacks
