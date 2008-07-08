@@ -85,13 +85,13 @@ init({R, W, N}) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_call({get, Key}, _From, State) ->
-  {reply, {ok, internal_get(Key, State)}, State};
+  {reply, internal_get(Key, State), State};
   
 handle_call({put, Key, Context, Value}, _From, State) ->
   {reply, internal_put(Key, Context, Value, State), State};
   
 handle_call({has_key, Key}, _From, State) ->
-  {reply, {ok, internal_has_key(Key, State)}, State};
+  {reply, internal_has_key(Key, State), State};
   
 handle_call({delete, Key}, _From, State) ->
   {reply, internal_delete(Key, State), State};
@@ -144,11 +144,14 @@ code_change(_OldVsn, State, _Extra) ->
 
 internal_put(Key, Context, Value, #mediator{n=N,w=W}) ->
   Servers = membership:server_for_key(Key, N),
+  error_logger:info_msg("put servers: ~p~n", [Servers]),
   Incremented = vector_clock:increment(node(), Context),
   MapFun = fun(Server) ->
     storage_server:put(Server, Key, Incremented, Value)
   end,
-  {Good, _Bad} = pcall(MapFun, Servers),
+  {Good, Bad} = pcall(MapFun, Servers),
+  error_logger:info_msg("good, bad: ~p~n", [{Good, Bad}]),
+  Blah = blah,
   if
     length(Good) >= W -> {ok, length(Good)};
     true -> {failure, error_message(Good, N, W)}
@@ -156,12 +159,14 @@ internal_put(Key, Context, Value, #mediator{n=N,w=W}) ->
   
 internal_get(Key, #mediator{n=N,r=R}) ->
   Servers = membership:server_for_key(Key, N),
+  error_logger:info_msg("put servers: ~p~n", [Servers]),
   MapFun = fun(Server) ->
     storage_server:get(Server, Key)
   end,
-  {Good, _Bad} = pcall(MapFun, Servers),
-    if
-    length(Good) >= R -> resolve_read(Good);
+  {Good, Bad} = pcall(MapFun, Servers),
+  error_logger:info_msg("good, bad: ~p~n", [{Good, Bad}]),
+  if
+    length(Good) >= R -> {ok, resolve_read(Good)};
     true -> {failure, error_message(Good, N, R)}
   end.
   
@@ -172,13 +177,12 @@ internal_has_key(Key, #mediator{n=N,r=R}) ->
   end,
   {Good, _Bad} = pcall(MapFun, Servers),
   if
-    length(Good) >= R -> resolve_has_key(Good);
+    length(Good) >= R -> {ok, resolve_has_key(Good)};
     true -> {failure, error_message(Good, N, R)}
   end.
   
 internal_delete(Key, #mediator{n=N,w=W}) ->
   Servers = membership:server_for_key(key, N),
-  error_logger:info_msg("servers: ~p", [Servers]),
   MapFun = fun(Server) ->
     storage_server:delete(Server, Key, 10000)
   end,
@@ -191,7 +195,10 @@ internal_delete(Key, #mediator{n=N,w=W}) ->
   end.
   
 resolve_read([First|Responses]) ->
-  lists:foldr({vector_clock, resolve}, First, Responses).
+  case First of
+    not_found -> not_found;
+    _ -> lists:foldr({vector_clock, resolve}, First, Responses)
+  end.
   
 resolve_has_key(Good) ->
   {True, False} = lists:partition(fun(E) -> E end, Good),

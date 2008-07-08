@@ -240,7 +240,6 @@ nearest_server(Code, N, State, AlreadyFound) ->
 		FoundCode -> FoundCode
 	end,
 	ServerName = dict:fetch(ServerCode, Table),
-	error_logger:info_msg("ServerName ~p", [ServerName]),
 	{removed, ModState} = int_remove_node(ServerName, State),
 	[dict:fetch(ServerCode, Table) | nearest_server(ServerCode, N-1, ModState)].
 	

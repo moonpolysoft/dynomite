@@ -28,10 +28,24 @@ all_servers_working_test() ->
   {ok, {_Context, <<"value1">>}} = mediator:get(<<"key1">>),
   {ok, true} = mediator:has_key(<<"key1">>),
   {ok, 3} = mediator:delete(<<"key1">>),
-  error_logger:info_msg("~p~p~p~n", [gen_server:call({good_store1, node()}, info), gen_server:call({good_store2, node()}, info), gen_server:call({good_store3, node()}, info)]),
-  error_logger:info_msg("~p~p~p~n", [gen_server:call({good_store1, node()}, info), gen_server:call({good_store2, node()}, info), gen_server:call({good_store3, node()}, info)]),
-  error_logger:info_msg("~p~p~p~n", [gen_server:call({good_store1, node()}, info), gen_server:call({good_store2, node()}, info), gen_server:call({good_store3, node()}, info)]),
-  error_logger:info_msg("~p~p~p~n", [gen_server:call({good_store1, node()}, info), gen_server:call({good_store2, node()}, info), gen_server:call({good_store3, node()}, info)]),
   {ok, false} = mediator:has_key(<<"key1">>),
-  % {ok, not_found} = mediator:get(<<"key1">>),
+  {ok, not_found} = mediator:get(<<"key1">>),
   stop_integrated(3, 0).
+  
+one_bad_server_test() ->
+  init_integrated(2, 1, {2, 2, 3}),
+  {ok, 2} = mediator:put(<<"key1">>, [], <<"value1">>),
+  {ok, {_Context, <<"value1">>}} = mediator:get(<<"key1">>),
+  {ok, true} = mediator:has_key(<<"key1">>),
+  {ok, 2} = mediator:delete(<<"key1">>),
+  {ok, false} = mediator:has_key(<<"key1">>),
+  {ok, not_found} = mediator:get(<<"key1">>),
+  stop_integrated(2, 1).
+  
+two_bad_servers_test() ->
+  init_integrated(1, 2, {2, 2, 3}),
+  {failure, _} = mediator:put(<<"key1">>, [], <<"value1">>),
+  {failure, _} = mediator:get(<<"key1">>),
+  {failure, _} = mediator:delete(<<"key1">>),
+  {failure, _} = mediator:has_key(<<"key1">>),
+  stop_integrated(1, 2).
