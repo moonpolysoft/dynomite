@@ -49,3 +49,11 @@ two_bad_servers_test() ->
   {failure, _} = mediator:delete(<<"key1">>),
   {failure, _} = mediator:has_key(<<"key1">>),
   stop_integrated(1, 2).
+  
+three_bad_servers_test() ->
+  init_integrated(0, 3, {2, 2, 3}),
+  {failure, _} = mediator:put(<<"key1">>, [], <<"value1">>),
+  {failure, _} = mediator:get(<<"key1">>),
+  {failure, _} = mediator:delete(<<"key1">>),
+  {failure, _} = mediator:has_key(<<"key1">>),
+  stop_integrated(0, 3).
