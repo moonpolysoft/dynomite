@@ -28,7 +28,7 @@ put(Key, Context, Value, {Directory, Table}) ->
   ok = file:write(Io, Value),
   ok = file:close(Io),
   dets:insert(Table, [#file{name=Key, path=HashedFilename, context=Context}]),
-  {Directory, Table}.
+  {ok, {Directory, Table}}.
 	
 	
 get(Key, {_Directory, Table}) ->
@@ -36,13 +36,13 @@ get(Key, {_Directory, Table}) ->
 	  [] -> not_found;
 	  [#file{path=Path,context=Context}] -> 
 	    {ok, Binary} = file:read_file(Path),
-	    {Context, Binary}
+	    {ok, {Context, Binary}}
   end.
 	
 has_key(Key, {_Directory, Table}) ->
   case dets:lookup(Table, Key) of
-    [] -> false;
-    [_Record] -> true
+    [] -> {ok, false};
+    [_Record] -> {ok, true}
   end.
 	
 delete(Key, {Directory, Table}) ->
@@ -51,7 +51,7 @@ delete(Key, {Directory, Table}) ->
 	  [#file{path=Path}] ->
 	    ok = file:delete(Path),
 	    ok = dets:delete(Table, Key),
-	    {Directory, Table}
+	    {ok, {Directory, Table}}
   end.
 	
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
