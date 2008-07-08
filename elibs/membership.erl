@@ -49,7 +49,7 @@ server_for_key(Key) ->
 	
 server_for_key(Key, N) ->
 	gen_server:call(membership, {server_for_key, Key, N}).
-	
+
 stop() ->
   gen_server:call(membership, stop).
 
@@ -158,16 +158,27 @@ create_membership_state([Node|Tail], HashRing, Table) ->
 		add_nodes_to_ring(VirtualNodes, HashRing),
 		map_nodes_to_table(VirtualNodes, Node, Table)).
 
-int_join_ring({Name, Node}, State) ->
-  case server_in_ring({Name, Node}, State) of
+int_join_ring(ServerName, State) ->
+  case server_in_ring(ServerName, State) of
 		true -> {duplicate, State};
 		false -> 
-			VirtualNodes = virtual_nodes({Name, Node}),
+			VirtualNodes = virtual_nodes(ServerName),
 			{added, #membership{
 				hash_ring=add_nodes_to_ring(VirtualNodes, State#membership.hash_ring),
-				member_table=map_nodes_to_table(VirtualNodes, {Name, Node}, State#membership.member_table)
+				member_table=map_nodes_to_table(VirtualNodes, ServerName, State#membership.member_table)
 			}}
 	end.
+	
+int_remove_node(ServerName, State) ->
+  case server_in_ring(ServerName, State) of
+    false -> {not_found, State};
+    true ->
+      VirtualNodes = virtual_nodes(ServerName),
+      {removed, #membership{
+        hash_ring=remove_nodes_from_ring(VirtualNodes, State#membership.hash_ring),
+        member_table=remove_nodes_from_table(VirtualNodes, State#membership.member_table)
+      }}
+  end.
 	
 int_merge_states(#membership{member_table=TableA,hash_ring=RingA}, #membership{member_table=TableB,hash_ring=RingB}) ->
   MergedDict = dict:merge(fun(_Key,Value1,_Value2) -> 
@@ -176,8 +187,8 @@ int_merge_states(#membership{member_table=TableA,hash_ring=RingA}, #membership{m
   MergedRing = lists:umerge(RingA,RingB),
   #membership{member_table=MergedDict,hash_ring=MergedRing}.
 	
-server_in_ring({Name, Node}, #membership{member_table=Table}) ->
-  [ServerKey|_] = virtual_nodes({Name,Node}),
+server_in_ring(ServerName, #membership{member_table=Table}) ->
+  [ServerKey|_] = virtual_nodes(ServerName),
   dict:is_key(ServerKey, Table).
   
 virtual_nodes(NameNode) ->
@@ -185,12 +196,16 @@ virtual_nodes(NameNode) ->
 	
 virtual_nodes({Name, Node}, Bias) ->
   AbsName = lists:concat([Name, "/", Node]),
-	lists:map(
-		fun(I) -> 
-			erlang:phash2([I|AbsName])
-		end,
-		lists:seq(1, ?VIRTUALNODES * Bias)
-	).
+	virtual_nodes(AbsName, Bias);
+	
+virtual_nodes(ServerName, Bias) ->
+  AbsName = lists:concat([ServerName]),
+  lists:map(
+    fun(I) ->
+      erlang:phash2([I|AbsName])
+    end,
+    lists:seq(1, ?VIRTUALNODES * Bias)
+  ).
 	
 map_nodes_to_table(VirtualNodes, Node, Table) ->
 	lists:foldl(
@@ -199,22 +214,38 @@ map_nodes_to_table(VirtualNodes, Node, Table) ->
 		end, Table, VirtualNodes
 	).
 	
+remove_nodes_from_ring(VirtualNodes, Ring) ->
+  lists:subtract(Ring, VirtualNodes).
+  
+remove_nodes_from_table(VirtualNodes, Table) ->
+  lists:foldl(
+		fun(VirtualNode, AccTable) ->
+			dict:erase(VirtualNode, AccTable)
+		end, Table, VirtualNodes
+	).
+	
 add_nodes_to_ring(VirtualNodes, HashRing) ->
 	% HashRing should be pre-sorted
 	lists:merge(lists:sort(VirtualNodes), HashRing).
-	
-nearest_server(_Code, 0, _State) -> [];
-	
+
 nearest_server(Code, N, State) ->
+  nearest_server(Code, N, State, []).
+	
+nearest_server(_Code, 0, _State, _AlreadyFound) -> [];
+	%wrong, this needs to return 3 distinct servers
+nearest_server(Code, N, State, AlreadyFound) ->
   #membership{hash_ring=Ring, member_table=Table} = State,
 	ServerCode = case nearest_server(Code, Ring) of
 		first -> nearest_server(0, Ring);
 		FoundCode -> FoundCode
 	end,
-	[dict:fetch(ServerCode, Table) | nearest_server(ServerCode, N-1, State)].
+	ServerName = dict:fetch(ServerCode, Table),
+	error_logger:info_msg("ServerName ~p", [ServerName]),
+	{removed, ModState} = int_remove_node(ServerName, State),
+	[dict:fetch(ServerCode, Table) | nearest_server(ServerCode, N-1, ModState)].
 	
 nearest_server(Code, [ServerKey|Tail]) ->
-	case Code < ServerKey of 
+	case Code < ServerKey of
 		true -> ServerKey;
 		false -> nearest_server(Code, Tail)
 	end;

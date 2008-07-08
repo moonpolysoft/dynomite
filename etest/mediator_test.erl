@@ -28,7 +28,10 @@ all_servers_working_test() ->
   {ok, {_Context, <<"value1">>}} = mediator:get(<<"key1">>),
   {ok, true} = mediator:has_key(<<"key1">>),
   {ok, 3} = mediator:delete(<<"key1">>),
-  ok = [gen_server:call({good_store1, node()}, info), gen_server:call({good_store2, node()}, info), gen_server:call({good_store3, node()}, info)],
+  error_logger:info_msg("~p~p~p~n", [gen_server:call({good_store1, node()}, info), gen_server:call({good_store2, node()}, info), gen_server:call({good_store3, node()}, info)]),
+  error_logger:info_msg("~p~p~p~n", [gen_server:call({good_store1, node()}, info), gen_server:call({good_store2, node()}, info), gen_server:call({good_store3, node()}, info)]),
+  error_logger:info_msg("~p~p~p~n", [gen_server:call({good_store1, node()}, info), gen_server:call({good_store2, node()}, info), gen_server:call({good_store3, node()}, info)]),
+  error_logger:info_msg("~p~p~p~n", [gen_server:call({good_store1, node()}, info), gen_server:call({good_store2, node()}, info), gen_server:call({good_store3, node()}, info)]),
   {ok, false} = mediator:has_key(<<"key1">>),
   % {ok, not_found} = mediator:get(<<"key1">>),
   stop_integrated(3, 0).

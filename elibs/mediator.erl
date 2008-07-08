@@ -178,6 +178,7 @@ internal_has_key(Key, #mediator{n=N,r=R}) ->
   
 internal_delete(Key, #mediator{n=N,w=W}) ->
   Servers = membership:server_for_key(key, N),
+  error_logger:info_msg("servers: ~p", [Servers]),
   MapFun = fun(Server) ->
     storage_server:delete(Server, Key, 10000)
   end,
