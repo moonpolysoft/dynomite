@@ -1,10 +1,12 @@
 #!/usr/bin/env ruby
 
 require 'optparse'
+require 'digest/md5'
 
 options = {}
 options[:port] = 11222
 options[:name] = 'dynomite'
+options[:cluster] = 'development'
 
 OptionParser.new do |opts|
   opts.banner = "Usage: dynomite [options]"
@@ -12,22 +14,28 @@ OptionParser.new do |opts|
   opts.separator ""
   opts.separator "Specific options:"
   
-  opts.on("-p", "--port", "The port to listen on") do |port|
+  opts.on("-p", "--port PORT", "The port to listen on") do |port|
     options[:port] = port
   end
   
-  opts.on("-n", "--name", "The erlang nodename") do |name|
+  opts.on("-n", "--node NODE", "The erlang nodename") do |name|
     options[:name] = name
   end
   
-  opts.on("-s", "--sasl-log", "sasl log path") do |log|
+  opts.on("-c", "--cluster CLUSTER", "The cluster name") do |name|
+    options[:cluster] = name
+  end
+  
+  opts.on("-s", "--sasl-log LOGFILE", "sasl log path") do |log|
     options[:sasl] = "-sasl sasl_error_logger #{log}"
   end
   
-  opts.on("-l", "--log", "error log path") do |log|
+  opts.on("-l", "--log LOGFILE", "error log path") do |log|
     options[:log] = "-kernel error_logger #{log}"
   end
 end.parse!
+
+cookie = Digest::MD5.hexdigest(options[:cluster] + "you should really change this salt")
 
 str = "erl \
   -boot start_sasl \
@@ -38,8 +46,8 @@ str = "erl \
   -dynomite port #{options[:port]} \
   #{options[:sasl]} \
   #{options[:log]} \
-  -mnesia dir '\"/tmp/mbd\"' \
   -noshell \
+  -cookie #{options[:cluster]} \
   -run dynomite start"
   
 exec str
