@@ -11,7 +11,7 @@ start_link() ->
   {ok, Pid}.
   
 init() ->
-  {ok, Listen} = gen_tcp:listen(11211, [binary, inet6, {active, false}, {packet, 0}]),
+  {ok, Listen} = gen_tcp:listen(11222, [binary, inet6, {active, false}, {packet, 0}]),
   error_logger:info_msg("listen: ~p~n", [Listen]),
   par_connect(Listen).
   
@@ -71,7 +71,7 @@ execute_command("close", Socket) ->
 send_failure(Socket, Reason) ->
   gen_tcp:send(Socket, "fail "),
   gen_tcp:send(Socket, Reason),
-  gen_tcp:send(Socket, $\n).
+  gen_tcp:send(Socket, "\n").
   
 send_msg(Socket, Msg, N) ->
   gen_tcp:send(Socket, Msg),
