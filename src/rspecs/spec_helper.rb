@@ -1,7 +1,7 @@
 require 'spec'
 require 'mocha'
 require 'stubba'
-require File.dirname(__FILE__) + "/../lib/datamuncher"
+require File.dirname(__FILE__) + "/../rlibs/dynomite"
 
 Spec::Runner.configure do |config|
   # config.before(:all) {}

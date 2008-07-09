@@ -47,9 +47,10 @@ start_link(Args) ->
 %%--------------------------------------------------------------------
 init({N,FsArgs}) ->
     {ok,{{one_for_all,0,1}, [
-      {membership, {membership,start_link,[]}, permanent, 1, worker, [membership]},
-      {mediator, {mediator,start_link,[N]}, permanent, 1, worker, [mediator]},
-      {storage_server_sup, {storage_server_sup,start_link,[FsArgs]}, permanent, infinity, supervisor, [storage_server_sup]}
+      {membership, {membership,start_link,[]}, permanent, 1000, worker, [membership]},
+      {mediator, {mediator,start_link,[N]}, permanent, 1000, worker, [mediator]},
+      {storage_server_sup, {storage_server_sup,start_link,[FsArgs]}, permanent, 10000, supervisor, [storage_server_sup]},
+      {ext_listener, {ext_listener,start_link,[]}, permanent, 1000, worker, [ext_listener]}
     ]}}.
 
 %%====================================================================

@@ -10,7 +10,7 @@ close(_Table) -> ok.
 info(Table) -> dict:fetch_keys(Table).
 
 put(Key, Context, Value, Table) ->
-	{ok, dict:store(Key, {Context,Value}, Table)}.
+	{ok, dict:store(Key, {Context,[Value]}, Table)}.
 	
 get(Key, Table) ->
   case dict:find(Key, Table) of

@@ -16,7 +16,7 @@ open(Directory) ->
   {Directory, TableName}.
 
 % noop
-close({_Directory, Table}) -> dets:close(Table), crypto:stop().
+close({_Directory, Table}) -> dets:close(Table), error_logger:info_msg("well damn.~n", []), crypto:stop().
 
 put(Key, Context, Value, {Directory, Table}) ->
   case dets:lookup(Table, Key) of
@@ -36,7 +36,7 @@ get(Key, {_Directory, Table}) ->
 	  [] -> not_found;
 	  [#file{path=Path,context=Context}] -> 
 	    {ok, Binary} = file:read_file(Path),
-	    {ok, {Context, Binary}}
+	    {ok, {Context, [Binary]}}
   end.
 	
 has_key(Key, {_Directory, Table}) ->
@@ -73,7 +73,7 @@ ensure_against_collisions(Directory, Hash) ->
   
 ensure_against_collisions(Directory, Hash, Append) ->
   Filename = case Append > 0 of
-    true -> hash_to_directory(Directory, Hash) ++ '-' ++ integer_to_list(Append);
+    true -> hash_to_directory(Directory, Hash) ++ "-" ++ integer_to_list(Append);
     false -> hash_to_directory(Directory, Hash)
   end,
   case filelib:is_file(Filename) of
