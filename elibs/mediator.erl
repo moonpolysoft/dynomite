@@ -144,14 +144,11 @@ code_change(_OldVsn, State, _Extra) ->
 
 internal_put(Key, Context, Value, #mediator{n=N,w=W}) ->
   Servers = membership:server_for_key(Key, N),
-  error_logger:info_msg("put servers: ~p~n", [Servers]),
   Incremented = vector_clock:increment(node(), Context),
   MapFun = fun(Server) ->
     storage_server:put(Server, Key, Incremented, Value)
   end,
   {Good, Bad} = pcall(MapFun, Servers),
-  error_logger:info_msg("good, bad: ~p~n", [{Good, Bad}]),
-  Blah = blah,
   if
     length(Good) >= W -> {ok, length(Good)};
     true -> {failure, error_message(Good, N, W)}
@@ -159,12 +156,10 @@ internal_put(Key, Context, Value, #mediator{n=N,w=W}) ->
   
 internal_get(Key, #mediator{n=N,r=R}) ->
   Servers = membership:server_for_key(Key, N),
-  error_logger:info_msg("put servers: ~p~n", [Servers]),
   MapFun = fun(Server) ->
     storage_server:get(Server, Key)
   end,
   {Good, Bad} = pcall(MapFun, Servers),
-  error_logger:info_msg("good, bad: ~p~n", [{Good, Bad}]),
   if
     length(Good) >= R -> {ok, resolve_read(Good)};
     true -> {failure, error_message(Good, N, R)}

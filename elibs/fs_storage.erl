@@ -16,7 +16,7 @@ open(Directory) ->
   {Directory, TableName}.
 
 % noop
-close({_Directory, Table}) -> dets:close(Table), error_logger:info_msg("well damn.~n", []), crypto:stop().
+close({_Directory, Table}) -> dets:close(Table), crypto:stop().
 
 put(Key, Context, Value, {Directory, Table}) ->
   case dets:lookup(Table, Key) of

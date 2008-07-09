@@ -110,7 +110,6 @@ handle_call({has_key, Key}, _From, State = #storage{module=Module,table=Table}) 
 handle_call({delete, Key}, _From, State = #storage{module=Module,table=Table}) ->
   case catch Module:delete(sanitize_key(Key), Table) of
     {ok, ModifiedTable} -> 
-      error_logger:info_msg("delete state: ~p~n", [State#storage{table=ModifiedTable}]),
       {reply, ok, State#storage{table=ModifiedTable}};
     Failure -> {reply, {failure, Failure}, State}
   end;

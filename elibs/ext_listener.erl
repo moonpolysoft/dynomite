@@ -12,7 +12,6 @@ start_link() ->
   
 init() ->
   {ok, Listen} = gen_tcp:listen(11222, [binary, inet6, {active, false}, {packet, 0}]),
-  error_logger:info_msg("listen: ~p~n", [Listen]),
   par_connect(Listen).
   
 par_connect(Listen) ->
@@ -107,7 +106,6 @@ read_data(Socket, Length) ->
   
 read_length(Socket) ->
   Blah = read_section(Socket),
-  error_logger:info_msg("next section ~p~n", [Blah]),
   list_to_integer(Blah).
 
 read_section(Socket) ->
