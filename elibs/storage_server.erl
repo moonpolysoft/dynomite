@@ -80,6 +80,7 @@ close(Name, Timeout) ->
 %% @end 
 %%--------------------------------------------------------------------
 init({StorageModule,DbKey,Name}) ->
+  process_flag(trap_exit, true),
   membership:join_ring({Name,node()}),
   {ok, #storage{module=StorageModule,table=StorageModule:open(DbKey),name=Name}}.
 
@@ -95,19 +96,19 @@ init({StorageModule,DbKey,Name}) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_call({get, Key}, _From, State = #storage{module=Module,table=Table}) ->
-	{reply, catch Module:get(Key, Table), State};
+	{reply, catch Module:get(sanitize_key(Key), Table), State};
 	
 handle_call({put, Key, Context, Value}, _From, State = #storage{module=Module,table=Table}) ->
-  case catch Module:put(Key, Context, Value, Table) of
+  case catch Module:put(sanitize_key(Key), Context, Value, Table) of
     {ok, ModifiedTable} -> {reply, ok, State#storage{table=ModifiedTable}};
     Failure -> {reply, Failure, State}
   end;
 	
 handle_call({has_key, Key}, _From, State = #storage{module=Module,table=Table}) ->
-	{reply, catch Module:has_key(Key,Table), State};
+	{reply, catch Module:has_key(sanitize_key(Key),Table), State};
 	
 handle_call({delete, Key}, _From, State = #storage{module=Module,table=Table}) ->
-  case catch Module:delete(Key, Table) of
+  case catch Module:delete(sanitize_key(Key), Table) of
     {ok, ModifiedTable} -> 
       error_logger:info_msg("delete state: ~p~n", [State#storage{table=ModifiedTable}]),
       {reply, ok, State#storage{table=ModifiedTable}};
@@ -162,3 +163,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+
+sanitize_key(Key) ->
+  if
+    is_atom(Key) -> atom_to_list(Key);
+    is_binary(Key) -> binary_to_list(Key);
+    true -> Key
+  end.

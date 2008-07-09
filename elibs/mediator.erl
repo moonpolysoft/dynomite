@@ -203,8 +203,8 @@ resolve_read([First|Responses]) ->
 resolve_has_key(Good) ->
   {True, False} = lists:partition(fun(E) -> E end, Good),
   if
-    length(True) > length(False) -> true;
-    true -> false
+    length(True) > length(False) -> {true, length(True)};
+    true -> {false, length(False)}
   end.
   
 pcall(MapFun, Servers) ->

@@ -10,6 +10,10 @@ task :default do
   sh "erlc  #{ERLC_FLAGS} #{ERLC_TEST_FLAGS} elibs/*.erl"
 end
 
+task :run do
+  sh %Q{erl -boot start_sasl +K true -smp enable -pz ./ebin/ -sname local_console#{$$} -mnesia dir '"/tmp/mbd"' -noshell -run dynomite start}
+end
+
 task :build_dist do
   sh "erlc #{ERLC_FLAGS} elibs/*.erl"
 end

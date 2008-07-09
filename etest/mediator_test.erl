@@ -25,20 +25,20 @@ stop_storage_servers(Name, N) ->
 all_servers_working_test() ->
   init_integrated(3, 0, {2, 2, 3}),
   {ok, 3} = mediator:put(<<"key1">>, [], <<"value1">>),
-  {ok, {_Context, <<"value1">>}} = mediator:get(<<"key1">>),
-  {ok, true} = mediator:has_key(<<"key1">>),
+  {ok, {_Context, [<<"value1">>]}} = mediator:get(<<"key1">>),
+  {ok, {true, 3}} = mediator:has_key(<<"key1">>),
   {ok, 3} = mediator:delete(<<"key1">>),
-  {ok, false} = mediator:has_key(<<"key1">>),
+  {ok, {false, 3}} = mediator:has_key(<<"key1">>),
   {ok, not_found} = mediator:get(<<"key1">>),
   stop_integrated(3, 0).
   
 one_bad_server_test() ->
   init_integrated(2, 1, {2, 2, 3}),
   {ok, 2} = mediator:put(<<"key1">>, [], <<"value1">>),
-  {ok, {_Context, <<"value1">>}} = mediator:get(<<"key1">>),
-  {ok, true} = mediator:has_key(<<"key1">>),
+  {ok, {_Context, [<<"value1">>]}} = mediator:get(<<"key1">>),
+  {ok, {true, 2}} = mediator:has_key(<<"key1">>),
   {ok, 2} = mediator:delete(<<"key1">>),
-  {ok, false} = mediator:has_key(<<"key1">>),
+  {ok, {false, 2}} = mediator:has_key(<<"key1">>),
   {ok, not_found} = mediator:get(<<"key1">>),
   stop_integrated(2, 1).
   
