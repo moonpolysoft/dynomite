@@ -203,9 +203,7 @@ resolve_has_key(Good) ->
   end.
   
 pcall(MapFun, Servers) ->
-  % Replies = lib_misc:pmap(MapFun, Servers),
-  % getting rid of pmap to try and track down a problem
-  Replies = lists:map(MapFun, Servers),
+  Replies = lib_misc:pmap(MapFun, Servers),
   {GoodReplies, Bad} = lists:partition(fun valid/1, Replies),
   Good = lists:map(fun strip_ok/1, GoodReplies),
   {Good, Bad}.
