@@ -9,8 +9,8 @@ options[:name] = 'dynomite'
 OptionParser.new do |opts|
   opts.banner = "Usage: dynomite [options]"
 
-  opts.seperator ""
-  opts.seperator "Specific options:"
+  opts.separator ""
+  opts.separator "Specific options:"
   
   opts.on("-p", "--port", "The port to listen on") do |port|
     options[:port] = port
@@ -19,17 +19,27 @@ OptionParser.new do |opts|
   opts.on("-n", "--name", "The erlang nodename") do |name|
     options[:name] = name
   end
+  
+  opts.on("-s", "--sasl-log", "sasl log path") do |log|
+    options[:sasl] = "-sasl sasl_error_logger #{log}"
+  end
+  
+  opts.on("-l", "--log", "error log path") do |log|
+    options[:log] = "-kernel error_logger #{log}"
+  end
 end.parse!
 
-`erl 
-  -boot start_sasl 
-  +K true 
-  -smp enable 
-  -pz ./ebin/ 
-  -sname #{options[:name]}
-  -dynomite port #{options[:port]}
-  -mnesia dir '"/tmp/mbd"' 
-  -noshell 
-  -run dynomite start`
+str = "erl \
+  -boot start_sasl \
+  +K true \
+  -smp enable \
+  -pz ./ebin/ \
+  -sname #{options[:name]} \
+  -dynomite port #{options[:port]} \
+  #{options[:sasl]} \
+  #{options[:log]} \
+  -mnesia dir '\"/tmp/mbd\"' \
+  -noshell \
+  -run dynomite start"
   
-  
+exec str
