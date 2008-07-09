@@ -7,25 +7,28 @@ class DynomiteError < Exception; end
 
 class Dynomite
   DEFAULTS = {
-    :port => 11211,
-    :host => '127.0.0.1'
+    :port => 11222,
+    :host => 'localhost'
   }
   
   
   def initialize(options={})
     options = DEFAULTS.merge(options)
+    puts options.inspect
     @addr = Socket.pack_sockaddr_in(options[:port], options[:host])
     @socket = Socket.new(AF_INET6, SOCK_STREAM, 0)
     @socket.connect(@addr)
     @socket.sync = true
+  rescue => boom
+    $stderr.puts boom
   end
   
   def get(key)
-    socket.write("get #{key.length} #{key}\n")
+    write("get #{key.length} #{key}\n")
     command = read_section
     case command
     when "fail"
-      reason = read_section
+      reason = read_line
       raise DynomiteError.new(reason)
     when "succ"
       items = read_section.to_i
@@ -42,25 +45,25 @@ class Dynomite
   
   def put(key, context, data)
     ctx_length = context ? context.length : 0
-    socket.write("put #{key.length} #{key} #{ctx_length} #{context} #{data.length} ")
-    socket.write(data)
-    socket.write("\n")
+    write("put #{key.length} #{key} #{ctx_length} #{context} #{data.length} ")
+    write(data)
+    write("\n")
     command = read_section
     case command
     when "fail"
-      reason = read_section
+      reason = read_line
       raise DynomiteError.new(reason)
     when "succ"
-      read_section.to_i
+      return read_section.to_i
     end
   end
   
   def has_key(key)
-    socket.write("has #{key.length} #{key}\n")
+    write("has #{key.length} #{key}\n")
     command = read_section
     case command
     when "fail"
-      reason = read_section
+      reason = read_line
       raise DynomiteError.new(reason)
     when "yes"
       n = read_section.to_i
@@ -72,11 +75,11 @@ class Dynomite
   end
   
   def delete(key)
-    socket.write("del #{key.length} #{key}\n")
+    write("del #{key.length} #{key}\n")
     command = read_section
     case command
     when "fail"
-      reason = read_section
+      reason = read_line
       raise DynomiteError.new(reason)
     when "succ"
       read_section.to_i
@@ -93,16 +96,34 @@ class Dynomite
     @socket
   end
   
+  def read(length)
+    socket.read(length)
+  end
+  
+  def write(data)
+    socket.write(data)
+  end
+  
   def read_section
     buff = ""
-    while (socket.read(1, buff) && buff !~ /^.*\s$/); end
-    buff[0,buff.length-1]
+    while ((char = read(1)) && char != ' ' && char != "\n")
+      buff << char
+    end
+    buff
+  end
+  
+  def read_line
+    buff = ""
+    while ((char = read(1)) && char != "\n")
+      buff << char
+    end
+    buff
   end
   
   def read_binary(length)
-    buff = socket.read(length)
+    buff = read(length)
     #clear terminating char
-    socket.read(1)
+    read(1)
     buff
   end
   
