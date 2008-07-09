@@ -11,7 +11,12 @@ start_link() ->
   {ok, Pid}.
   
 init() ->
-  {ok, Listen} = gen_tcp:listen(11222, [binary, inet6, {active, false}, {packet, 0}]),
+  Port = case application:get_env(port) of
+    {ok, Val} -> Val;
+    undefined -> 11222
+  end,
+  {ok, Listen} = gen_tcp:listen(Port, [binary, inet6, {active, false}, {packet, 0}]),
+  error_logger:info_msg("listening on ~p~n", [Port]),
   par_connect(Listen).
   
 par_connect(Listen) ->

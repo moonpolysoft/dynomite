@@ -1,2 +1,35 @@
 #!/usr/bin/env ruby
 
+require 'optparse'
+
+options = {}
+options[:port] = 11222
+options[:name] = 'dynomite'
+
+OptionParser.new do |opts|
+  opts.banner = "Usage: dynomite [options]"
+
+  opts.seperator ""
+  opts.seperator "Specific options:"
+  
+  opts.on("-p", "--port", "The port to listen on") do |port|
+    options[:port] = port
+  end
+  
+  opts.on("-n", "--name", "The erlang nodename") do |name|
+    options[:name] = name
+  end
+end.parse!
+
+`erl 
+  -boot start_sasl 
+  +K true 
+  -smp enable 
+  -pz ./ebin/ 
+  -sname #{options[:name]}
+  -dynomite port #{options[:port]}
+  -mnesia dir '"/tmp/mbd"' 
+  -noshell 
+  -run dynomite start`
+  
+  

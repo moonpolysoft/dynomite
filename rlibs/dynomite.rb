@@ -11,7 +11,6 @@ class Dynomite
     :host => 'localhost'
   }
   
-  
   def initialize(options={})
     options = DEFAULTS.merge(options)
     puts options.inspect
