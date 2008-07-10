@@ -56,7 +56,7 @@ str = "erl \
   #{options[:log]} \
   -noshell \
   #{options[:config]} \
-  -cookie #{cookie} \
+  -setcookie #{cookie} \
   -run dynomite start"
 puts str
 exec str
