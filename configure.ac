@@ -3,14 +3,14 @@ dnl - It should be specified as major.minor.revision [1.3.0]
 dnl - The third argument, should be replaced with the package 
 dnl - maintainers email address.
 
-AC_INIT([dynomite], [0.0.0], [cliff@powerset.com])
+AC_INIT([dynomite], [0.0.1], [cliff@powerset.com])
 SHORT_DESCRIPTION="The dynomite datastore.  It is a highly available, low latency key value store.  Word."
 
 dnl - The following prerequisites line can be used to specify
 dnl - the exact, or minimum, versions of packages on which this
 dnl - package will depend (for build _and_ runtime)
 
-#RUNTIME_PREREQUISITES="powerset_erlang powerset_ruby"
+RUNTIME_PREREQUISITES="powerset_erlang powerset_ruby"
 
 dnl - The following prerequisites line can be used to specify
 dnl - the exact, or minimum, versions of packages on which this
