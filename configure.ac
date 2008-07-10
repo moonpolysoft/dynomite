@@ -10,7 +10,7 @@ dnl - The following prerequisites line can be used to specify
 dnl - the exact, or minimum, versions of packages on which this
 dnl - package will depend (for build _and_ runtime)
 
-#RUNTIME_PREREQUISITES="powerset_erlang"
+#RUNTIME_PREREQUISITES="powerset_erlang powerset_ruby"
 
 dnl - The following prerequisites line can be used to specify
 dnl - the exact, or minimum, versions of packages on which this

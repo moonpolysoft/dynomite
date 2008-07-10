@@ -7,7 +7,7 @@ ERLC_FLAGS = "+debug_info -W2 -I include -o ebin"
 ID2_VERSION = "0.0.0"
 
 task :default do
-  sh "erlc  #{ERLC_FLAGS} #{ERLC_TEST_FLAGS} elibs/*.erl"
+  sh "erlc  #{ERLC_FLAGS} #{ENV['TEST'] ? ERLC_TEST_FLAGS : ''} elibs/*.erl"
 end
 
 task :run do

@@ -20,6 +20,16 @@ PKG_FILES:
   finds:
     - source: .pkgtmp@prefix@ -type f -o -type l
       destination: .
+      owner: webapp
+      group: webapp
+  dirs:
+    - destination: log/@PACKAGE_NAME@
+      mode: 1777
+      owner: webapp
+      group: webapp
+  links:
+    - source: share/dynomite/bin/dynomite
+      destination: bin/dynomite
 
 PKG_DESCRIPTION: 
   <%= encode_files('@top_srcdir@/README', '@top_srcdir@/ChangeLog') %>
