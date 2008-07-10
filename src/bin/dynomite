@@ -3,6 +3,8 @@
 require 'optparse'
 require 'digest/md5'
 
+ROOT = File.expand_path(File.dirname(__FILE__) + "/..")
+
 options = {}
 options[:port] = 11222
 options[:name] = 'dynomite'
@@ -41,7 +43,7 @@ str = "erl \
   -boot start_sasl \
   +K true \
   -smp enable \
-  -pz ./ebin/ \
+  -pz #{ROOT}/ebin/ \
   -sname #{options[:name]} \
   -dynomite port #{options[:port]} \
   #{options[:sasl]} \
@@ -49,5 +51,5 @@ str = "erl \
   -noshell \
   -cookie #{cookie} \
   -run dynomite start"
-
+puts str
 exec str
