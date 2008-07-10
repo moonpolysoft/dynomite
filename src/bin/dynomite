@@ -47,7 +47,7 @@ str = "erl \
   #{options[:sasl]} \
   #{options[:log]} \
   -noshell \
-  -cookie #{options[:cluster]} \
+  -cookie #{cookie} \
   -run dynomite start"
-  
+
 exec str
