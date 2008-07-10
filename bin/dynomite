@@ -9,6 +9,8 @@ options = {}
 options[:port] = 11222
 options[:name] = 'dynomite'
 options[:cluster] = 'development'
+options[:databases] = ''
+options[:config] = ''
 
 OptionParser.new do |opts|
   opts.banner = "Usage: dynomite [options]"
@@ -35,6 +37,10 @@ OptionParser.new do |opts|
   opts.on("-l", "--log LOGFILE", "error log path") do |log|
     options[:log] = "-kernel error_logger #{log}"
   end
+  
+  opts.on('-f', "--config CONFIGFILE", "configuration file") do |config|
+    options[:config] = "-dynomite config \"#{config}\""
+  end
 end.parse!
 
 cookie = Digest::MD5.hexdigest(options[:cluster] + "NomMxnLNUH8suehhFg2fkXQ4HVdL2ewXwM")
@@ -49,6 +55,7 @@ str = "erl \
   #{options[:sasl]} \
   #{options[:log]} \
   -noshell \
+  #{options[:config]} \
   -cookie #{cookie} \
   -run dynomite start"
 puts str
