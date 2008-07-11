@@ -95,7 +95,8 @@ handle_call({join_ring, {Name, Node}}, _From, State) ->
 handle_call(hash_ring, _From, State) ->
 	{reply, State#membership.hash_ring, State};
 	
-handle_call({merge_rings, OutsideState}, _From, State) ->
+handle_call({merge_rings, OutsideState}, From, State) ->
+  error_logger:info_msg("Node ~p joining ring~n", [From]),
   {reply, State, int_merge_states(OutsideState, State)};
 	
 handle_call({server_for_key, Key, N}, _From, State) ->
