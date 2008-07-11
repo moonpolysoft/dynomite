@@ -31,12 +31,12 @@
 %% @end 
 %%--------------------------------------------------------------------
 start(_Type, StartArgs) ->
-    case dynomite_sup:start_link(StartArgs) of
-        {ok, Pid} -> 
-            {ok, Pid};
-        Error ->
-            Error
-    end.
+  case dynomite_sup:start_link(StartArgs) of
+    {ok, Pid} -> 
+      {ok, Pid};
+    Error ->
+      Error
+  end.
 
 %%--------------------------------------------------------------------
 %% @spec stop(State) -> void()

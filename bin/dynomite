@@ -43,7 +43,7 @@ OptionParser.new do |opts|
   end
   
   opts.on('-j', "--join NODENAME", 'node to join with') do |node|
-    options[:node] = %Q(-dynomite join_to "'#{node}'")
+    options[:node] = %Q(-dynomite jointo "'#{node}'")
   end
 end.parse!
 

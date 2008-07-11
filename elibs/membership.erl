@@ -67,6 +67,12 @@ stop() ->
 %%--------------------------------------------------------------------
 init(_Args) ->
     State = create_membership_state([]),
+    case application:get_env(jointo) of
+      undefined -> true;
+      {ok, Node} -> net_adm:ping(Node),
+      error_logger:info_msg("node: ~p~n", [Node])
+    end,
+    error_logger:info_msg("nodes: ~p~n", [nodes()]),
     case length(nodes()) > 0 of
       true -> {Replies,_BadNodes} = gen_server:multi_call(nodes(), membership, {merge_rings, State}),
         case Replies of
