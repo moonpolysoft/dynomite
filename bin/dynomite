@@ -41,6 +41,10 @@ OptionParser.new do |opts|
   opts.on('-f', "--config CONFIGFILE", "configuration file") do |config|
     options[:config] = "-dynomite config \"#{config}\""
   end
+  
+  opts.on('-j', "--join NODENAME", 'node to join with') do |node|
+    options[:node] = "-dynomite join_to #{node}"
+  end
 end.parse!
 
 cookie = Digest::MD5.hexdigest(options[:cluster] + "NomMxnLNUH8suehhFg2fkXQ4HVdL2ewXwM")
@@ -56,6 +60,7 @@ str = "erl \
   #{options[:log]} \
   -noshell \
   #{options[:config]} \
+  #{options[:node]} \
   -setcookie #{cookie} \
   -run dynomite start"
 puts str
