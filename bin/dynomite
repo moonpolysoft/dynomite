@@ -39,11 +39,11 @@ OptionParser.new do |opts|
   end
   
   opts.on('-f', "--config CONFIGFILE", "configuration file") do |config|
-    options[:config] = "-dynomite config \"#{config}\""
+    options[:config] = %Q(-dynomite config "\\"#{config}\\"")
   end
   
   opts.on('-j', "--join NODENAME", 'node to join with') do |node|
-    options[:node] = "-dynomite join_to #{node}"
+    options[:node] = %Q(-dynomite join_to "'#{node}'")
   end
 end.parse!
 
