@@ -69,8 +69,10 @@ init(_Args) ->
     State = create_membership_state([]),
     case length(nodes()) > 0 of
       true -> {Replies,_BadNodes} = gen_server:multi_call(nodes(), membership, {merge_rings, State}),
-        [{_Node, MergedState}|_] = Replies,
-        {ok, MergedState};
+        case Replies of
+          [{_Node, MergedState}|_] -> {ok, MergedState};
+          _ -> {ok, State}
+        end;
       false -> {ok, State}
     end.
 
