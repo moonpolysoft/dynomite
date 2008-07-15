@@ -35,6 +35,7 @@ execute_command("get", Socket) ->
   Length = read_length(Socket),
   Key = read_data(Socket, Length),
   case mediator:get(Key) of
+    {ok, not_found} -> send_not_found(Socket);
     {ok, {Context, Values}} -> send_get(Socket, Context, Values);
     {failure, Reason} -> send_failure(Socket, Reason)
   end;
@@ -71,6 +72,8 @@ execute_command("close", Socket) ->
   gen_tcp:send(Socket, "close\n"),
   gen_tcp:close(Socket),
   exit(closed).
+  
+send_not_found(Socket) -> gen_tcp:send(Socket, "not_found\n").
   
 send_failure(Socket, Reason) ->
   gen_tcp:send(Socket, "fail "),

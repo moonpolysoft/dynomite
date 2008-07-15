@@ -5,6 +5,7 @@ get keylength key\n
 
 responses:
 fail reason\n
+not_found\n
 succ items ctx_length ctx (data_length data)+\n
 
 request:

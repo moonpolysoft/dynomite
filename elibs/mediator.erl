@@ -151,7 +151,7 @@ internal_put(Key, Context, Value, #mediator{n=N,w=W}) ->
   {Good, Bad} = pcall(MapFun, Servers),
   if
     length(Good) >= W -> {ok, length(Good)};
-    true -> {failure, error_message(Good, N, W)}
+    true -> {failure, error_message(Good, Bad, N, W)}
   end.
   
 internal_get(Key, #mediator{n=N,r=R}) ->
@@ -160,9 +160,11 @@ internal_get(Key, #mediator{n=N,r=R}) ->
     storage_server:get(Server, Key)
   end,
   {Good, Bad} = pcall(MapFun, Servers),
+  NotFound = resolve_not_found(Bad, R),
   if
     length(Good) >= R -> {ok, resolve_read(Good)};
-    true -> {failure, error_message(Good, N, R)}
+    NotFound -> {ok, not_found};
+    true -> {failure, error_message(Good, Bad, N, R)}
   end.
   
 internal_has_key(Key, #mediator{n=N,r=R}) ->
@@ -170,10 +172,10 @@ internal_has_key(Key, #mediator{n=N,r=R}) ->
   MapFun = fun(Server) ->
     storage_server:has_key(Server, Key)
   end,
-  {Good, _Bad} = pcall(MapFun, Servers),
+  {Good, Bad} = pcall(MapFun, Servers),
   if
     length(Good) >= R -> {ok, resolve_has_key(Good)};
-    true -> {failure, error_message(Good, N, R)}
+    true -> {failure, error_message(Good, Bad, N, R)}
   end.
   
 internal_delete(Key, #mediator{n=N,w=W}) ->
@@ -182,11 +184,11 @@ internal_delete(Key, #mediator{n=N,w=W}) ->
     storage_server:delete(Server, Key, 10000)
   end,
   Blah = pcall(MapFun, Servers),
-  {Good, _Bad} = Blah,
+  {Good, Bad} = Blah,
   % ok = Blah,
   if
     length(Good) >= W -> {ok, length(Good)};
-    true -> {failure, error_message(Good, N, W)}
+    true -> {failure, error_message(Good, Bad, N, W)}
   end.
   
 resolve_read([First|Responses]) ->
@@ -202,6 +204,18 @@ resolve_has_key(Good) ->
     true -> {false, length(False)}
   end.
   
+resolve_not_found(Bad, R) ->
+  Count = lists:foldl(fun(E, Acc) -> 
+    case E of
+      not_found -> Acc+1;
+      _ -> Acc
+    end
+  end, 0, Bad),
+  if
+    Count >= R -> true;
+    true -> false
+  end.
+  
 pcall(MapFun, Servers) ->
   Replies = lib_misc:pmap(MapFun, Servers),
   {GoodReplies, Bad} = lists:partition(fun valid/1, Replies),
@@ -215,5 +229,5 @@ valid(_) -> false.
 strip_ok({ok, Val}) -> Val;
 strip_ok(Val) -> Val.
 
-error_message(Good, N, T) ->
-  io_lib:format("contacted ~p of ~p servers.  Needed ~p.", [length(Good), N, T]).
+error_message(Good, Bad, N, T) ->
+  io_lib:format("contacted ~p of ~p servers.  Needed ~p. Errors: ~p", [length(Good), N, T, Bad]).
