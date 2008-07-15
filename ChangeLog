@@ -1,3 +1,18 @@
+Version 0.0.3 (cliff)
+	* (Cliff Moon) not found response for get request
+	* (Cliff Moon) AF_UNSPEC to support ipv6 and ipv4
+	* (Cliff Moon) properly retrieving command line options
+	* (Cliff Moon) logging of membership join events
+	* (Cliff Moon) changing to correct param name
+	* (Cliff Moon) proper escaping of args
+	* (Cliff Moon) note to self: compile before committing
+	* (Cliff Moon) ability to name a node to connect to
+	* (Cliff Moon) enable start when other nodes are there but not running.
+	* (Cliff Moon) setcookie is the correct arg name
+	* (Cliff Moon) dynomite config
+	* (Cliff Moon) merge back from powerset
+	* (Cliff Moon) adding code root directory
+
 Version 0.0.2 (cliff)
   * fixed bin symlink
 
