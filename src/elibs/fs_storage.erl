@@ -47,7 +47,7 @@ has_key(Key, {_Directory, Table}) ->
 	
 delete(Key, {Directory, Table}) ->
 	case dets:lookup(Table, Key) of
-	  [] -> {Directory, Table};
+	  [] -> {ok, {Directory, Table}};
 	  [#file{path=Path}] ->
 	    ok = file:delete(Path),
 	    ok = dets:delete(Table, Key),

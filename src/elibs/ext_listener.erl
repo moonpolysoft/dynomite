@@ -27,7 +27,6 @@ par_connect(Listen) ->
   
 loop(Socket) ->
   Cmd = read_section(Socket),
-  error_logger:info_msg("received command: ~p~n", [Cmd]),
   execute_command(Cmd, Socket),
   loop(Socket).
 
