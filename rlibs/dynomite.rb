@@ -13,13 +13,10 @@ class Dynomite
   
   def initialize(options={})
     options = DEFAULTS.merge(options)
-    puts options.inspect
     @addr = Socket.pack_sockaddr_in(options[:port], options[:host])
-    @socket = Socket.new(AF_UNSPEC, SOCK_STREAM, 0)
+    @socket = Socket.new(AF_INET6, SOCK_STREAM, 0)
     @socket.connect(@addr)
     @socket.sync = true
-  rescue => boom
-    $stderr.puts boom
   end
   
   def get(key)

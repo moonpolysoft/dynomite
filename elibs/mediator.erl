@@ -230,4 +230,4 @@ strip_ok({ok, Val}) -> Val;
 strip_ok(Val) -> Val.
 
 error_message(Good, Bad, N, T) ->
-  io_lib:format("contacted ~p of ~p servers.  Needed ~p. Errors: ~p", [length(Good), N, T, Bad]).
+  io_lib:format("contacted ~p of ~p servers.  Needed ~p. Errors: ~w", [length(Good), N, T, Bad]).
