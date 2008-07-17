@@ -14,9 +14,7 @@ class Dynomite
   def initialize(options={})
     options = DEFAULTS.merge(options)
     @addr = Socket.pack_sockaddr_in(options[:port], options[:host])
-    @socket = Socket.new(AF_INET6, SOCK_STREAM, 0)
-    @socket.connect(@addr)
-    @socket.sync = true
+    connect
   end
   
   def get(key)
@@ -89,15 +87,36 @@ class Dynomite
   private
   
   def socket
+    connect if !@socket or @socket.closed?
     @socket
   end
   
+  def connect
+    @socket = Socket.new(AF_INET6, SOCK_STREAM, 0)
+    @socket.connect(@addr)
+    @socket.sync = true
+  end
+  
   def read(length)
+    retries = 3
     socket.read(length)
+  rescue => boom
+    retries -= 1
+    if retries > 0
+      connect
+      retry
+    end
   end
   
   def write(data)
+    retries = 3
     socket.write(data)
+  rescue => boom
+    retries -= 1
+    if retries > 0
+      connect
+      retry
+    end
   end
   
   def read_section
