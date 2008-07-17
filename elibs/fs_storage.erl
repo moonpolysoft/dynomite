@@ -8,7 +8,11 @@
 }).
 
 % open with the name of the fs directory
-open(Directory) ->
+open(InDir) ->
+  Directory = case application:get_env(datadir) of
+    {ok, Val} -> Val;
+    undefined -> InDir
+  end,
   ok = filelib:ensure_dir(Directory ++ "/"),
   TableName = list_to_atom(lists:concat([file, '/', node()])),
   {ok, TableName} = dets:open_file(TableName, [{file, lists:concat([Directory, "/files.dets"])}, {keypos, 2}]),
