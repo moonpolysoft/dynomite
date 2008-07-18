@@ -220,13 +220,14 @@ pcall(MapFun, Servers) ->
   Replies = lib_misc:pmap(MapFun, Servers),
   {GoodReplies, Bad} = lists:partition(fun valid/1, Replies),
   Good = lists:map(fun strip_ok/1, GoodReplies),
+	membership:mark_as_bad(lists:map(fun({Server, _}) -> Server end, Bad)),
   {Good, Bad}.
   
-valid({ok, _}) -> true;
-valid(ok) -> true;
+valid({_, {ok, _}}) -> true;
+valid({_, ok}) -> true;
 valid(_) -> false.
 
-strip_ok({ok, Val}) -> Val;
+strip_ok({_, {ok, Val}}) -> Val;
 strip_ok(Val) -> Val.
 
 error_message(Good, Bad, N, T) ->

@@ -15,7 +15,7 @@
 -define(VIRTUALNODES, 100).
 
 %% API
--export([start_link/0, join_ring/1, hash_ring/0, server_for_key/1, server_for_key/2, stop/0]).
+-export([start_link/0, join_ring/1, hash_ring/0, server_for_key/1, server_for_key/2, stop/0, mark_as_bad/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -52,6 +52,9 @@ server_for_key(Key, N) ->
 
 stop() ->
   gen_server:call(membership, stop).
+
+mark_as_bad(BadServers) ->
+	gen_server:multi_call(membership, {mark_as_bad, BadServers}).
 
 %%====================================================================
 %% gen_server callbacks
@@ -108,6 +111,9 @@ handle_call({merge_rings, OutsideState}, From, State) ->
 handle_call({server_for_key, Key, N}, _From, State) ->
 	KeyHash = erlang:phash2(Key),
 	{reply, nearest_server(KeyHash, N, State), State};
+	
+handle_call({mark_as_bad, BadServers}, _From, State) ->
+	{reply, blah, State};
 	
 handle_call(stop, _From, State) ->
   {stop, shutdown, ok, State}.
