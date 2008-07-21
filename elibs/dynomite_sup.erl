@@ -19,6 +19,8 @@
 %% Supervisor callbacks
 -export([init/1]).
 
+-import("config.hrl").
+
 -define(SERVER, ?MODULE).
 
 %%====================================================================
@@ -29,8 +31,8 @@
 %% @doc Starts the supervisor
 %% @end 
 %%--------------------------------------------------------------------
-start_link(Args) ->
-    supervisor:start_link(dynomite_sup, Args).
+start_link(Config) ->
+    supervisor:start_link(dynomite_sup, Config).
 
 %%====================================================================
 %% Supervisor callbacks
@@ -45,12 +47,13 @@ start_link(Args) ->
 %% specifications.
 %% @end 
 %%--------------------------------------------------------------------
-init({N,FsArgs}) ->
+init(Config) ->
     {ok,{{one_for_all,0,1}, [
-      {membership, {membership,start_link,[]}, permanent, 1000, worker, [membership]},
-      {mediator, {mediator,start_link,[N]}, permanent, 1000, worker, [mediator]},
-      {storage_server_sup, {storage_server_sup,start_link,[FsArgs]}, permanent, 10000, supervisor, [storage_server_sup]},
-      {ext_listener, {ext_listener,start_link,[]}, permanent, 1000, worker, [ext_listener]}
+			{configuration, {configuration,start_link,[Config]}, permanent, 1000, worker, [configuration]},
+      {membership, {membership,start_link,[Config]}, permanent, 1000, worker, [membership]},
+      {mediator, {mediator,start_link,[Config]}, permanent, 1000, worker, [mediator]},
+      {storage_server_sup, {storage_server_sup,start_link,[Config]}, permanent, 10000, supervisor, [storage_server_sup]},
+      {ext_listener, {ext_listener,start_link,[Config]}, permanent, 1000, worker, [ext_listener]}
     ]}}.
 
 %%====================================================================

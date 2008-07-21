@@ -14,13 +14,15 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0]).
+-export([start_link/0, get_config/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {}).
+-include("config.hrl").
+
+-record(state, {config}).
 
 %%====================================================================
 %% API
@@ -30,8 +32,11 @@
 %% @doc Starts the server
 %% @end 
 %%--------------------------------------------------------------------
-start_link() ->
-    gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start_link(Config) ->
+	gen_server:start_link({local, configuration}, configuration, Config, []).
+
+get_config(Node) ->
+	gen_server:call({configuration, Node}, get_config, 1000).
 
 %%====================================================================
 %% gen_server callbacks
@@ -45,8 +50,8 @@ start_link() ->
 %% @doc Initiates the server
 %% @end 
 %%--------------------------------------------------------------------
-init([]) ->
-    {ok, #state{}}.
+init(Config) ->
+    {ok, #state{config=Config}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -60,6 +65,8 @@ init([]) ->
 %% @end 
 %%--------------------------------------------------------------------
 
+handle_call(get_config, _From, State#state{config=Config}) ->
+	{reply, Config, State};
 
 handle_call(_Request, _From, State) ->
     Reply = ok,

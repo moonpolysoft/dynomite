@@ -5,12 +5,15 @@
 -include("etest/ext_listener_test.erl").
 -endif.
 
-start_link() ->
-  Pid = spawn(fun init/0),
+start_link(Config) ->
+  Pid = spawn(fun -> init(Config) end),
   link(Pid),
   {ok, Pid}.
   
-init() ->
+%%---------------------------------
+% internal functions
+
+init(Config) ->
   Port = case application:get_env(port) of
     {ok, Val} -> Val;
     undefined -> 11222

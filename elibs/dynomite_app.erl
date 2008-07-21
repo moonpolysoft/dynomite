@@ -13,6 +13,8 @@
 
 -behaviour(application).
 
+-include("config.hrl").
+
 %% Application callbacks
 -export([start/2, stop/1]).
 
@@ -30,13 +32,16 @@
 %% top supervisor of the tree.
 %% @end 
 %%--------------------------------------------------------------------
-start(_Type, StartArgs) ->
-  case dynomite_sup:start_link(StartArgs) of
-    {ok, Pid} -> 
-      {ok, Pid};
-    Error ->
-      Error
-  end.
+start(_Type, []) ->
+	Config = case application:get_env(join) of
+		{ok, NodeName} -> case net_adm:ping(NodeName) of
+			pong -> process_arguments([directory, port], configuration:get_config(NodeName));
+			pang -> error_logger:error_msg("Could not connect to ~w.  Exiting.~n", [NodeName]),
+				halt().
+		end;
+		undefined -> process_arguments([r, w, n, q, directory, port])
+	end,
+  dynomite_sup:start_link(Config).
 
 %%--------------------------------------------------------------------
 %% @spec stop(State) -> void()
@@ -53,4 +58,14 @@ stop({_, Sup}) ->
 %% Internal functions
 %%====================================================================
 
+process_arguments(Args) ->
+	process_arguments(Args, #config{n=3,r=2,w=2,q=10,directory="/tmp/dynomite"});
+	
+process_arguments([], Config) -> Config;
 
+process_arguments([Argument | ArgList], Config) ->
+	process_arguments(ArgList, 
+		case application:get_env(Argument) of
+			{ok, Val} -> Config#config{Argument=Val};
+			undefined -> Config
+		end).

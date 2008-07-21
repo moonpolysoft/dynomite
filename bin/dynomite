@@ -19,14 +19,14 @@ OptionParser.new do |opts|
   opts.separator "Specific options:"
   
   opts.on("-p", "--port PORT", "The port to listen on") do |port|
-    options[:port] = port
+    options[:port] = "-dynomite port #{port}"
   end
   
-  opts.on("-n", "--node NODE", "The erlang nodename") do |name|
+  opts.on("-m", "--node NODE", "The erlang nodename") do |name|
     options[:name] = name
   end
   
-  opts.on("-c", "--cluster CLUSTER", "The cluster name") do |name|
+  opts.on("-c", "--cluster CLUSTER", "The cluster name (cookie)") do |name|
     options[:cluster] = name
   end
   
@@ -38,16 +38,28 @@ OptionParser.new do |opts|
     options[:log] = "-kernel error_logger #{log}"
   end
   
-  opts.on('-f', "--config CONFIGFILE", "configuration file") do |config|
-    options[:config] = %Q(-dynomite config "\\"#{config}\\"")
-  end
-  
   opts.on('-j', "--join NODENAME", 'node to join with') do |node|
     options[:node] = %Q(-dynomite jointo "'#{node}'")
   end
   
   opts.on('-d', "--data DATADIR", "data directory") do |dir|
     options[:data] = %Q(-dynomite datadir '"#{dir}"')
+  end
+  
+  opts.on('-n', "--replication N", "replication factor") do |n|
+    options[:n] = %Q(-dynomite n #{n})
+  end
+  
+  opts.on('-r', "--read R", "read factor") do |r|
+    options[:r] = %Q(-dynomite r #{r})
+  end
+  
+  opts.on('-w', "--write W", 'write factor') do |w|
+    options[:w] = %Q(-dynomite w #{w})
+  end
+  
+  opts.on('-q', "--partitions Q", 'partitions, as a power of 2') do |q|
+    options[:q] = %Q(-dynomite q #{q})
   end
 end.parse!
 
@@ -59,13 +71,16 @@ str = "erl \
   -smp enable \
   -pz #{ROOT}/ebin/ \
   -sname #{options[:name]} \
-  -dynomite port #{options[:port]} \
   #{options[:sasl]} \
   #{options[:log]} \
   -noshell \
-  #{options[:config]} \
+  #{options[:port]} \
   #{options[:node]} \
-  #{options[:data]} \
+  #{options[:dir]} \
+  #{options[:n]} \
+  #{options[:r]} \
+  #{options[:w]} \
+  #{options[:q]} \
   -setcookie #{cookie} \
   -run dynomite start"
 puts str

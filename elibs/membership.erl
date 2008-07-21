@@ -23,6 +23,8 @@
 
 -record(membership, {hash_ring, member_table}).
 
+-include("config.hrl").
+
 -ifdef(TEST).
 -include("etest/membership_test.erl").
 -endif.
@@ -35,8 +37,8 @@
 %% @doc Starts the server
 %% @end 
 %%--------------------------------------------------------------------
-start_link() ->
-  gen_server:start({local, membership}, ?MODULE, [], []).
+start_link(Config) ->
+  gen_server:start({local, membership}, ?MODULE, Config, []).
 
 join_ring(Server) ->
 	gen_server:multi_call(membership, {join_ring, Server}).
@@ -68,7 +70,7 @@ mark_as_bad(BadServers) ->
 %% @doc Initiates the server
 %% @end 
 %%--------------------------------------------------------------------
-init(_Args) ->
+init(Config) ->
     State = create_membership_state([]),
     case application:get_env(jointo) of
       undefined -> true;
