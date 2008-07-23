@@ -36,8 +36,7 @@ start(_Type, []) ->
 	Config = case application:get_env(join) of
 		{ok, NodeName} -> case net_adm:ping(NodeName) of
 			pong -> process_arguments([directory, port], configuration:get_config(NodeName));
-			pang -> error_logger:error_msg("Could not connect to ~w.  Exiting.~n", [NodeName]),
-				halt().
+			pang -> {error, io_lib:format("Could not connect to ~w.  Exiting.~n", [NodeName])}
 		end;
 		undefined -> process_arguments([r, w, n, q, directory, port])
 	end,
@@ -59,13 +58,22 @@ stop({_, Sup}) ->
 %%====================================================================
 
 process_arguments(Args) ->
-	process_arguments(Args, #config{n=3,r=2,w=2,q=10,directory="/tmp/dynomite"});
+	process_arguments(Args, #config{n=3,r=2,w=2,q=10,directory="/tmp/dynomite"}).
 	
 process_arguments([], Config) -> Config;
 
-process_arguments([Argument | ArgList], Config) ->
+process_arguments([Arg | ArgList], Config) ->
 	process_arguments(ArgList, 
-		case application:get_env(Argument) of
-			{ok, Val} -> Config#config{Argument=Val};
+		case application:get_env(Arg) of
+			{ok, Val} -> config_replace(Arg, Config, Val);
 			undefined -> Config
 		end).
+		
+config_replace(Field, Tuple, Value) ->
+  config_replace(record_info(fields, config), Field, Tuple, Value, 2).
+  
+config_replace([Field | _], Field, Tuple, Value, Index) ->
+  setelement(Index, Tuple, Value);
+  
+config_replace([_|Fields], Field, Tuple, Value, Index) ->
+  config_replace(Fields, Field, Tuple, Value, Index+1).
