@@ -38,3 +38,10 @@ multiple_key_diff_test() ->
   LeftRoot = update("key3", "newvalue", Root),
   RightRoot = update("key2", "newvalue", Root),
   ["key2", "key3"] = lists:sort(key_diff(LeftRoot, RightRoot)).
+  
+totally_boned_key_diff_test() ->
+  Left = update("key3", "value3", update("key2", "value2", update("key1", "value1", create(0, 2 bsl 31)))),
+  Right = update("key6", "value6", update("key5", "value5", update("key4", "value4", create(0, 2 bsl 31)))),
+  List = lists:sort(key_diff(Left, Right)),
+  timer:sleep(100),
+  ["key1", "key2", "key3", "key4", "key5", "key6"] = List.

@@ -45,7 +45,7 @@ update(Key, Value, Root = #root{max=Max,min=Min,node=Node}) ->
   Root#root{node=update(erlang:phash2(Key), Key, Value, Min, Max, Node)}.
   
 update(KeyHash, Key, Value, Min, Max, Node = #node{middle=Middle}) ->
-  error_logger:info_msg("update node ~p with keyhash ~p min ~p max ~p~n", [Node, KeyHash, Min, Max]),
+  % error_logger:info_msg("update node ~p with keyhash ~p min ~p max ~p~n", [Node, KeyHash, Min, Max]),
   KeyHash = hash(Key),
   {Left,Right} = if
     KeyHash < Middle -> 
@@ -60,22 +60,22 @@ update(KeyHash, Key, Value, Min, Max, Node = #node{middle=Middle}) ->
   };
   
 update(KeyHash, Key, Value, Min, Max, empty) ->
-  error_logger:info_msg("update empty~n", []),
+  % error_logger:info_msg("update empty~n", []),
   #leaf{
-    hash=hash(value),
+    hash=hash(Value),
     key=Key
   };
 
 %replace leaf
 update(_, Key, Value, _, _, #leaf{key=Key}) ->
-  error_logger:info_msg("replacing leaf ~n", []),
+  % error_logger:info_msg("replacing leaf ~n", []),
   #leaf{
    hash=hash(Value),
    key=Key
   };
 
 update(KeyHash, Key, Value, Min, Max, Leaf = #leaf{}) ->
-  error_logger:info_msg("update leaf ~p min ~p max ~p ~n", [Leaf, Min, Max]),
+  % error_logger:info_msg("update leaf ~p min ~p max ~p ~n", [Leaf, Min, Max]),
   Middle = (Min+Max) div 2,
   Node = #node {middle=Middle,left=empty,right=empty,hash=empty},
   SemiNode = case hash(Leaf#leaf.key) of
@@ -97,25 +97,29 @@ leaf_size(empty) -> 0.
 key_diff(#root{node=NodeA}, #root{node=NodeB}) ->
   key_diff(NodeA, NodeB);
   
-key_diff(#node{hash=HashA,left=LeftA,right=RightA}, #node{hash=HashB,left=LeftB,right=RightB}) ->
+key_diff(NodeLeft = #node{hash=HashA,left=LeftA,right=RightA}, NodeRight = #node{hash=HashB,left=LeftB,right=RightB}) ->
+  error_logger:info_msg("diff node ~p~n node ~p~n", [NodeLeft, NodeRight]),
   if
     HashA == HashB -> [];
     true -> key_diff(LeftA,LeftB) ++ key_diff(RightA,RightB)
   end;
   
 key_diff(Node = #node{left=Left,right=Right,middle=Middle}, Leaf = #leaf{key=Key}) ->
+  error_logger:info_msg("diff node ~p~n leaf ~p~n", [Node, Leaf]),
   case hash(Key) of
-    Hash when Hash < Middle -> key_diff(Left, Leaf);
-    true -> key_diff(Right, Leaf)
+    Hash when Hash < Middle -> key_diff(Left, Leaf) ++ key_diff(empty, Right);
+    _ -> key_diff(Right, Leaf) ++ key_diff(empty, Left)
   end;
   
 key_diff(Leaf = #leaf{key=Key}, Node = #node{left=Left,right=Right,middle=Middle}) ->
+  error_logger:info_msg("diff leaf ~p~n node ~p~n", [Leaf, Node]),
   case hash(Key) of
-    Hash when Hash < Middle -> key_diff(Leaf, Left);
-    true -> key_diff(Leaf, Right)
+    Hash when Hash < Middle -> key_diff(Leaf, Left) ++ key_diff(empty, Right);
+    _ -> key_diff(Leaf, Right) ++ key_diff(empty, Left)
   end;
   
-key_diff(#leaf{hash=HashA,key=KeyA}, #leaf{hash=HashB,key=KeyB}) ->
+key_diff(Left = #leaf{hash=HashA,key=KeyA}, Right = #leaf{hash=HashB,key=KeyB}) ->
+  error_logger:info_msg("diff leaf ~p~n leaf ~p~n", [Left, Right]),
   if
     (HashA == HashB) and (KeyA == KeyB) -> [];
     (HashA /= HashB) and (KeyA == KeyB) -> [KeyA];
@@ -125,12 +129,20 @@ key_diff(#leaf{hash=HashA,key=KeyA}, #leaf{hash=HashB,key=KeyB}) ->
 
 key_diff(empty, empty) -> [];
 
-key_diff(empty, #leaf{key=Key}) -> [Key];
+key_diff(empty, Right = #leaf{key=Key}) -> 
+  error_logger:info_msg("diff empty right ~p~n", [Right]),
+  [Key];
 
-key_diff(empty, #node{left=Left,right=Right}) ->
+key_diff(Left = #leaf{key=Key}, empty) -> 
+  error_logger:info_msg("diff left ~p empty~n", [Left]),
+  [Key];
+
+key_diff(empty, Node = #node{left=Left,right=Right}) ->
+  error_logger:info_msg("diff empty right ~p~n", [Node]),
   key_diff(empty, Left) ++ key_diff(empty, Right);
   
-key_diff(#node{left=Left,right=Right}, empty) ->
+key_diff(Node = #node{left=Left,right=Right}, empty) ->
+  error_logger:info_msg("diff left ~p empty~n", [Node]),
   key_diff(Left, empty) ++ key_diff(Right, empty).
 
 %%====================================================================
