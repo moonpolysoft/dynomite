@@ -15,15 +15,17 @@
 -define(VIRTUALNODES, 100).
 
 %% API
--export([start_link/0, join_ring/1, hash_ring/0, server_for_key/1, server_for_key/2, stop/0, mark_as_bad/1]).
+-export([start_link/1, join_ring/1, server_for_key/1, server_for_key/2, stop/0, mark_as_bad/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(membership, {hash_ring, member_table}).
+-record(membership, {config, partitions, version}).
 
 -include("config.hrl").
+
+-define(power_2(N), (2 bsl (N-1))).
 
 -ifdef(TEST).
 -include("etest/membership_test.erl").
@@ -40,11 +42,8 @@
 start_link(Config) ->
   gen_server:start({local, membership}, ?MODULE, Config, []).
 
-join_ring(Server) ->
-	gen_server:multi_call(membership, {join_ring, Server}).
-	
-hash_ring() ->
-	gen_server:call(membership, hash_ring).
+join_ring(Node) ->
+	gen_server:multi_call({membership, Node}, {join_ring, node()}).
 	
 server_for_key(Key) ->
   gen_server:call(membership, {server_for_key, Key, 1}).
@@ -57,6 +56,9 @@ stop() ->
 
 mark_as_bad(BadServers) ->
 	gen_server:multi_call(membership, {mark_as_bad, BadServers}).
+	
+fire_gossip() ->
+  gen_server:call(membership, fire_gossip).
 
 %%====================================================================
 %% gen_server callbacks
@@ -71,21 +73,13 @@ mark_as_bad(BadServers) ->
 %% @end 
 %%--------------------------------------------------------------------
 init(Config) ->
-    State = create_membership_state([]),
-    case application:get_env(jointo) of
-      undefined -> true;
-      {ok, Node} -> net_adm:ping(Node),
-      error_logger:info_msg("node: ~p~n", [Node])
-    end,
-    error_logger:info_msg("nodes: ~p~n", [nodes()]),
-    case length(nodes()) > 0 of
-      true -> {Replies,_BadNodes} = gen_server:multi_call(nodes(), membership, {merge_rings, State}),
-        case Replies of
-          [{_Node, MergedState}|_] -> {ok, MergedState};
-          _ -> {ok, State}
-        end;
-      false -> {ok, State}
-    end.
+  Nodes = nodes(),
+	{ok, State} = if
+		length(Nodes) > 0 -> join_ring(random_node());
+		true -> {ok, create_initial_state(Config)}
+	end,
+	timer:apply_interval(500, membership, fire_gossip, []),
+	{ok, State}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -99,20 +93,26 @@ init(Config) ->
 %% @end 
 %%--------------------------------------------------------------------
 
-handle_call({join_ring, {Name, Node}}, _From, State) ->
-	{Added, NewState} = int_join_ring({Name, Node}, State),
-	{reply, Added, NewState};
-
-handle_call(hash_ring, _From, State) ->
-	{reply, State#membership.hash_ring, State};
+handle_call({join, Node}, _From, State) ->
+  NewState = join_node(Node, State, ordered_nodes()),
+	{reply, NewState, NewState};
 	
-handle_call({merge_rings, OutsideState}, From, State) ->
-  error_logger:info_msg("Node ~p joining ring~n", [From]),
-  {reply, State, int_merge_states(OutsideState, State)};
+handle_call({share, NewState}, _From, State) ->
+  case vector_clock:compare(State#membership.version, NewState#membership.version) of
+    less -> {reply, replaced, NewState};
+    greater -> {reply, State, State};
+    equal -> {reply, replaced, State};
+    concurrent -> Merged = merge_states(State, NewState),
+      {reply, Merged, Merged}
+  end;
+	
+handle_call(fire_gossip, _From, State) ->
+  {Replies,BadNodes} = gen_server:multi_call(random_nodes(2), membership, {share, State}),
+  Merged = lists:foldl(fun({_,S}, M) -> merge_states(M, S) end, Replies, State),
+  {reply, ok, Merged};
 	
 handle_call({server_for_key, Key, N}, _From, State) ->
-	KeyHash = erlang:phash2(Key),
-	{reply, nearest_server(KeyHash, N, State), State};
+	{reply, noop, State};
 	
 handle_call({mark_as_bad, BadServers}, _From, State) ->
 	{reply, blah, State};
@@ -127,9 +127,8 @@ handle_call(stop, _From, State) ->
 %% @doc Handling cast messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_cast({join_ring, Node}, State) ->
-		{_Added, NewState} = int_join_ring(Node, State),
-    {noreply, NewState}.
+handle_cast(_, State) ->
+    {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_info(Info, State) -> {noreply, State} |
@@ -163,107 +162,110 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
-create_membership_state(Nodes) ->
-	create_membership_state(Nodes, [], dict:new()).
 
-create_membership_state([], HashRing, Table) ->
-	#membership{hash_ring=HashRing,member_table=Table};
-
-create_membership_state([Node|Tail], HashRing, Table) ->
-	VirtualNodes = virtual_nodes(Node),
-	create_membership_state(Tail,
-		add_nodes_to_ring(VirtualNodes, HashRing),
-		map_nodes_to_table(VirtualNodes, Node, Table)).
-
-int_join_ring(ServerName, State) ->
-  case server_in_ring(ServerName, State) of
-		true -> {duplicate, State};
-		false -> 
-			VirtualNodes = virtual_nodes(ServerName),
-			{added, #membership{
-				hash_ring=add_nodes_to_ring(VirtualNodes, State#membership.hash_ring),
-				member_table=map_nodes_to_table(VirtualNodes, ServerName, State#membership.member_table)
-			}}
-	end.
-	
-int_remove_node(ServerName, State) ->
-  case server_in_ring(ServerName, State) of
-    false -> {not_found, State};
+random_node() -> 
+  [Node] = random_nodes(1),
+  Node.
+  
+random_nodes(N) -> random_nodes(N, nodes(), []).
+  
+random_nodes(_, [], Taken) -> Taken;
+  
+random_nodes(0, _, Taken) -> Taken;
+  
+random_nodes(N, Nodes, Taken) ->
+  {One, Two} = lists:split(random:uniform(length(Nodes)), Nodes),
+  if
+    length(Two) > 0 -> 
+      [Head|Split] = Two,
+      random_nodes(N-1, One ++ Split, [Head|Taken]);
     true ->
-      VirtualNodes = virtual_nodes(ServerName),
-      {removed, #membership{
-        hash_ring=remove_nodes_from_ring(VirtualNodes, State#membership.hash_ring),
-        member_table=remove_nodes_from_table(VirtualNodes, State#membership.member_table)
-      }}
+      [Head|Split] = One,
+      random_nodes(N-1, Split, [Head|Taken])
   end.
-	
-int_merge_states(#membership{member_table=TableA,hash_ring=RingA}, #membership{member_table=TableB,hash_ring=RingB}) ->
-  MergedDict = dict:merge(fun(_Key,Value1,_Value2) -> 
-      Value1 
-    end, TableA, TableB),
-  MergedRing = lists:umerge(RingA,RingB),
-  #membership{member_table=MergedDict,hash_ring=MergedRing}.
-	
-server_in_ring(ServerName, #membership{member_table=Table}) ->
-  [ServerKey|_] = virtual_nodes(ServerName),
-  dict:is_key(ServerKey, Table).
-  
-virtual_nodes(NameNode) ->
-	virtual_nodes(NameNode, 1).
-	
-virtual_nodes({Name, Node}, Bias) ->
-  AbsName = lists:concat([Name, "/", Node]),
-	virtual_nodes(AbsName, Bias);
-	
-virtual_nodes(ServerName, Bias) ->
-  AbsName = lists:concat([ServerName]),
-  lists:map(
-    fun(I) ->
-      erlang:phash2([I|AbsName])
-    end,
-    lists:seq(1, ?VIRTUALNODES * Bias)
-  ).
-	
-map_nodes_to_table(VirtualNodes, Node, Table) ->
-	lists:foldl(
-		fun(VirtualNode, AccTable) ->
-			dict:store(VirtualNode, Node, AccTable)
-		end, Table, VirtualNodes
-	).
-	
-remove_nodes_from_ring(VirtualNodes, Ring) ->
-  lists:subtract(Ring, VirtualNodes).
-  
-remove_nodes_from_table(VirtualNodes, Table) ->
-  lists:foldl(
-		fun(VirtualNode, AccTable) ->
-			dict:erase(VirtualNode, AccTable)
-		end, Table, VirtualNodes
-	).
-	
-add_nodes_to_ring(VirtualNodes, HashRing) ->
-	% HashRing should be pre-sorted
-	lists:merge(lists:sort(VirtualNodes), HashRing).
 
-nearest_server(Code, N, State) ->
-  nearest_server(Code, N, State, []).
-	
-nearest_server(_Code, 0, _State, _AlreadyFound) -> [];
-	%wrong, this needs to return 3 distinct servers
-nearest_server(Code, N, State, AlreadyFound) ->
-  #membership{hash_ring=Ring, member_table=Table} = State,
-	ServerCode = case nearest_server(Code, Ring) of
-		first -> nearest_server(0, Ring);
-		FoundCode -> FoundCode
-	end,
-	ServerName = dict:fetch(ServerCode, Table),
-	{removed, ModState} = int_remove_node(ServerName, State),
-	[dict:fetch(ServerCode, Table) | nearest_server(ServerCode, N-1, ModState)].
-	
-nearest_server(Code, [ServerKey|Tail]) ->
-	case Code < ServerKey of
-		true -> ServerKey;
-		false -> nearest_server(Code, Tail)
-	end;
+ordered_nodes() -> lists:sort(nodes([this, visible])).
 
-nearest_server(_Code, []) -> first.
+%% partitions is a list starting with 0 which defines a partition space.
+create_initial_state(Config) ->
+  Q = Config#config.q,
+  #membership{
+    version=vector_clock:create(node()),
+	  partitions=create_partitions(Q, node()),
+	  config=Config}.
+	
+create_partitions(Q, Node) ->
+  lists:map(fun(Partition) -> {Node, Partition} end, lists:seq(0, ?power_2(32)-1, partition_range(Q))).
+	
+partition_range(Q) -> ?power_2(32-Q).
+
+merge_states(StateA, StateB) ->
+  PartA = StateA#membership.partitions,
+  PartB = StateB#membership.partitions,
+  Config = StateA#membership.config,
+  merge_partitions(PartA, PartB, [], Config#config.n).
+  
+merge_partitions([], [], Result, _) -> lists:reverse(Result);
+
+merge_partitions([{NodeA,Number}|PartA], [{NodeB,Number}|PartB], Result, N) ->
+  if
+    NodeA == NodeB -> 
+      merge_partitions(PartA, PartB, [{NodeA,Number}|Result], N);
+    true ->
+      case within(N, NodeA, NodeB, ordered_nodes()) of
+        {true, First} -> merge_partitions(PartA, PartB, [{First,Number}|Result], N);
+        % bah, maybe we should just fucking pick one
+        _ -> merge_partitions(PartA, PartB, [{NodeA,Number}|Result], N)
+      end
+  end.
+
+within(N, NodeA, NodeB, Nodes) ->
+  within(N, NodeA, NodeB, Nodes, nil).
+
+within(_, _, _, [], _) -> false;
+  
+within(N, NodeA, NodeB, [Head|Nodes], nil) ->
+  case Head of
+    NodeA -> within(N-1, NodeB, nil, Nodes, NodeA);
+    NodeB -> within(N-1, NodeA, nil, Nodes, NodeB);
+    _ -> within(N-1, NodeA, NodeB, Nodes, nil)
+  end;
+  
+within(0, _, _, _, _) -> false;
+  
+within(N, Last, nil, [Head|Nodes], First) ->
+  case Head of
+    Last -> {true, First};
+    _ -> within(N-1, Last, nil, Nodes, First)
+  end.
+
+join_node(NewNode, #membership{config=Config,partitions=Partitions,version=Version}, Nodes) ->
+  Tokens = ?power_2(Config#config.q) div length(Nodes),
+  FromEachNode = Tokens div (length(Nodes)-1),
+  {CleanNodes,_} = lists:partition(fun(E) -> E =/= NewNode end, Nodes),
+  #membership{config=Config,
+    partitions = steal_partitions(NewNode, Tokens, FromEachNode, FromEachNode, CleanNodes, Partitions, []),
+    version = vector_clock:increment(node(), Version)}.
+  
+steal_partitions(_, 0, _, _, _, Partitions, Stolen) ->
+  lists:keysort(2, Partitions ++ Stolen);
+  
+steal_partitions(Node, Tokens, 0, FromEach, [Head|Nodes], Partitions, Stolen) ->
+  if
+    length(Nodes) > 0 -> steal_partitions(Node, Tokens, FromEach, FromEach, Nodes, Partitions, Stolen);
+    true -> steal_partitions(Node, Tokens, FromEach, FromEach, [Head|Nodes], Partitions, Stolen)
+  end;
+  
+steal_partitions(Node, Tokens, FromThis, FromEach, [Head|Nodes], Partitions, Stolen) ->
+  case lists:keytake(Head, 1, Partitions) of
+    {value, {Head, Partition}, NewPartitions} ->
+      steal_partitions(Node, Tokens-1, FromThis-1, FromEach, [Head|Nodes], NewPartitions, [{Node,Partition}|Stolen]);
+    % there may be another node joining the system in this case.  we should handle gracefully
+    false -> steal_partitions(Node, Tokens, FromThis, FromEach, [Head|Nodes], Partitions, Stolen)
+  end.
+  
+  
+  
+  
+  
+  
