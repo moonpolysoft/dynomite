@@ -16,7 +16,7 @@
 -record(leaf, {hash, key}).
 
 %% API
--export([create/2, update/3]).
+-export([create/2, update/3, leaf_size/1, key_diff/2]).
 
 -ifdef(TEST).
 -include("etest/merkle_test.erl").
@@ -93,6 +93,45 @@ leaf_size(#node{left=Left,right=Right}) ->
 leaf_size(#leaf{}) -> 1;
 
 leaf_size(empty) -> 0.
+
+key_diff(#root{node=NodeA}, #root{node=NodeB}) ->
+  key_diff(NodeA, NodeB);
+  
+key_diff(#node{hash=HashA,left=LeftA,right=RightA}, #node{hash=HashB,left=LeftB,right=RightB}) ->
+  if
+    HashA == HashB -> [];
+    true -> key_diff(LeftA,LeftB) ++ key_diff(RightA,RightB)
+  end;
+  
+key_diff(Node = #node{left=Left,right=Right,middle=Middle}, Leaf = #leaf{key=Key}) ->
+  case hash(Key) of
+    Hash when Hash < Middle -> key_diff(Left, Leaf);
+    true -> key_diff(Right, Leaf)
+  end;
+  
+key_diff(Leaf = #leaf{key=Key}, Node = #node{left=Left,right=Right,middle=Middle}) ->
+  case hash(Key) of
+    Hash when Hash < Middle -> key_diff(Leaf, Left);
+    true -> key_diff(Leaf, Right)
+  end;
+  
+key_diff(#leaf{hash=HashA,key=KeyA}, #leaf{hash=HashB,key=KeyB}) ->
+  if
+    (HashA == HashB) and (KeyA == KeyB) -> [];
+    (HashA /= HashB) and (KeyA == KeyB) -> [KeyA];
+    %we're just totally boned here
+    true -> [KeyA,KeyB]
+  end;
+
+key_diff(empty, empty) -> [];
+
+key_diff(empty, #leaf{key=Key}) -> [Key];
+
+key_diff(empty, #node{left=Left,right=Right}) ->
+  key_diff(empty, Left) ++ key_diff(empty, Right);
+  
+key_diff(#node{left=Left,right=Right}, empty) ->
+  key_diff(Left, empty) ++ key_diff(Right, empty).
 
 %%====================================================================
 %% Internal functions

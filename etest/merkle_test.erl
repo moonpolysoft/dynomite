@@ -27,3 +27,14 @@ update_replace_value_test() ->
   SecondRoot = update("key1", "wholenewthing", NewRoot),
   true = hash(NewRoot) =/= hash(SecondRoot),
   3 = leaf_size(SecondRoot).
+  
+simple_key_diff_test() ->
+  Root = update("key1", "value1", create(0, 2 bsl 31)),
+  NewRoot = update("key1", "value2", Root),
+  ["key1"] = key_diff(Root, NewRoot).
+  
+multiple_key_diff_test() ->
+  Root = update("key3", "value3", update("key2", "value2", update("key1", "value1", create(0, 2 bsl 31)))),
+  LeftRoot = update("key3", "newvalue", Root),
+  RightRoot = update("key2", "newvalue", Root),
+  ["key2", "key3"] = lists:sort(key_diff(LeftRoot, RightRoot)).
