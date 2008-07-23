@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, get_config/1]).
+-export([start_link/1, get_config/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -22,7 +22,7 @@
 
 -include("config.hrl").
 
--record(state, {config}).
+-record(configuration, {config}).
 
 %%====================================================================
 %% API
@@ -51,7 +51,7 @@ get_config(Node) ->
 %% @end 
 %%--------------------------------------------------------------------
 init(Config) ->
-    {ok, #state{config=Config}}.
+    {ok, #configuration{config=Config}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -65,8 +65,8 @@ init(Config) ->
 %% @end 
 %%--------------------------------------------------------------------
 
-handle_call(get_config, _From, State#state{config=Config}) ->
-	{reply, Config, State};
+handle_call(get_config, _From, State) ->
+	{reply, State#configuration.config, State};
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
