@@ -1,12 +1,12 @@
 -module (ext_listener).
--export ([start_link/0]).
+-export ([start_link/1]).
 
 -ifdef(TEST).
 -include("etest/ext_listener_test.erl").
 -endif.
 
 start_link(Config) ->
-  Pid = spawn(fun -> init(Config) end),
+  Pid = spawn(fun() -> init(Config) end),
   link(Pid),
   {ok, Pid}.
   
