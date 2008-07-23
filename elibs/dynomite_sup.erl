@@ -19,7 +19,7 @@
 %% Supervisor callbacks
 -export([init/1]).
 
--import("config.hrl").
+-include("config.hrl").
 
 -define(SERVER, ?MODULE).
 
