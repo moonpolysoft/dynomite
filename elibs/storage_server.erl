@@ -81,7 +81,6 @@ close(Name, Timeout) ->
 %%--------------------------------------------------------------------
 init({StorageModule,DbKey,Name}) ->
   process_flag(trap_exit, true),
-  membership:join_ring({Name,node()}),
   {ok, #storage{module=StorageModule,table=StorageModule:open(DbKey),name=Name}}.
 
 %%--------------------------------------------------------------------

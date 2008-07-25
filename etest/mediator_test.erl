@@ -1,8 +1,8 @@
 -include_lib("include/eunit/eunit.hrl").
 
-init_integrated(Good, Bad, {R, W, N}) ->
-  {ok, _} = membership:start_link(),
-  {ok, _} = mediator:start_link({R, W, N}),
+init_integrated(Good, Bad, Config) ->
+  {ok, _} = membership:start_link(Config),
+  {ok, _} = mediator:start_link(Config),
   ok = start_storage_servers(dict_storage, good_store, Good),
   ok = start_storage_servers(fail_storage, bad_store, Bad).
   
@@ -23,7 +23,7 @@ stop_storage_servers(Name, N) ->
   stop_storage_servers(Name, N-1).
   
 all_servers_working_test() ->
-  init_integrated(3, 0, {2, 2, 3}),
+  init_integrated(3, 0, #config{q=10}),
   {ok, 3} = mediator:put(<<"key1">>, [], <<"value1">>),
   {ok, {_Context, [<<"value1">>]}} = mediator:get(<<"key1">>),
   {ok, {true, 3}} = mediator:has_key(<<"key1">>),

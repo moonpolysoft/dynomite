@@ -1,5 +1,5 @@
 -module (vector_clock).
--export ([create/1, increment/2, resolve/2]).
+-export ([create/1, increment/2, resolve/2, merge/2]).
 
 -ifdef(TEST).
 -include("etest/vector_clock_test.erl").

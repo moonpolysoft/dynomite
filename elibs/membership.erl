@@ -15,13 +15,13 @@
 -define(VIRTUALNODES, 100).
 
 %% API
--export([start_link/1, join_ring/1, server_for_key/1, server_for_key/2, stop/0, mark_as_bad/1]).
+-export([start_link/1, join_node/1, nodes_for_key/1, partitions_for_node/2, partition_for_key/1, stop/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(membership, {config, partitions, version}).
+-record(membership, {config, partitions, version, nodes}).
 
 -include("config.hrl").
 
@@ -42,20 +42,20 @@
 start_link(Config) ->
   gen_server:start({local, membership}, ?MODULE, Config, []).
 
-join_ring(Node) ->
-	gen_server:multi_call({membership, Node}, {join_ring, node()}).
+join_node(Node) ->
+	gen_server:call({membership, Node}, {join_node, node()}).
 	
-server_for_key(Key) ->
-  gen_server:call(membership, {server_for_key, Key, 1}).
-	
-server_for_key(Key, N) ->
-	gen_server:call(membership, {server_for_key, Key, N}).
+nodes_for_key(Key) ->
+  gen_server:call(membership, {nodes_for_key, Key}).
+  
+partitions_for_node(Node, Option) ->
+  gen_server:call(membership, {partitions_for_node, Node, Option}).
+  
+partition_for_key(Key) ->
+  gen_server:call(membership, {partition_for_key, Key}).
 
 stop() ->
   gen_server:call(membership, stop).
-
-mark_as_bad(BadServers) ->
-	gen_server:multi_call(membership, {mark_as_bad, BadServers}).
 	
 fire_gossip() ->
   gen_server:call(membership, fire_gossip).
@@ -75,7 +75,7 @@ fire_gossip() ->
 init(Config) ->
   Nodes = nodes(),
 	{ok, State} = if
-		length(Nodes) > 0 -> join_ring(random_node());
+		length(Nodes) > 0 -> join_node(random_node(Nodes));
 		true -> {ok, create_initial_state(Config)}
 	end,
 	timer:apply_interval(500, membership, fire_gossip, []),
@@ -93,8 +93,8 @@ init(Config) ->
 %% @end 
 %%--------------------------------------------------------------------
 
-handle_call({join, Node}, _From, State) ->
-  NewState = join_node(Node, State, ordered_nodes()),
+handle_call({join_node, Node}, _From, State) ->
+  NewState = int_join_node(Node, State),
 	{reply, NewState, NewState};
 	
 handle_call({share, NewState}, _From, State) ->
@@ -107,15 +107,18 @@ handle_call({share, NewState}, _From, State) ->
   end;
 	
 handle_call(fire_gossip, _From, State) ->
-  {Replies,BadNodes} = gen_server:multi_call(random_nodes(2), membership, {share, State}),
+  {Replies,BadNodes} = gen_server:multi_call(random_nodes(2, State#membership.nodes), membership, {share, State}),
   Merged = lists:foldl(fun({_,S}, M) -> merge_states(M, S) end, Replies, State),
   {reply, ok, Merged};
 	
-handle_call({server_for_key, Key, N}, _From, State) ->
-	{reply, noop, State};
+handle_call({nodes_for_key, Key}, _From, State) ->
+	{reply, int_nodes_for_key(Key, State), State};
 	
-handle_call({mark_as_bad, BadServers}, _From, State) ->
-	{reply, blah, State};
+handle_call({partitions_for_node, Node, Option}, _From, State) ->
+  {reply, int_partitions_for_node(Node, Option, State), State};
+  
+handle_call({partition_for_key, Key}, _From, State) ->
+  {reply, int_partition_for_key(Key, State), State};
 	
 handle_call(stop, _From, State) ->
   {stop, shutdown, ok, State}.
@@ -163,11 +166,11 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 
-random_node() -> 
-  [Node] = random_nodes(1),
+random_node(Nodes) -> 
+  [Node] = random_nodes(1, Nodes),
   Node.
   
-random_nodes(N) -> random_nodes(N, nodes(), []).
+random_nodes(N, Nodes) -> random_nodes(N, Nodes, []).
   
 random_nodes(_, [], Taken) -> Taken;
   
@@ -184,8 +187,6 @@ random_nodes(N, Nodes, Taken) ->
       random_nodes(N-1, Split, [Head|Taken])
   end.
 
-ordered_nodes() -> lists:sort(nodes([this, visible])).
-
 %% partitions is a list starting with 0 which defines a partition space.
 create_initial_state(Config) ->
   Q = Config#config.q,
@@ -195,7 +196,7 @@ create_initial_state(Config) ->
 	  config=Config}.
 	
 create_partitions(Q, Node) ->
-  lists:map(fun(Partition) -> {Node, Partition} end, lists:seq(0, ?power_2(32)-1, partition_range(Q))).
+  lists:map(fun(Partition) -> {Node, Partition} end, lists:seq(1, ?power_2(32), partition_range(Q))).
 	
 partition_range(Q) -> ?power_2(32-Q).
 
@@ -203,19 +204,26 @@ merge_states(StateA, StateB) ->
   PartA = StateA#membership.partitions,
   PartB = StateB#membership.partitions,
   Config = StateA#membership.config,
-  merge_partitions(PartA, PartB, [], Config#config.n).
+  Nodes = lists:merge(StateA#membership.nodes, StateB#membership.nodes),
+  Partitions = merge_partitions(PartA, PartB, [], Config#config.n, Nodes),
+  #membership{
+    version=vector_clock:merge(StateA#membership.version, StateB#membership.version),
+    nodes=Nodes,
+    partitions=Partitions,
+    config=Config
+  }.
   
-merge_partitions([], [], Result, _) -> lists:reverse(Result);
+merge_partitions([], [], Result, _, _) -> lists:reverse(Result);
 
-merge_partitions([{NodeA,Number}|PartA], [{NodeB,Number}|PartB], Result, N) ->
+merge_partitions([{NodeA,Number}|PartA], [{NodeB,Number}|PartB], Result, N, Nodes) ->
   if
     NodeA == NodeB -> 
-      merge_partitions(PartA, PartB, [{NodeA,Number}|Result], N);
+      merge_partitions(PartA, PartB, [{NodeA,Number}|Result], N, Nodes);
     true ->
-      case within(N, NodeA, NodeB, ordered_nodes()) of
-        {true, First} -> merge_partitions(PartA, PartB, [{First,Number}|Result], N);
+      case within(N, NodeA, NodeB, Nodes) of
+        {true, First} -> merge_partitions(PartA, PartB, [{First,Number}|Result], N, Nodes);
         % bah, maybe we should just fucking pick one
-        _ -> merge_partitions(PartA, PartB, [{NodeA,Number}|Result], N)
+        _ -> merge_partitions(PartA, PartB, [{NodeA,Number}|Result], N, Nodes)
       end
   end.
 
@@ -239,7 +247,7 @@ within(N, Last, nil, [Head|Nodes], First) ->
     _ -> within(N-1, Last, nil, Nodes, First)
   end.
 
-join_node(NewNode, #membership{config=Config,partitions=Partitions,version=Version}, Nodes) ->
+int_join_node(NewNode, #membership{config=Config,partitions=Partitions,version=Version,nodes=Nodes}) ->
   Tokens = ?power_2(Config#config.q) div length(Nodes),
   FromEachNode = Tokens div (length(Nodes)-1),
   {CleanNodes,_} = lists:partition(fun(E) -> E =/= NewNode end, Nodes),
@@ -264,8 +272,67 @@ steal_partitions(Node, Tokens, FromThis, FromEach, [Head|Nodes], Partitions, Sto
     false -> steal_partitions(Node, Tokens, FromThis, FromEach, [Head|Nodes], Partitions, Stolen)
   end.
   
+int_partitions_for_node(Node, State, master) ->
+  Partitions = State#membership.partitions,
+  {Matching,_} = lists:partition(fun({N,_}) -> N == Node end, Partitions),
+  lists:map(fun({_,P}) -> P end, Matching);
   
+int_partitions_for_node(Node, State, all) ->
+  Config = State#membership.config,
+  Partitions = State#membership.partitions,
+  Nodes = n_nodes(Node, Config#config.n, lists:reverse(State#membership.nodes)),
+  lists:foldl(fun(E, Acc) -> lists:merge(Acc, int_partitions_for_node(E, State, master)) end, Nodes, []).
   
+int_nodes_for_key(Key, State) ->
+  KeyHash = erlang:phash2(Key),
+  Config = State#membership.config,
+  Q = Config#config.q,
+  Partition = find_partition(KeyHash, Q),
+  int_nodes_for_partition(Partition, State).
   
+int_nodes_for_partition(Partition, State) ->
+  Config = State#membership.config,
+  Partitions = State#membership.partitions,
+  Q = Config#config.q,
+  N = Config#config.n,
+  {Node,Partition} = lists:nth(index_for_partition(Partition, Q), Partitions),
+  n_nodes(Node, N, State#membership.nodes).
   
+int_partition_for_key(Key, State) ->
+  KeyHash = erlang:phash2(Key),
+  Config = State#membership.config,
+  Q = Config#config.q,
+  find_partition(KeyHash, Q).
   
+find_partition(Hash, Q) ->
+  Size = partition_range(Q),
+  Factor = (Hash div Size),
+  Rem = (Hash rem Size),
+  if
+    Rem > 0 -> Factor * Size + 1;
+    true -> ((Factor-1) * Size) + 1
+  end.
+  
+%1 based index, thx erlang
+index_for_partition(Partition, Q) ->
+  Size = partition_range(Q),
+  Index = (Partition div Size) + 1.
+  
+n_nodes(StartNode, N, Nodes) ->
+  if
+    N >= length(Nodes) -> Nodes;
+    true -> n_nodes(StartNode, N, Nodes, [], Nodes)
+  end.
+  
+n_nodes(_, 0, _, Taken, _) -> lists:reverse(Taken);
+
+n_nodes(StartNode, N, [], Taken, Cycle) -> n_nodes(StartNode, N, Cycle, Taken, Cycle);
+
+n_nodes(found, N, [Head|Nodes], Taken, Cycle) ->
+  n_nodes(found, N-1, Nodes, [Head|Taken], Cycle);
+  
+n_nodes(StartNode, N, [StartNode|Nodes], Taken, Cycle) ->
+  n_nodes(found, N-1, Nodes, [StartNode|Taken], Cycle);
+  
+n_nodes(StartNode, N, [_|Nodes], Taken, Cycle) ->
+  n_nodes(StartNode, N, Nodes, Taken, Cycle).
