@@ -39,11 +39,15 @@ OptionParser.new do |opts|
   end
   
   opts.on('-j', "--join NODENAME", 'node to join with') do |node|
-    options[:node] = %Q(-dynomite jointo "'#{node}'")
+    options[:jointo] = %Q(-dynomite jointo "'#{node}'")
+  end
+  
+  opts.on("-s", "--storage MODULE", "storage module to use") do |storage|
+    options[:storage] = %Q(-dynomite storage_mod '#{storage}')
   end
   
   opts.on('-d', "--data DATADIR", "data directory") do |dir|
-    options[:data] = %Q(-dynomite datadir '"#{dir}"')
+    options[:directory] = %Q(-dynomite directory '"#{dir}"')
   end
   
   opts.on('-n', "--replication N", "replication factor") do |n|
@@ -75,8 +79,9 @@ str = "erl \
   #{options[:log]} \
   -noshell \
   #{options[:port]} \
-  #{options[:node]} \
-  #{options[:dir]} \
+  #{options[:jointo]} \
+  #{options[:directory]} \
+  #{options[:storage]} \
   #{options[:n]} \
   #{options[:r]} \
   #{options[:w]} \
