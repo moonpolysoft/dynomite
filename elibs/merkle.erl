@@ -16,7 +16,7 @@
 -record(leaf, {hash, key}).
 
 %% API
--export([create/2, update/3, leaf_size/1, key_diff/2]).
+-export([create/2, update/3, delete/2, leaf_size/1, key_diff/2]).
 
 -ifdef(TEST).
 -include("etest/merkle_test.erl").
@@ -40,6 +40,21 @@ create(Min, Max) ->
       middle=(Min+Max) div 2,
       left=empty,
       right=empty}}.
+  
+delete(Key, Root = #root{max=Max,min=Min,node=Node}) ->
+  Root#root{node=delete(erlang:phash2(Key), Key, Node)}.
+  
+delete(KeyHash, Key, Node = #node{left=Left,right=Right,middle=Middle}) ->
+  {NewLeft,NewRight} = if
+    KeyHash < Middle -> {delete(KeyHash,Key,Left),Right};
+    true -> {Left,delete(KeyHash,Key,Left)}
+  end,
+  Node#node{left=NewLeft,right=NewRight};
+  
+delete(KeyHash, Key, #leaf{key=Key}) -> empty;
+
+%the key isn't here, so tree is unchanged
+delete(KeyHash, Key, Leaf = #leaf{}) -> Leaf.
   
 update(Key, Value, Root = #root{max=Max,min=Min,node=Node}) ->
   Root#root{node=update(erlang:phash2(Key), Key, Value, Min, Max, Node)}.

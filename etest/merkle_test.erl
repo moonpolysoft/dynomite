@@ -45,3 +45,13 @@ totally_boned_key_diff_test() ->
   List = lists:sort(key_diff(Left, Right)),
   timer:sleep(100),
   ["key1", "key2", "key3", "key4", "key5", "key6"] = List.
+  
+delete_test() ->
+  Root = create(0, 2 bsl 31),
+  NewRoot = delete("key2", update("key3", "value3", update("key2", "value2", update("key1", "value1", Root)))),
+  2 = leaf_size(NewRoot).
+  
+delete_second_test() ->
+  Root = create(0, 2 bsl 31),
+  NewRoot = delete("key3", delete("key2", update("key3", "value3", update("key2", "value2", update("key1", "value1", Root))))),
+  1 = leaf_size(NewRoot).
