@@ -34,23 +34,24 @@ join_node_split_test() ->
     partitions = create_partitions(10, one),
     config=#config{q=10,n=3},
     version=vector_clock:create(one),
-    nodes=[one, two]},
+    nodes=[one]},
   NewMem = int_join_node(two, Membership),
   Partitions = NewMem#membership.partitions,
   {Ones, Twos} = lists:partition(fun({Node,_}) -> Node == one end, Partitions),
   ?power_2(9) = length(Ones),
   ?power_2(9) = length(Twos),
-  SecMem = int_join_node(three, Membership#membership{partitions=Partitions,nodes=[one, two, three]}),
+  SecMem = int_join_node(three, Membership#membership{partitions=Partitions,nodes=[one, two]}),
   {Threes, Others} = lists:partition(fun({Node,_}) -> Node == three end, SecMem#membership.partitions),
   341 = length(Threes),
   683 = length(Others),
-  ThrMem = int_join_node(four, SecMem#membership{nodes=[one, two, three, four]}),
+  ThrMem = int_join_node(four, SecMem#membership{nodes=[one, two, three]}),
   {Fours, Others2} = lists:partition(fun({Node,_}) -> Node == four end, ThrMem#membership.partitions),
   256 = length(Fours),
   768 = length(Others2).
   
 start_server_test() ->
-  {ok, Pid} = start_link(#config{q=10,n=3,r=2,w=2}).
+  {ok, Pid} = start_link(#config{q=10,n=3,r=2,w=2}),
+  stop().
   
 find_partition_simple_test() ->
   1 = find_partition(500, 10).
@@ -84,3 +85,41 @@ n_nodes_wrap_test() ->
   
 n_nodes_sublist_test() ->
   [b, c] = n_nodes(b, 2, [a, b, c, d, e]).
+  
+merge_partitions_simple_test() ->
+  PartA = [{a,1},{b,2},{c,3}],
+  PartB = [{a,1},{b,2},{c,3}],
+  Nodes = [a, b, c],
+  [{a,1},{b,2},{c,3}] = merge_partitions(PartA, PartB, [], 1, Nodes).
+  
+merge_partitions_overlap_test() ->
+  PartA = [{a,1},{b,2},{c,3}],
+  PartB = [{c,1}],
+  Nodes = [a, b, c],
+  [{a,1},{b,2},{c,3}] = merge_partitions(PartA, PartB, [], 3, Nodes).
+  
+%%%%% test out the api
+
+partitions_for_node_master_simple_test() ->
+  Config = #config{n=1,r=1,w=1,q=10},
+  {ok, Pid} = membership:start_link(Config),
+  Partitions = membership:partitions_for_node(node(), master),
+  1024 = length(Partitions),
+  membership:stop().
+  
+partitions_for_node_all_simple_test() ->
+  Config = #config{n=1,r=1,w=1,q=10},
+  {ok, Pid} = membership:start_link(Config),
+  Partitions = membership:partitions_for_node(node(), all),
+  1024 = length(Partitions),
+  membership:stop().
+  
+partitions_for_node_master_two_nodes_test() ->
+  Config = #config{n=1,r=1,w=1,q=10},
+  {ok, Pid} = membership:start_link(Config),
+  membership:join_node(node(), 'dynomite@blah.blah'),
+  Partitions = membership:partitions_for_node('dynomite@blah.blah', master),
+  timer:sleep(100),
+  512 = length(Partitions),
+  membership:stop().
+  

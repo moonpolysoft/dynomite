@@ -15,7 +15,7 @@
 -define(VIRTUALNODES, 100).
 
 %% API
--export([start_link/1, join_node/1, nodes_for_key/1, partitions_for_node/2, partition_for_key/1, stop/0]).
+-export([start_link/1, join_node/2, nodes_for_key/1, partitions_for_node/2, fire_gossip/0, partition_for_key/1, stop/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -42,8 +42,8 @@
 start_link(Config) ->
   gen_server:start({local, membership}, ?MODULE, Config, []).
 
-join_node(Node) ->
-	gen_server:call({membership, Node}, {join_node, node()}).
+join_node(JoinTo, Me) ->
+	gen_server:call({membership, JoinTo}, {join_node, Me}).
 	
 nodes_for_key(Key) ->
   gen_server:call(membership, {nodes_for_key, Key}).
@@ -75,10 +75,10 @@ fire_gossip() ->
 init(Config) ->
   Nodes = nodes(),
 	{ok, State} = if
-		length(Nodes) > 0 -> join_node(random_node(Nodes));
+		length(Nodes) > 0 -> join_node(random_node(Nodes), node());
 		true -> {ok, create_initial_state(Config)}
 	end,
-	timer:apply_interval(500, membership, fire_gossip, []),
+  timer:apply_interval(500, membership, fire_gossip, []),
 	{ok, State}.
 
 %%--------------------------------------------------------------------
@@ -115,7 +115,7 @@ handle_call({nodes_for_key, Key}, _From, State) ->
 	{reply, int_nodes_for_key(Key, State), State};
 	
 handle_call({partitions_for_node, Node, Option}, _From, State) ->
-  {reply, int_partitions_for_node(Node, Option, State), State};
+  {reply, int_partitions_for_node(Node, State, Option), State};
   
 handle_call({partition_for_key, Key}, _From, State) ->
   {reply, int_partition_for_key(Key, State), State};
@@ -193,7 +193,8 @@ create_initial_state(Config) ->
   #membership{
     version=vector_clock:create(node()),
 	  partitions=create_partitions(Q, node()),
-	  config=Config}.
+	  config=Config,
+	  nodes=[node()]}.
 	
 create_partitions(Q, Node) ->
   lists:map(fun(Partition) -> {Node, Partition} end, lists:seq(1, ?power_2(32), partition_range(Q))).
@@ -213,7 +214,9 @@ merge_states(StateA, StateB) ->
     config=Config
   }.
   
-merge_partitions([], [], Result, _, _) -> lists:reverse(Result);
+merge_partitions([], [], Result, _, _) -> lists:keysort(2, Result);
+merge_partitions(A, [], Result, _, _) -> lists:keysort(2, A ++ Result);
+merge_partitions([], B, Result, _, _) -> lists:keysort(2, B ++ Result);
 
 merge_partitions([{NodeA,Number}|PartA], [{NodeB,Number}|PartB], Result, N, Nodes) ->
   if
@@ -247,13 +250,17 @@ within(N, Last, nil, [Head|Nodes], First) ->
     _ -> within(N-1, Last, nil, Nodes, First)
   end.
 
-int_join_node(NewNode, #membership{config=Config,partitions=Partitions,version=Version,nodes=Nodes}) ->
+int_join_node(NewNode, #membership{config=Config,partitions=Partitions,version=Version,nodes=OldNodes}) ->
+  Nodes = lists:sort([NewNode|OldNodes]),
   Tokens = ?power_2(Config#config.q) div length(Nodes),
   FromEachNode = Tokens div (length(Nodes)-1),
   {CleanNodes,_} = lists:partition(fun(E) -> E =/= NewNode end, Nodes),
+  P = steal_partitions(NewNode, Tokens, FromEachNode, FromEachNode, CleanNodes, Partitions, []),
+  % error_logger:info_msg("tokens ~p fromeach ~p cleannodes ~p partitions ~p~n", [Tokens, FromEachNode, CleanNodes, P]),
   #membership{config=Config,
-    partitions = steal_partitions(NewNode, Tokens, FromEachNode, FromEachNode, CleanNodes, Partitions, []),
-    version = vector_clock:increment(node(), Version)}.
+    partitions = P,
+    version = vector_clock:increment(node(), Version),
+    nodes=Nodes}.
   
 steal_partitions(_, 0, _, _, _, Partitions, Stolen) ->
   lists:keysort(2, Partitions ++ Stolen);
@@ -281,7 +288,9 @@ int_partitions_for_node(Node, State, all) ->
   Config = State#membership.config,
   Partitions = State#membership.partitions,
   Nodes = n_nodes(Node, Config#config.n, lists:reverse(State#membership.nodes)),
-  lists:foldl(fun(E, Acc) -> lists:merge(Acc, int_partitions_for_node(E, State, master)) end, Nodes, []).
+  lists:foldl(fun(E, Acc) -> 
+      lists:merge(Acc, int_partitions_for_node(E, State, master)) 
+    end, [], Nodes).
   
 int_nodes_for_key(Key, State) ->
   KeyHash = erlang:phash2(Key),
@@ -336,3 +345,4 @@ n_nodes(StartNode, N, [StartNode|Nodes], Taken, Cycle) ->
   
 n_nodes(StartNode, N, [_|Nodes], Taken, Cycle) ->
   n_nodes(StartNode, N, Nodes, Taken, Cycle).
+  
