@@ -1,5 +1,5 @@
 -module (fs_storage).
--export ([open/1, close/1, get/2, put/4, has_key/2, delete/2, create_filename/2]).
+-export ([open/2, close/1, get/2, put/4, has_key/2, delete/2, create_filename/2]).
 
 -record(file, {
   name,
@@ -8,15 +8,11 @@
 }).
 
 % open with the name of the fs directory
-open(InDir) ->
-  Directory = case application:get_env(datadir) of
-    {ok, Val} -> Val;
-    undefined -> InDir
-  end,
+open(Directory, Name) ->
   ok = filelib:ensure_dir(Directory ++ "/"),
-  TableName = list_to_atom(lists:concat([file, '/', node()])),
+  TableName = list_to_atom(lists:concat([Name, '/', node()])),
   {ok, TableName} = dets:open_file(TableName, [{file, lists:concat([Directory, "/files.dets"])}, {keypos, 2}]),
-  ok = crypto:start(),
+  crypto:start(),
   {Directory, TableName}.
 
 % noop
