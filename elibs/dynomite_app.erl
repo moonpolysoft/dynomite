@@ -33,12 +33,14 @@
 %% @end 
 %%--------------------------------------------------------------------
 start(_Type, []) ->
-	Config = case application:get_env(join) of
-		{ok, NodeName} -> case net_adm:ping(NodeName) of
-			pong -> process_arguments([directory, port], configuration:get_config(NodeName));
-			pang -> {error, io_lib:format("Could not connect to ~w.  Exiting.~n", [NodeName])}
-		end;
-		undefined -> process_arguments([r, w, n, q, directory, port])
+	Config = case application:get_env(jointo) of
+		{ok, NodeName} -> 
+		  error_logger:info_msg("attempting to contact ~w~n", [NodeName]),
+		  case net_adm:ping(NodeName) of
+  			pong -> process_arguments([directory, port], configuration:get_config(NodeName));
+  			pang -> {error, io_lib:format("Could not connect to ~w.  Exiting.~n", [NodeName])}
+  		end;
+		undefined -> process_arguments([r, w, n, q, directory, port, storage_mod])
 	end,
   dynomite_sup:start_link(Config).
 
@@ -58,7 +60,7 @@ stop({_, Sup}) ->
 %%====================================================================
 
 process_arguments(Args) ->
-	process_arguments(Args, #config{n=3,r=2,w=2,q=10,directory="/tmp/dynomite"}).
+	process_arguments(Args, #config{n=3,r=2,w=2,q=6,directory="/tmp/dynomite",storage_mod=fs_storage}).
 	
 process_arguments([], Config) -> Config;
 
