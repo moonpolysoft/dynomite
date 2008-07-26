@@ -24,9 +24,7 @@
 
 -include("config.hrl").
 
--record(mediator, {
-    r, w, n
-  }).
+-record(mediator, {config}).
   
 -ifdef(TEST).
 -include("etest/mediator_test.erl").
@@ -40,8 +38,8 @@
 %% @doc Starts the server
 %% @end 
 %%--------------------------------------------------------------------
-start_link({R, W, N}) ->
-  gen_server:start_link({local, mediator}, ?MODULE, {R, W, N}, []).
+start_link(Config) ->
+  gen_server:start_link({local, mediator}, ?MODULE, Config, []).
 
 get(Key) -> 
   gen_server:call(mediator, {get, Key}).
@@ -72,8 +70,8 @@ stop() ->
 %% @doc Initiates the server
 %% @end 
 %%--------------------------------------------------------------------
-init({R, W, N}) ->
-    {ok, #mediator{n=N,r=R,w=W}}.
+init(Config) ->
+    {ok, #mediator{config=Config}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -144,8 +142,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 
-internal_put(Key, Context, Value, #mediator{n=N,w=W}) ->
-  Servers = membership:server_for_key(Key, N),
+internal_put(Key, Context, Value, #mediator{config=Config}) ->
+  {N,R,W} = unpack_config(Config),
+  Servers = membership:nodes_for_key(Key),
   Incremented = vector_clock:increment(node(), Context),
   MapFun = fun(Server) ->
     storage_server:put(Server, Key, Incremented, Value)
@@ -156,8 +155,9 @@ internal_put(Key, Context, Value, #mediator{n=N,w=W}) ->
     true -> {failure, error_message(Good, Bad, N, W)}
   end.
   
-internal_get(Key, #mediator{n=N,r=R}) ->
-  Servers = membership:server_for_key(Key, N),
+internal_get(Key, #mediator{config=Config}) ->
+  {N,R,W} = unpack_config(Config),
+  Servers = membership:nodes_for_key(Key),
   MapFun = fun(Server) ->
     storage_server:get(Server, Key)
   end,
@@ -169,8 +169,9 @@ internal_get(Key, #mediator{n=N,r=R}) ->
     true -> {failure, error_message(Good, Bad, N, R)}
   end.
   
-internal_has_key(Key, #mediator{n=N,r=R}) ->
-  Servers = membership:server_for_key(Key, N),
+internal_has_key(Key, #mediator{config=Config}) ->
+  {N,R,W} = unpack_config(Config),
+  Servers = membership:nodes_for_key(Key),
   MapFun = fun(Server) ->
     storage_server:has_key(Server, Key)
   end,
@@ -180,8 +181,9 @@ internal_has_key(Key, #mediator{n=N,r=R}) ->
     true -> {failure, error_message(Good, Bad, N, R)}
   end.
   
-internal_delete(Key, #mediator{n=N,w=W}) ->
-  Servers = membership:server_for_key(key, N),
+internal_delete(Key, #mediator{config=Config}) ->
+  {N,R,W} = unpack_config(Config),
+  Servers = membership:nodes_for_key(Key),
   MapFun = fun(Server) ->
     storage_server:delete(Server, Key, 10000)
   end,
@@ -234,3 +236,6 @@ strip_ok(Val) -> Val.
 
 error_message(Good, Bad, N, T) ->
   io_lib:format("contacted ~p of ~p servers.  Needed ~p. Errors: ~w", [length(Good), N, T, Bad]).
+  
+unpack_config(#config{n=N,r=R,w=W}) ->
+  {N, R, W}.
