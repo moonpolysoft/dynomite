@@ -1,7 +1,7 @@
 -include_lib("include/eunit/eunit.hrl").
 
 dict_storage_test() ->
-  storage_server:start_link(dict_storage, ok, store),
+  storage_server:start_link(dict_storage, ok, store, 0, (2 bsl 31)),
   storage_server:put(store, key, context, value),
   storage_server:put(store, two, context, value2),
   {ok, {context, [value]}} = storage_server:get(store, key),
@@ -11,7 +11,7 @@ dict_storage_test() ->
   storage_server:close(store).
   
 local_fs_storage_test() ->
-  State = fs_storage:open("/Users/cliff/data/storage_test"),
+  State = fs_storage:open("/Users/cliff/data/storage_test", storage_test),
   fs_storage:put("key_one", context, <<"value one">>, State),
   fs_storage:put("key_one", context, <<"value one">>, State),
   fs_storage:put("key_two", context, <<"value two">>, State),
@@ -24,7 +24,7 @@ local_fs_storage_test() ->
   fs_storage:close(State).
 	
 fs_storage_test() ->
-  {ok, Pid} = storage_server:start_link(fs_storage, "/Users/cliff/data/storage_test", store2),
+  {ok, Pid} = storage_server:start_link(fs_storage, "/Users/cliff/data/storage_test", store2, 0, (2 bsl 31)),
   storage_server:put(store2, "key_one", context, <<"value one">>),
   storage_server:put(store2, "key_one", context, <<"value one">>),
   storage_server:put(store2, "key_two", context, <<"value two">>),

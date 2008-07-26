@@ -55,3 +55,12 @@ delete_second_test() ->
   Root = create(0, 2 bsl 31),
   NewRoot = delete("key3", delete("key2", update("key3", "value3", update("key2", "value2", update("key1", "value1", Root))))),
   1 = leaf_size(NewRoot).
+  
+delete_third_test() ->
+  Root = create(0, 2 bsl 31),
+  Blah = update(two, value2, update(key, value, Root)),
+  error_logger:info_msg("blah ~p~n",[Blah]),
+  NewRoot = delete(key, Blah),
+  error_logger:info_msg("newroot ~p~n",[NewRoot]),
+  timer:sleep(100),
+  1 = leaf_size(NewRoot).
