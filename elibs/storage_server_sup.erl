@@ -19,6 +19,8 @@
 %% Supervisor callbacks
 -export([init/1]).
 
+-include("config.hrl").
+
 -define(SERVER, ?MODULE).
 
 %%====================================================================
@@ -29,8 +31,8 @@
 %% @doc Starts the supervisor
 %% @end 
 %%--------------------------------------------------------------------
-start_link(Args) ->
-    supervisor:start_link(storage_server_sup, Args).
+start_link(Config) ->
+    supervisor:start_link(storage_server_sup, Config).
 
 %%====================================================================
 %% Supervisor callbacks
@@ -45,11 +47,14 @@ start_link(Args) ->
 %% specifications.
 %% @end 
 %%--------------------------------------------------------------------
-init(Args) ->
-    {ok,{{one_for_all,0,1}, 
-      lists:map(fun({Module, DbKey, Name}) ->
-          {Name, {storage_server,start_link,[Module, DbKey, Name]}, permanent, 1000, worker, [storage_server]}
-        end, Args)}}.
+init(Config) ->
+  Partitions = membership:partitions_for_node(node(), all),
+  ChildSpecs = lists:map(fun(Part) ->
+      Name = list_to_atom(lists:concat([storage_, Part])),
+      DbKey = lists:concat([Config#config.directory, "/", Part]),
+      {Name, {storage_server,start_link,[Config#config.storage_mod, DbKey, Name]}, permanent, 1000, worker, [storage_server]}
+    end, Partitions),
+    {ok,{{one_for_one,0,1}, ChildSpecs}}.
 
 %%====================================================================
 %% Internal functions
