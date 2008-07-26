@@ -14,13 +14,13 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/3, get/2, get/3, put/4, put/5, has_key/2, has_key/3, delete/2, delete/3, close/1, close/2]).
+-export([start_link/5, get/2, get/3, put/4, put/5, has_key/2, has_key/3, delete/2, delete/3, close/1, close/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(storage, {module,table,name}).
+-record(storage, {module,table,name,tree}).
 
 -ifdef(TEST).
 -include("etest/storage_server_test.erl").
@@ -34,8 +34,8 @@
 %% @doc Starts the server
 %% @end 
 %%--------------------------------------------------------------------
-start_link(StorageModule, DbKey, Name) ->
-   gen_server:start_link({local, Name}, ?MODULE, {StorageModule,DbKey,Name}, []).
+start_link(StorageModule, DbKey, Name, Min, Max) ->
+   gen_server:start_link({local, Name}, ?MODULE, {StorageModule,DbKey,Name,Min,Max}, []).
 
 get(Name, Key) ->
 	get(Name, Key, 1000).
@@ -79,9 +79,9 @@ close(Name, Timeout) ->
 %% @doc Initiates the server
 %% @end 
 %%--------------------------------------------------------------------
-init({StorageModule,DbKey,Name}) ->
+init({StorageModule,DbKey,Name,Min,Max}) ->
   process_flag(trap_exit, true),
-  {ok, #storage{module=StorageModule,table=StorageModule:open(DbKey),name=Name}}.
+  {ok, #storage{module=StorageModule,table=StorageModule:open(DbKey,Name),name=Name,tree=merkle:create(Min,Max)}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -97,19 +97,21 @@ init({StorageModule,DbKey,Name}) ->
 handle_call({get, Key}, _From, State = #storage{module=Module,table=Table}) ->
 	{reply, catch Module:get(sanitize_key(Key), Table), State};
 	
-handle_call({put, Key, Context, Value}, _From, State = #storage{module=Module,table=Table}) ->
+handle_call({put, Key, Context, Value}, _From, State = #storage{module=Module,table=Table,tree=Tree}) ->
+  UpdatedTree = merkle:update(Key, Value, Tree),
   case catch Module:put(sanitize_key(Key), Context, Value, Table) of
-    {ok, ModifiedTable} -> {reply, ok, State#storage{table=ModifiedTable}};
+    {ok, ModifiedTable} -> {reply, ok, State#storage{table=ModifiedTable,tree=UpdatedTree}};
     Failure -> {reply, Failure, State}
   end;
 	
 handle_call({has_key, Key}, _From, State = #storage{module=Module,table=Table}) ->
 	{reply, catch Module:has_key(sanitize_key(Key),Table), State};
 	
-handle_call({delete, Key}, _From, State = #storage{module=Module,table=Table}) ->
+handle_call({delete, Key}, _From, State = #storage{module=Module,table=Table,tree=Tree}) ->
+  UpdatedTree = merkle:delete(Key, Tree),
   case catch Module:delete(sanitize_key(Key), Table) of
     {ok, ModifiedTable} -> 
-      {reply, ok, State#storage{table=ModifiedTable}};
+      {reply, ok, State#storage{table=ModifiedTable,tree=Tree}};
     Failure -> {reply, {failure, Failure}, State}
   end;
   
