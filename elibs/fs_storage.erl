@@ -1,5 +1,5 @@
 -module (fs_storage).
--export ([open/2, close/1, get/2, put/4, has_key/2, delete/2, create_filename/2]).
+-export ([open/2, close/1, get/2, put/4, has_key/2, delete/2, fold/3, create_filename/2]).
 
 -record(file, {
   name,
@@ -17,6 +17,12 @@ open(Directory, Name) ->
 
 % noop
 close({_Directory, Table}) -> dets:close(Table), crypto:stop().
+
+fold(Fun, {_Directory, Table}, AccIn) when is_function(Fun) ->
+  dets:foldl(fun(#file{name=Key,path=Path,context=Context}, Acc) ->
+      {ok, Value} = file:read_file(Path),
+      Fun({Key, Context, Value}, Acc)
+    end, AccIn, Table).
 
 put(Key, Context, Value, {Directory, Table}) ->
   case dets:lookup(Table, Key) of
