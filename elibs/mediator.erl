@@ -198,7 +198,7 @@ internal_delete(Key, #mediator{config=Config}) ->
 resolve_read([First|Responses]) ->
   case First of
     not_found -> not_found;
-    _ -> lists:foldr({vector_clock, resolve}, First, Responses)
+    _ -> lists:foldr(fun vector_clock:resolve/2, First, Responses)
   end.
   
 resolve_has_key(Good) ->
