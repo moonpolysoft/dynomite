@@ -52,7 +52,8 @@ init(Config) ->
   ChildSpecs = lists:map(fun(Part) ->
       Name = list_to_atom(lists:concat([storage_, Part])),
       DbKey = lists:concat([Config#config.directory, "/", Part]),
-      {Name, {storage_server,start_link,[Config#config.storage_mod, DbKey, Name]}, permanent, 1000, worker, [storage_server]}
+      {Min,Max} = membership:range(Part),
+      {Name, {storage_server,start_link,[Config#config.storage_mod, DbKey, Name, Min, Max]}, permanent, 1000, worker, [storage_server]}
     end, Partitions),
     {ok,{{one_for_one,0,1}, ChildSpecs}}.
 
