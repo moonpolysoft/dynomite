@@ -9,7 +9,8 @@ dict_storage_test() ->
   {ok, true} = storage_server:has_key(store, key),
   storage_server:delete(store, key),
   {ok, false} = storage_server:has_key(store, key),
-  storage_server:close(store).
+  storage_server:close(store),
+  receive _ -> true end.
   
 local_fs_storage_test() ->
   State = fs_storage:open("/Users/cliff/data/storage_test", storage_test),
@@ -38,6 +39,17 @@ fs_storage_test() ->
   {ok,true} = storage_server:has_key(store2, "key_two"),
   storage_server:delete(store2, "key_two"),
   exit(Pid, shutdown),
-  receive
-    _ -> true
-  end.
+  receive _ -> true end.
+  
+sync_storage_test() ->
+  {ok, Pid} = storage_server:start_link(dict_storage, ok, store1, 0, (2 bsl 31)),
+  {ok, Pid2} = storage_server:start_link(dict_storage, ok, store2, 0, (2 bsl 31)),
+  storage_server:put(store2, "key_one", vector_clock:create(a), <<"value one">>),
+  storage_server:put(store2, "key_two", vector_clock:create(a), <<"value two">>),
+  storage_server:sync(store2, Pid),
+  {ok, {_, [<<"value one">>]}} = storage_server:get(Pid, "key_one"),
+  {ok, {_, [<<"value two">>]}} = storage_server:get(Pid, "key_two"),
+  exit(Pid, shutdown),
+  receive _ -> true end,
+  exit(Pid2, shutdown),
+  receive _ -> true end.

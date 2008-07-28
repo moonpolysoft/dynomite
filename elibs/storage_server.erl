@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/5, get/2, get/3, put/4, put/5, fold/3, has_key/2, has_key/3, delete/2, delete/3, close/1, close/2]).
+-export([start_link/5, get/2, get/3, put/4, put/5, fold/3, sync/2, get_tree/1, has_key/2, has_key/3, delete/2, delete/3, close/1, close/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -57,6 +57,31 @@ has_key(Name, Key, Timeout) ->
 	
 delete(Name, Key) ->
   delete(Name, Key, 1000).
+	
+sync(Local, Remote) ->
+  TreeA = get_tree(Local),
+  TreeB = get_tree(Remote),
+  lists:foreach(fun(Key) ->
+      {ok, RetrieveA} = get(Local, Key),
+      {ok, RetrieveB} = get(Remote, Key),
+      case {RetrieveA, RetrieveB} of
+        {not_found, {Context, [Value]}} -> put(Local, Key, Context, Value);
+        {{Context, [Value]}, not_found} -> put(Remote, Key, Context, Value);
+        _ ->
+          {Context, Values} = vector_clock:resolve(RetrieveA, RetrieveB),
+          [Value|_] = Values,
+          if
+            length(Values) == 1 -> 
+              put(Remote, Key, Context, Value),
+              put(Local, Key, Context, Value);
+            true ->
+              error_logger:info_msg("Cannot resolve key ~p with ~p~n", [Key, Remote])
+          end
+      end
+    end, merkle:key_diff(TreeA, TreeB)).
+	
+get_tree(Server) ->
+  gen_server:call(Server, get_tree).
 	
 delete(Name, Key, Timeout) ->
 	gen_server:call(Name, {delete, Key}, Timeout).
@@ -121,6 +146,9 @@ handle_call({delete, Key}, _From, State = #storage{module=Module,table=Table,tre
       {reply, ok, State#storage{table=ModifiedTable,tree=Tree}};
     Failure -> {reply, {failure, Failure}, State}
   end;
+  
+handle_call(get_tree, _From, State = #storage{tree=Tree}) ->
+  {reply, Tree, State};
   
 handle_call({fold, Fun, AccIn}, _From, State = #storage{module=Module,table=Table}) ->
   Reply = Module:fold(Fun, Table, AccIn),
