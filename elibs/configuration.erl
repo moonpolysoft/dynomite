@@ -65,7 +65,8 @@ init(Config) ->
 %% @end 
 %%--------------------------------------------------------------------
 
-handle_call(get_config, _From, State) ->
+handle_call(get_config, {_, _From}, State) ->
+  error_logger:info_msg("supplying configuration to: ~p~n", [node(_From)]),
 	{reply, State#configuration.config, State};
 
 handle_call(_Request, _From, State) ->

@@ -96,9 +96,10 @@ init(Config) ->
 %% @end 
 %%--------------------------------------------------------------------
 
-handle_call({join_node, Node}, _From, State) ->
+handle_call({join_node, Node}, {_, _From}, State) ->
+  error_logger:info_msg("~p is joining the cluster.~n", [node(_From)]),
   NewState = int_join_node(Node, State),
-	{reply, NewState, NewState};
+	{reply, {ok, NewState}, NewState};
 	
 handle_call({share, NewState}, _From, State) ->
   case vector_clock:compare(State#membership.version, NewState#membership.version) of
