@@ -42,7 +42,7 @@ create(Min, Max) ->
       right=empty}}.
   
 delete(Key, Root = #root{max=Max,min=Min,node=Node}) ->
-  Root#root{node=delete(erlang:phash2(Key), Key, Node)}.
+  Root#root{node=delete(lib_misc:hash(Key), Key, Node)}.
   
 delete(KeyHash, Key, Node = #node{left=Left,right=Right,middle=Middle}) ->
   {NewLeft,NewRight} = if
@@ -59,7 +59,7 @@ delete(KeyHash, Key, Leaf = #leaf{}) -> Leaf;
 delete(KeyHash, Key, empty) -> empty.
   
 update(Key, Value, Root = #root{max=Max,min=Min,node=Node}) ->
-  Root#root{node=update(erlang:phash2(Key), Key, Value, Min, Max, Node)}.
+  Root#root{node=update(lib_misc:hash(Key), Key, Value, Min, Max, Node)}.
   
 update(KeyHash, Key, Value, Min, Max, Node = #node{middle=Middle}) ->
   % error_logger:info_msg("update node ~p with keyhash ~p min ~p max ~p~n", [Node, KeyHash, Min, Max]),
@@ -169,4 +169,4 @@ key_diff(Node = #node{left=Left,right=Right}, empty) ->
 hash(#root{node=Node}) -> hash(Node);
 hash(#node{hash=Hash}) -> Hash;
 hash(#leaf{hash=Hash}) -> Hash;
-hash(N) -> erlang:phash2(N).
+hash(N) -> lib_misc:hash(N).

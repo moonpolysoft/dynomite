@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/5, get/2, get/3, put/4, put/5, has_key/2, has_key/3, delete/2, delete/3, close/1, close/2]).
+-export([start_link/5, get/2, get/3, put/4, put/5, fold/3, has_key/2, has_key/3, delete/2, delete/3, close/1, close/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -61,6 +61,9 @@ delete(Name, Key) ->
 delete(Name, Key, Timeout) ->
 	gen_server:call(Name, {delete, Key}, Timeout).
 
+fold(Name, Fun, AccIn) ->
+  gen_server:call(Name, {fold, Fun, AccIn}).
+
 close(Name) ->
   close(Name, 1000).
   
@@ -81,7 +84,11 @@ close(Name, Timeout) ->
 %%--------------------------------------------------------------------
 init({StorageModule,DbKey,Name,Min,Max}) ->
   process_flag(trap_exit, true),
-  {ok, #storage{module=StorageModule,table=StorageModule:open(DbKey,Name),name=Name,tree=merkle:create(Min,Max)}}.
+  Table = StorageModule:open(DbKey,Name),
+  Tree = StorageModule:fold(fun({Key, _, Value}, Acc) -> 
+      merkle:update(Key, Value, Acc) 
+    end, Table, merkle:create(Min, Max)),
+  {ok, #storage{module=StorageModule,table=Table,name=Name,tree=Tree}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -114,6 +121,10 @@ handle_call({delete, Key}, _From, State = #storage{module=Module,table=Table,tre
       {reply, ok, State#storage{table=ModifiedTable,tree=Tree}};
     Failure -> {reply, {failure, Failure}, State}
   end;
+  
+handle_call({fold, Fun, AccIn}, _From, State = #storage{module=Module,table=Table}) ->
+  Reply = Module:fold(Fun, Table, AccIn),
+  {reply, Reply, State};
   
 handle_call(info, _From, State = #storage{module=Module, table=Table}) ->
   {reply, State, State};
