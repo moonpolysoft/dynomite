@@ -145,9 +145,10 @@ code_change(_OldVsn, State, _Extra) ->
 internal_put(Key, Context, Value, #mediator{config=Config}) ->
   {N,R,W} = unpack_config(Config),
   Servers = membership:nodes_for_key(Key),
+  Part = membership:partition_for_key(Key),
   Incremented = vector_clock:increment(node(), Context),
   MapFun = fun(Server) ->
-    storage_server:put(Server, Key, Incremented, Value)
+    storage_server:put({list_to_atom(lists:concat([storage_, Part])), Server}, Key, Incremented, Value)
   end,
   {Good, Bad} = pcall(MapFun, Servers),
   if
@@ -158,8 +159,12 @@ internal_put(Key, Context, Value, #mediator{config=Config}) ->
 internal_get(Key, #mediator{config=Config}) ->
   {N,R,W} = unpack_config(Config),
   Servers = membership:nodes_for_key(Key),
+  Part = membership:partition_for_key(Key),
+  Name = list_to_atom(lists:concat([storage_, Part])),
+  error_logger:info_msg("internal_get name ~w on ~n", [Name]),
   MapFun = fun(Server) ->
-    storage_server:get(Server, Key)
+    error_logger:info_msg("node ~w~n", [Server]),
+    storage_server:get({Name, Server}, Key)
   end,
   {Good, Bad} = pcall(MapFun, Servers),
   NotFound = resolve_not_found(Bad, R),
@@ -172,8 +177,9 @@ internal_get(Key, #mediator{config=Config}) ->
 internal_has_key(Key, #mediator{config=Config}) ->
   {N,R,W} = unpack_config(Config),
   Servers = membership:nodes_for_key(Key),
+  Part = membership:partition_for_key(Key),
   MapFun = fun(Server) ->
-    storage_server:has_key(Server, Key)
+    storage_server:has_key({list_to_atom(lists:concat([storage_, Part])), Server}, Key)
   end,
   {Good, Bad} = pcall(MapFun, Servers),
   if
@@ -184,8 +190,9 @@ internal_has_key(Key, #mediator{config=Config}) ->
 internal_delete(Key, #mediator{config=Config}) ->
   {N,R,W} = unpack_config(Config),
   Servers = membership:nodes_for_key(Key),
+  Part = membership:partition_for_key(Key),
   MapFun = fun(Server) ->
-    storage_server:delete(Server, Key, 10000)
+    storage_server:delete({list_to_atom(lists:concat([storage_, Part])), Server}, Key, 10000)
   end,
   Blah = pcall(MapFun, Servers),
   {Good, Bad} = Blah,
@@ -209,7 +216,7 @@ resolve_has_key(Good) ->
   end.
   
 resolve_not_found(Bad, R) ->
-  Count = lists:foldl(fun(E, Acc) -> 
+  Count = lists:foldl(fun({_, E}, Acc) -> 
     case E of
       not_found -> Acc+1;
       _ -> Acc
@@ -224,7 +231,7 @@ pcall(MapFun, Servers) ->
   Replies = lib_misc:pmap(MapFun, Servers),
   {GoodReplies, Bad} = lists:partition(fun valid/1, Replies),
   Good = lists:map(fun strip_ok/1, GoodReplies),
-	membership:mark_as_bad(lists:map(fun({Server, _}) -> Server end, Bad)),
+  % membership:mark_as_bad(lists:map(fun({Server, _}) -> Server end, Bad)),
   {Good, Bad}.
   
 valid({_, {ok, _}}) -> true;
