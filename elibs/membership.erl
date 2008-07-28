@@ -15,7 +15,7 @@
 -define(VIRTUALNODES, 100).
 
 %% API
--export([start_link/1, join_node/2, nodes_for_key/1, partitions_for_node/2, fire_gossip/0, partition_for_key/1, stop/0]).
+-export([start_link/1, join_node/2, nodes_for_key/1, partitions_for_node/2, fire_gossip/0, partition_for_key/1, stop/0, range/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -54,6 +54,9 @@ partitions_for_node(Node, Option) ->
 partition_for_key(Key) ->
   gen_server:call(membership, {partition_for_key, Key}).
 
+range(Partition) ->
+  gen_server:call(membership, {range, Partition}).
+
 stop() ->
   gen_server:call(membership, stop).
 	
@@ -78,7 +81,7 @@ init(Config) ->
 		length(Nodes) > 0 -> join_node(random_node(Nodes), node());
 		true -> {ok, create_initial_state(Config)}
 	end,
-  timer:apply_interval(500, membership, fire_gossip, []),
+  % timer:apply_interval(500, membership, fire_gossip, []),
 	{ok, State}.
 
 %%--------------------------------------------------------------------
@@ -110,6 +113,9 @@ handle_call(fire_gossip, _From, State) ->
   {Replies,BadNodes} = gen_server:multi_call(random_nodes(2, State#membership.nodes), membership, {share, State}),
   Merged = lists:foldl(fun({_,S}, M) -> merge_states(M, S) end, Replies, State),
   {reply, ok, Merged};
+	
+handle_call({range, Partition}, _From, State) ->
+  {reply, int_range(Partition, State#membership.config), State};
 	
 handle_call({nodes_for_key, Key}, _From, State) ->
 	{reply, int_nodes_for_key(Key, State), State};
@@ -165,6 +171,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+
+int_range(Partition, #config{q=Q}) ->
+  Size = partition_range(Q),
+  {Partition, Partition+Size}.
 
 random_node(Nodes) -> 
   [Node] = random_nodes(1, Nodes),
@@ -293,10 +303,12 @@ int_partitions_for_node(Node, State, all) ->
     end, [], Nodes).
   
 int_nodes_for_key(Key, State) ->
-  KeyHash = erlang:phash2(Key),
+  error_logger:info_msg("inside int_nodes_for_key~n", []),
+  KeyHash = lib_misc:hash(Key),
   Config = State#membership.config,
   Q = Config#config.q,
   Partition = find_partition(KeyHash, Q),
+  error_logger:info_msg("found partition ~w for key ~p~n", [Partition, Key]),
   int_nodes_for_partition(Partition, State).
   
 int_nodes_for_partition(Partition, State) ->
@@ -305,10 +317,11 @@ int_nodes_for_partition(Partition, State) ->
   Q = Config#config.q,
   N = Config#config.n,
   {Node,Partition} = lists:nth(index_for_partition(Partition, Q), Partitions),
+  error_logger:info_msg("Node ~w Partition ~w N ~w~n", [Node, Partition, N]),
   n_nodes(Node, N, State#membership.nodes).
   
 int_partition_for_key(Key, State) ->
-  KeyHash = erlang:phash2(Key),
+  KeyHash = lib_misc:hash(Key),
   Config = State#membership.config,
   Q = Config#config.q,
   find_partition(KeyHash, Q).
