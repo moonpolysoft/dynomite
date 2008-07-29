@@ -78,6 +78,7 @@ str = "erl \
   #{options[:w]} \
   #{options[:q]} \
   -setcookie #{cookie} \
-  -run dynomite start"
+  -run dynomite start \
+  #{options[:detached]}"
 puts str
 exec str
