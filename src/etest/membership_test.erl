@@ -127,4 +127,5 @@ nodes_for_key_test() ->
   Config = #config{n=1,r=1,w=1,q=6},
   {ok, Pid} = membership:start_link(Config),
   Node = node(),
-  [Node] = membership:nodes_for_key(<<"original-natural-Melbourne_international_exhibition_1880.jpg">>).
+  [Node] = membership:nodes_for_key(<<"original-natural-Melbourne_international_exhibition_1880.jpg">>),
+  membership:stop().
