@@ -1,3 +1,44 @@
+Version 0.1.0 (cliff)
+	* (Cliff Moon) adding compare to export
+	* (Cliff Moon) storage server synchronization on start
+	* (Cliff Moon) fixed membership gossip
+	* (Cliff Moon) error formatting
+	* (Cliff Moon) synchronization
+	* (Cliff Moon) logging for join events
+	* (Cliff Moon) switched merkle over to fnv hash
+	* (Cliff Moon) fixed startup sequence to include min and max
+	* (Cliff Moon) switching to fnv hash.  phash2 was comically bad.
+	* (Cliff Moon) added support for the new membership format
+	* (Cliff Moon) added default port
+	* (Cliff Moon) refactoring command line to be more like fuzed.  have commands for remote control.
+	* (Cliff Moon) integrated fold to bootstrap merkle trees on start.
+	* (Cliff Moon) better fun syntax
+	* (Cliff Moon) pass through fold for fail storage
+	* (Cliff Moon) adding fold to the storage servers
+	* (Cliff Moon) giving the thread pool cmd line arg.
+	* (Cliff Moon) integrating merkle trees into storage server
+	* (Cliff Moon) added storage module to config
+	* (Cliff Moon) added delete to merkle trees
+	* (Cliff Moon) mediator uses new membership functions and the config records
+	* (Cliff Moon) storage server sup now queries the membership server
+	* (Cliff Moon) fixed some environment options and the startup sequence
+	* (Cliff Moon) fixing issues with node joining
+	* (Cliff Moon) changed signature of storage modules
+	* (Cliff Moon) added merkle trees to the storage server
+	* (Cliff Moon) fixing up command line options
+	* (Cliff Moon) added node tracking
+	* (Cliff Moon) fixes to key_diff
+	* (Cliff Moon) key_diff for merkle trees
+	* (Cliff Moon) merkle trees
+	* (Cliff Moon) decoupling partitioning from placement in the membership server
+	* (Cliff Moon) compile error in ext listener
+	* (Cliff Moon) added config header
+	* (Cliff Moon) argument processing
+	* (Cliff Moon) configuration server
+	* (Cliff Moon) propagating new configuration options
+	* (Cliff Moon) configuration server
+	* (Cliff Moon) beginnings of failure detection in membership
+
 Version 0.0.4 (cliff)
 * (Cliff Moon) robustify ruby client.  directory params
 * (Cliff Moon) fixes to delete and logging
