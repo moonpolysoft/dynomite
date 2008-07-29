@@ -92,7 +92,7 @@ class Dynomite
   end
   
   def connect
-    @socket = Socket.new(AF_INET6, SOCK_STREAM, 0)
+    @socket = Socket.new(AF_INET, SOCK_STREAM, 0)
     @socket.connect(@addr)
     @socket.sync = true
   end
