@@ -15,13 +15,13 @@
 -define(VIRTUALNODES, 100).
 
 %% API
--export([start_link/1, join_node/2, nodes_for_key/1, partitions_for_node/2, fire_gossip/0, partition_for_key/1, stop/0, range/1]).
+-export([start_link/1, join_node/2, nodes_for_key/1, nodes/0, state/0, state/1, old_partitions/0, partitions_for_node/2, fire_gossip/0, partition_for_key/1, stop/0, range/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(membership, {config, partitions, version, nodes}).
+-record(membership, {config, partitions, version, nodes, old_partitions}).
 
 -include("config.hrl").
 
@@ -48,6 +48,15 @@ join_node(JoinTo, Me) ->
 nodes_for_key(Key) ->
   gen_server:call(membership, {nodes_for_key, Key}).
   
+nodes() ->
+  gen_server:call(membership, nodes).
+  
+state() ->
+  gen_server:call(membership, state).
+  
+state(State) ->
+  gen_server:call(membership, {state, State}).
+  
 partitions_for_node(Node, Option) ->
   gen_server:call(membership, {partitions_for_node, Node, Option}).
   
@@ -57,11 +66,27 @@ partition_for_key(Key) ->
 range(Partition) ->
   gen_server:call(membership, {range, Partition}).
 
+old_partitions() ->
+  gen_server:call(membership, old_partitions).
+
 stop() ->
   gen_server:call(membership, stop).
 	
 fire_gossip() ->
-  gen_server:call(membership, fire_gossip).
+  State = state(),
+  Nodes = lists:filter(fun(E) -> E /= node() end, membership:nodes()),
+  ModState = if
+    length(Nodes) > 0 ->
+      {Replies,BadNodes} = gen_server:multi_call(random_nodes(2, Nodes), membership, {share, State}),
+      Merged = lists:foldl(
+        fun({_,S}, empty) ->
+          S;
+        ({_,S}, M) -> 
+          merge_states(M, S)
+        end, empty, Replies);
+    true -> State
+  end,
+  membership:state(ModState).
 
 %%====================================================================
 %% gen_server callbacks
@@ -76,12 +101,15 @@ fire_gossip() ->
 %% @end 
 %%--------------------------------------------------------------------
 init(Config) ->
-  Nodes = nodes(),
+  Nodes = erlang:nodes(),
 	{ok, State} = if
-		length(Nodes) > 0 -> join_node(random_node(Nodes), node());
+		length(Nodes) > 0 -> 
+		  Node = random_node(Nodes),
+		  error_logger:info_msg("joining node ~p~n", [Node]),
+		  join_node(Node, node());
 		true -> {ok, create_initial_state(Config)}
 	end,
-  % timer:apply_interval(500, membership, fire_gossip, []),
+  timer:apply_interval(500, membership, fire_gossip, []),
 	{ok, State}.
 
 %%--------------------------------------------------------------------
@@ -96,24 +124,31 @@ init(Config) ->
 %% @end 
 %%--------------------------------------------------------------------
 
-handle_call({join_node, Node}, {_, _From}, State) ->
-  error_logger:info_msg("~p is joining the cluster.~n", [node(_From)]),
+handle_call({join_node, Node}, _From, State) ->
+  error_logger:info_msg("~p is joining the cluster.~n", [_From]),
   NewState = int_join_node(Node, State),
 	{reply, {ok, NewState}, NewState};
 	
 handle_call({share, NewState}, _From, State) ->
   case vector_clock:compare(State#membership.version, NewState#membership.version) of
-    less -> {reply, replaced, NewState};
+    less -> {reply, NewState, NewState};
     greater -> {reply, State, State};
-    equal -> {reply, replaced, State};
+    equal -> {reply, State, State};
     concurrent -> Merged = merge_states(State, NewState),
       {reply, Merged, Merged}
   end;
 	
-handle_call(fire_gossip, _From, State) ->
-  {Replies,BadNodes} = gen_server:multi_call(random_nodes(2, State#membership.nodes), membership, {share, State}),
-  Merged = lists:foldl(fun({_,S}, M) -> merge_states(M, S) end, Replies, State),
-  {reply, ok, Merged};
+handle_call(nodes, _From, State = #membership{nodes=Nodes}) ->
+  {reply, Nodes, State};
+  
+handle_call(state, _From, State) -> {reply, State, State};
+
+handle_call({state, NewState}, _From, State) -> {reply, ok, NewState};
+	
+handle_call(old_partitions, _From, State = #membership{old_partitions=P}) when is_list(P) ->
+  {reply, P, State};
+  
+handle_call(old_partitions, _From, State) -> {reply, [], State};
 	
 handle_call({range, Partition}, _From, State) ->
   {reply, int_range(Partition, State#membership.config), State};
@@ -267,11 +302,11 @@ int_join_node(NewNode, #membership{config=Config,partitions=Partitions,version=V
   FromEachNode = Tokens div (length(Nodes)-1),
   {CleanNodes,_} = lists:partition(fun(E) -> E =/= NewNode end, Nodes),
   P = steal_partitions(NewNode, Tokens, FromEachNode, FromEachNode, CleanNodes, Partitions, []),
-  % error_logger:info_msg("tokens ~p fromeach ~p cleannodes ~p partitions ~p~n", [Tokens, FromEachNode, CleanNodes, P]),
   #membership{config=Config,
     partitions = P,
     version = vector_clock:increment(node(), Version),
-    nodes=Nodes}.
+    nodes=Nodes,
+    old_partitions=Partitions}.
   
 steal_partitions(_, 0, _, _, _, Partitions, Stolen) ->
   lists:keysort(2, Partitions ++ Stolen);
