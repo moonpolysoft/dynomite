@@ -38,7 +38,7 @@ start(_Type, []) ->
 		  error_logger:info_msg("attempting to contact ~w~n", [NodeName]),
 		  case net_adm:ping(NodeName) of
   			pong -> process_arguments([directory, port], configuration:get_config(NodeName));
-  			pang -> {error, io_lib:format("Could not connect to ~w.  Exiting.~n", [NodeName])}
+  			pang -> {error, io_lib:format("Could not connect to ~p.  Exiting.~n", [NodeName])}
   		end;
 		undefined -> process_arguments([r, w, n, q, directory, port, storage_mod])
 	end,
