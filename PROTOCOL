@@ -1,3 +1,37 @@
 The dynomite datastore protocol has two basic operations: get and put.
 
-get keylength key datalength data
+request:
+get keylength key\n
+
+responses:
+fail reason\n
+not_found\n
+succ items ctx_length ctx (data_length data)+\n
+
+request:
+put keylength key ctx_length ctx data_length data\n
+
+responses:
+fail reason\n
+succ n_of_servers_stored\n
+
+request:
+has keylength key\n
+
+responses:
+fail reason\n
+yes n_of_servers_stored\n
+no n_of_servers_stored\n
+
+request:
+del keylength key\n
+
+responses:
+fail reason\n
+succ n_of_severs_deleted\n
+
+request:
+close\n
+
+response:
+close\n
