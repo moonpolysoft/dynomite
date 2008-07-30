@@ -115,28 +115,28 @@ key_diff(#root{node=NodeA}, #root{node=NodeB}) ->
   key_diff(NodeA, NodeB);
   
 key_diff(NodeLeft = #node{hash=HashA,left=LeftA,right=RightA}, NodeRight = #node{hash=HashB,left=LeftB,right=RightB}) ->
-  error_logger:info_msg("diff node ~p~n node ~p~n", [NodeLeft, NodeRight]),
+  % error_logger:info_msg("diff node ~p~n node ~p~n", [NodeLeft, NodeRight]),
   if
     HashA == HashB -> [];
     true -> key_diff(LeftA,LeftB) ++ key_diff(RightA,RightB)
   end;
   
 key_diff(Node = #node{left=Left,right=Right,middle=Middle}, Leaf = #leaf{key=Key}) ->
-  error_logger:info_msg("diff node ~p~n leaf ~p~n", [Node, Leaf]),
+  % error_logger:info_msg("diff node ~p~n leaf ~p~n", [Node, Leaf]),
   case hash(Key) of
     Hash when Hash < Middle -> key_diff(Left, Leaf) ++ key_diff(empty, Right);
     _ -> key_diff(Right, Leaf) ++ key_diff(empty, Left)
   end;
   
 key_diff(Leaf = #leaf{key=Key}, Node = #node{left=Left,right=Right,middle=Middle}) ->
-  error_logger:info_msg("diff leaf ~p~n node ~p~n", [Leaf, Node]),
+  % error_logger:info_msg("diff leaf ~p~n node ~p~n", [Leaf, Node]),
   case hash(Key) of
     Hash when Hash < Middle -> key_diff(Leaf, Left) ++ key_diff(empty, Right);
     _ -> key_diff(Leaf, Right) ++ key_diff(empty, Left)
   end;
   
 key_diff(Left = #leaf{hash=HashA,key=KeyA}, Right = #leaf{hash=HashB,key=KeyB}) ->
-  error_logger:info_msg("diff leaf ~p~n leaf ~p~n", [Left, Right]),
+  % error_logger:info_msg("diff leaf ~p~n leaf ~p~n", [Left, Right]),
   if
     (HashA == HashB) and (KeyA == KeyB) -> [];
     (HashA /= HashB) and (KeyA == KeyB) -> [KeyA];
@@ -147,19 +147,19 @@ key_diff(Left = #leaf{hash=HashA,key=KeyA}, Right = #leaf{hash=HashB,key=KeyB}) 
 key_diff(empty, empty) -> [];
 
 key_diff(empty, Right = #leaf{key=Key}) -> 
-  error_logger:info_msg("diff empty right ~p~n", [Right]),
+  % error_logger:info_msg("diff empty right ~p~n", [Right]),
   [Key];
 
 key_diff(Left = #leaf{key=Key}, empty) -> 
-  error_logger:info_msg("diff left ~p empty~n", [Left]),
+  % error_logger:info_msg("diff left ~p empty~n", [Left]),
   [Key];
 
 key_diff(empty, Node = #node{left=Left,right=Right}) ->
-  error_logger:info_msg("diff empty right ~p~n", [Node]),
+  % error_logger:info_msg("diff empty right ~p~n", [Node]),
   key_diff(empty, Left) ++ key_diff(empty, Right);
   
 key_diff(Node = #node{left=Left,right=Right}, empty) ->
-  error_logger:info_msg("diff left ~p empty~n", [Node]),
+  % error_logger:info_msg("diff left ~p empty~n", [Node]),
   key_diff(Left, empty) ++ key_diff(Right, empty).
 
 %%====================================================================
