@@ -116,7 +116,7 @@ init({StorageModule,DbKey,Name,Min,Max}) ->
   process_flag(trap_exit, true),
   Table = StorageModule:open(DbKey,Name),
   Tree = StorageModule:fold(fun({Key, _, Value}, Acc) -> 
-      merkle:update(Key, Value, Acc) 
+      merkle:update(Key, Value, Acc)
     end, Table, merkle:create(Min, Max)),
   {ok, #storage{module=StorageModule,table=Table,name=Name,tree=Tree}}.
 
@@ -208,9 +208,6 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 
-sanitize_key(Key) ->
-  if
-    is_atom(Key) -> atom_to_list(Key);
-    is_binary(Key) -> binary_to_list(Key);
-    true -> Key
-  end.
+sanitize_key(Key) when is_atom(Key) -> atom_to_list(Key);
+sanitize_key(Key) when is_binary(Key) -> binary_to_list(Key);
+sanitize_key(Key) -> Key.
