@@ -15,7 +15,7 @@
 -define(VIRTUALNODES, 100).
 
 %% API
--export([start_link/1, join_node/2, nodes_for_key/1, nodes/0, state/0, state/1, old_partitions/0, partitions_for_node/2, fire_gossip/0, partition_for_key/1, stop/0, range/1]).
+-export([start_link/1, join_node/2, nodes_for_key/1, nodes/0, state/0, state/1, old_partitions/0, partitions_for_node/2, fire_gossip/1, partition_for_key/1, stop/0, range/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -40,7 +40,7 @@
 %% @end 
 %%--------------------------------------------------------------------
 start_link(Config) ->
-  gen_server:start({local, membership}, ?MODULE, Config, []).
+  gen_server:start_link({local, membership}, ?MODULE, Config, []).
 
 join_node(JoinTo, Me) ->
 	gen_server:call({membership, JoinTo}, {join_node, Me}).
@@ -72,21 +72,20 @@ old_partitions() ->
 stop() ->
   gen_server:call(membership, stop).
 	
-fire_gossip() ->
+fire_gossip({A1, A2, A3}) ->
+  random:seed(A1, A2, A3),
   State = state(),
   Nodes = lists:filter(fun(E) -> E /= node() end, membership:nodes()),
   ModState = if
     length(Nodes) > 0 ->
-      {Replies,BadNodes} = gen_server:multi_call(random_nodes(2, Nodes), membership, {share, State}),
-      Merged = lists:foldl(
-        fun({_,S}, empty) ->
-          S;
-        ({_,S}, M) -> 
-          merge_states(M, S)
-        end, empty, Replies);
+      Node = random_node(Nodes),
+        % error_logger:info_msg("firing gossip at ~p~n", [Node]),
+      RemoteState = gen_server:call({membership, Node}, {share, State}),
+      merge_states(RemoteState, State);
     true -> State
   end,
-  membership:state(ModState).
+  membership:state(ModState),
+  timer:apply_after(random:uniform(5000) + 5000, membership, fire_gossip, [random:seed()]).
 
 %%====================================================================
 %% gen_server callbacks
@@ -101,6 +100,7 @@ fire_gossip() ->
 %% @end 
 %%--------------------------------------------------------------------
 init(Config) ->
+  process_flag(trap_exit, true),
   Nodes = erlang:nodes(),
 	{ok, State} = if
 		length(Nodes) > 0 -> 
@@ -109,7 +109,7 @@ init(Config) ->
 		  join_node(Node, node());
 		true -> {ok, create_initial_state(Config)}
 	end,
-  timer:apply_interval(500, membership, fire_gossip, []),
+  timer:apply_after(random:uniform(5000) + 5000, membership, fire_gossip, [random:seed()]),
 	{ok, State}.
 
 %%--------------------------------------------------------------------
@@ -124,12 +124,13 @@ init(Config) ->
 %% @end 
 %%--------------------------------------------------------------------
 
-handle_call({join_node, Node}, _From, State) ->
-  error_logger:info_msg("~p is joining the cluster.~n", [_From]),
+handle_call({join_node, Node}, {_, _From}, State) ->
+  error_logger:info_msg("~p is joining the cluster.~n", [node(_From)]),
   NewState = int_join_node(Node, State),
 	{reply, {ok, NewState}, NewState};
 	
 handle_call({share, NewState}, _From, State) ->
+  % error_logger:info_msg("sharing state ~p ~p~n", [State#membership.version, NewState#membership.version]),
   case vector_clock:compare(State#membership.version, NewState#membership.version) of
     less -> {reply, NewState, NewState};
     greater -> {reply, State, State};
@@ -213,25 +214,24 @@ int_range(Partition, #config{q=Q}) ->
   {Partition, Partition+Size}.
 
 random_node(Nodes) -> 
-  [Node] = random_nodes(1, Nodes),
-  Node.
+  lists:nth(random:uniform(length(Nodes)), Nodes).
   
-random_nodes(N, Nodes) -> random_nodes(N, Nodes, []).
-  
-random_nodes(_, [], Taken) -> Taken;
-  
-random_nodes(0, _, Taken) -> Taken;
-  
-random_nodes(N, Nodes, Taken) ->
-  {One, Two} = lists:split(random:uniform(length(Nodes)), Nodes),
-  if
-    length(Two) > 0 -> 
-      [Head|Split] = Two,
-      random_nodes(N-1, One ++ Split, [Head|Taken]);
-    true ->
-      [Head|Split] = One,
-      random_nodes(N-1, Split, [Head|Taken])
-  end.
+% random_nodes(N, Nodes) -> random_nodes(N, Nodes, []).
+%   
+% random_nodes(_, [], Taken) -> Taken;
+%   
+% random_nodes(0, _, Taken) -> Taken;
+%   
+% random_nodes(N, Nodes, Taken) ->
+%   {One, Two} = lists:split(random:uniform(length(Nodes)), Nodes),
+%   if
+%     length(Two) > 0 -> 
+%       [Head|Split] = Two,
+%       random_nodes(N-1, One ++ Split, [Head|Taken]);
+%     true ->
+%       [Head|Split] = One,
+%       random_nodes(N-1, Split, [Head|Taken])
+%   end.
 
 %% partitions is a list starting with 0 which defines a partition space.
 create_initial_state(Config) ->
@@ -251,8 +251,9 @@ merge_states(StateA, StateB) ->
   PartA = StateA#membership.partitions,
   PartB = StateB#membership.partitions,
   Config = StateA#membership.config,
-  Nodes = lists:merge(StateA#membership.nodes, StateB#membership.nodes),
+  Nodes = lists:usort(lists:merge(StateA#membership.nodes, StateB#membership.nodes)),
   Partitions = merge_partitions(PartA, PartB, [], Config#config.n, Nodes),
+  % error_logger:info_msg("Merged nodes ~p and partitions ~p~n", [Nodes, length(Partitions)]),
   #membership{
     version=vector_clock:merge(StateA#membership.version, StateB#membership.version),
     nodes=Nodes,
@@ -298,31 +299,54 @@ within(N, Last, nil, [Head|Nodes], First) ->
 
 int_join_node(NewNode, #membership{config=Config,partitions=Partitions,version=Version,nodes=OldNodes}) ->
   Nodes = lists:sort([NewNode|OldNodes]),
-  Tokens = ?power_2(Config#config.q) div length(Nodes),
-  FromEachNode = Tokens div (length(Nodes)-1),
-  {CleanNodes,_} = lists:partition(fun(E) -> E =/= NewNode end, Nodes),
-  P = steal_partitions(NewNode, Tokens, FromEachNode, FromEachNode, CleanNodes, Partitions, []),
+  P = steal_partitions(NewNode, Partitions, Nodes, Config),
   #membership{config=Config,
     partitions = P,
     version = vector_clock:increment(node(), Version),
     nodes=Nodes,
     old_partitions=Partitions}.
   
-steal_partitions(_, 0, _, _, _, Partitions, Stolen) ->
+steal_partitions(ForNode, Partitions, Nodes, #config{q=Q}) ->
+  Tokens = ?power_2(Q) div length(Nodes),
+  FromEach = Tokens div (length(Nodes)-1),
+  case lists:keysearch(ForNode, 1, Partitions) of
+    {value, _} -> Partitions;
+    false -> if
+      FromEach == 0 -> steal_partitions(ForNode, Tokens, 1, Partitions, Nodes, []);
+      true -> steal_partitions(ForNode, Tokens, FromEach, Partitions, Nodes, [])
+    end
+  end.
+  
+steal_partitions(_, _, _, Partitions, [], Stolen) ->
+  % error_logger:info_msg("ran out of nodes ~n", []),
+  lists:keysort(2, Partitions ++ Stolen);  
+
+steal_partitions(ForNode, Tokens, FromEach, Partitions, Nodes, Stolen) when length(Stolen) == Tokens ->
+  % error_logger:info_msg("got enough stolen ~p~n", [Stolen]),
+  timer:sleep(100),
   lists:keysort(2, Partitions ++ Stolen);
+
+% skip fornode
+steal_partitions(ForNode, Tokens, FromEach, Partitions, [ForNode|Nodes], Stolen) ->
+  % error_logger:info_msg("fornode ~p tokens ~p fromeach ~p partitions ~p nodes ~p stolen ~p~n", [ForNode, Tokens, FromEach, length(Partitions), Nodes, length(Stolen)]),
+  steal_partitions(ForNode, Tokens, FromEach, Partitions, Nodes, Stolen);
+
+steal_partitions(ForNode, Tokens, FromEach, Partitions, [FromNode|Nodes], Stolen) ->
+  % error_logger:info_msg("fornode ~p tokens ~p fromeach ~p partitions ~p nodes ~p stolen ~p~n", [ForNode, Tokens, FromEach, length(Partitions), Nodes, length(Stolen)]),
+  {NewPartitions,NewStolen} = steal_n(FromEach, FromNode, ForNode, Partitions, Stolen),
+  steal_partitions(ForNode, Tokens, FromEach, NewPartitions, Nodes, NewStolen).
   
-steal_partitions(Node, Tokens, 0, FromEach, [Head|Nodes], Partitions, Stolen) ->
-  if
-    length(Nodes) > 0 -> steal_partitions(Node, Tokens, FromEach, FromEach, Nodes, Partitions, Stolen);
-    true -> steal_partitions(Node, Tokens, FromEach, FromEach, [Head|Nodes], Partitions, Stolen)
-  end;
-  
-steal_partitions(Node, Tokens, FromThis, FromEach, [Head|Nodes], Partitions, Stolen) ->
-  case lists:keytake(Head, 1, Partitions) of
-    {value, {Head, Partition}, NewPartitions} ->
-      steal_partitions(Node, Tokens-1, FromThis-1, FromEach, [Head|Nodes], NewPartitions, [{Node,Partition}|Stolen]);
-    % there may be another node joining the system in this case.  we should handle gracefully
-    false -> steal_partitions(Node, Tokens, FromThis, FromEach, [Head|Nodes], Partitions, Stolen)
+steal_n(0, Node, ForNode, Partitions, Stolen) -> {Partitions,Stolen};
+
+% we want to make sure to always leave at least on partition for an existing node
+steal_n(N, Node, ForNode, Partitions, Stolen) ->
+  case lists:keytake(Node, 1, Partitions) of
+    {value, {_,Part}, NewPartitions} -> 
+      case lists:keytake(Node, 1, NewPartitions) of
+        {value, _, _} -> steal_n(N-1, Node, ForNode, NewPartitions, [{ForNode,Part}|Stolen]);
+        false -> {Partitions,Stolen}
+      end;
+    false -> {Partitions,Stolen}
   end.
   
 int_partitions_for_node(Node, State, master) ->

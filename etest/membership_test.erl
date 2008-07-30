@@ -26,32 +26,34 @@ within_swapped_test() ->
   {true, one} = within(3, two, one, ?NODES),
   {true, seven} = within(2, eight, seven, ?NODES).
   
-steal_partitions_test() ->
-  [{bean, 1}, {bean, 2}, {bean, 3}|_] = steal_partitions(bean, 3, 1, 1, ?NODES, ?PARTITIONS, []).
-  
 join_node_split_test() ->
-  Membership = #membership{
-    partitions = create_partitions(10, one),
-    config=#config{q=10,n=3},
-    version=vector_clock:create(one),
-    nodes=[one]},
-  NewMem = int_join_node(two, Membership),
-  Partitions = NewMem#membership.partitions,
-  {Ones, Twos} = lists:partition(fun({Node,_}) -> Node == one end, Partitions),
-  ?power_2(9) = length(Ones),
-  ?power_2(9) = length(Twos),
-  SecMem = int_join_node(three, Membership#membership{partitions=Partitions,nodes=[one, two]}),
-  {Threes, Others} = lists:partition(fun({Node,_}) -> Node == three end, SecMem#membership.partitions),
-  341 = length(Threes),
-  683 = length(Others),
-  ThrMem = int_join_node(four, SecMem#membership{nodes=[one, two, three]}),
-  {Fours, Others2} = lists:partition(fun({Node,_}) -> Node == four end, ThrMem#membership.partitions),
-  256 = length(Fours),
-  768 = length(Others2).
+  {ok, Pid} = membership:start_link(#config{q=10,n=1,r=1,w=1}),
+  membership:join_node(node(), two),
+  P1 = membership:partitions_for_node(two, master),
+  512 = length(P1),
+  membership:stop(),
+  receive _ -> ok end.
   
-start_server_test() ->
-  {ok, Pid} = start_link(#config{q=10,n=3,r=2,w=2}),
-  stop().
+  
+  
+  % Membership = #membership{
+  %   partitions = create_partitions(10, one),
+  %   config=#config{q=10,n=3},
+  %   version=vector_clock:create(one),
+  %   nodes=[one]},
+  % NewMem = int_join_node(two, Membership),
+  % Partitions = NewMem#membership.partitions,
+  % {Ones, Twos} = lists:partition(fun({Node,_}) -> Node == one end, Partitions),
+  % ?power_2(9) = length(Ones),
+  % ?power_2(9) = length(Twos),
+  % SecMem = int_join_node(three, Membership#membership{partitions=Partitions,nodes=[one, two]}),
+  % {Threes, Others} = lists:partition(fun({Node,_}) -> Node == three end, SecMem#membership.partitions),
+  % 341 = length(Threes),
+  % 683 = length(Others),
+  % ThrMem = int_join_node(four, SecMem#membership{nodes=[one, two, three]}),
+  % {Fours, Others2} = lists:partition(fun({Node,_}) -> Node == four end, ThrMem#membership.partitions),
+  % 256 = length(Fours),
+  % 768 = length(Others2).
   
 find_partition_simple_test() ->
   1 = find_partition(500, 10).
@@ -105,14 +107,16 @@ partitions_for_node_master_simple_test() ->
   {ok, Pid} = membership:start_link(Config),
   Partitions = membership:partitions_for_node(node(), master),
   1024 = length(Partitions),
-  membership:stop().
+  membership:stop(),
+  receive _ -> ok end.
   
 partitions_for_node_all_simple_test() ->
   Config = #config{n=1,r=1,w=1,q=10},
   {ok, Pid} = membership:start_link(Config),
   Partitions = membership:partitions_for_node(node(), all),
   1024 = length(Partitions),
-  membership:stop().
+  membership:stop(),
+  receive _ -> ok end.
   
 partitions_for_node_master_two_nodes_test() ->
   Config = #config{n=1,r=1,w=1,q=10},
@@ -121,11 +125,22 @@ partitions_for_node_master_two_nodes_test() ->
   Partitions = membership:partitions_for_node('dynomite@blah.blah', master),
   timer:sleep(100),
   512 = length(Partitions),
-  membership:stop().
+  membership:stop(),
+  receive _ -> ok end.
   
 nodes_for_key_test() ->
   Config = #config{n=1,r=1,w=1,q=6},
   {ok, Pid} = membership:start_link(Config),
   Node = node(),
   [Node] = membership:nodes_for_key(<<"original-natural-Melbourne_international_exhibition_1880.jpg">>),
-  membership:stop().
+  membership:stop(),
+  receive _ -> ok end.
+  
+join_node_weirdness_test() ->
+  Config = #config{n=1,r=1,w=1,q=6},
+  {ok, Pid} = membership:start_link(Config),
+  lists:foreach(fun(N) ->
+      membership:join_node(node(), list_to_atom(lists:concat([N, '@blah.blah'])))
+    end, lists:seq(1, 10)),
+  membership:stop(),
+  receive _ -> ok end.
