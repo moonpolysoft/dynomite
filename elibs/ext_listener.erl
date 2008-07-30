@@ -35,7 +35,7 @@ loop(Socket) ->
 
 execute_command("get", Socket) ->
   Length = read_length(Socket),
-  Key = read_data(Socket, Length),
+  Key = binary_to_list(read_data(Socket, Length)),
   case mediator:get(Key) of
     {ok, not_found} -> send_not_found(Socket);
     {ok, {Context, Values}} -> send_get(Socket, Context, Values);
@@ -43,7 +43,7 @@ execute_command("get", Socket) ->
   end;
   
 execute_command("put", Socket) ->
-  Key = read_length_data(Socket),
+  Key = binary_to_list(read_length_data(Socket)),
   ContextData = read_length_data(Socket),
   Context = if
     erlang:byte_size(ContextData) > 0 -> binary_to_term(ContextData);
@@ -56,7 +56,7 @@ execute_command("put", Socket) ->
   end;
   
 execute_command("has", Socket) ->
-  Key = read_length_data(Socket),
+  Key = binary_to_list(read_length_data(Socket)),
   case mediator:has_key(Key) of
     {ok, {true, N}} -> send_msg(Socket, "yes", N);
     {ok, {false, N}} -> send_msg(Socket, "no", N);
@@ -64,7 +64,7 @@ execute_command("has", Socket) ->
   end;
   
 execute_command("del", Socket) ->
-  Key = read_length_data(Socket),
+  Key = binary_to_list(read_length_data(Socket)),
   case mediator:delete(Key) of
     {ok, N} -> send_msg(Socket, "succ", N);
     {failure, Reason} -> send_failure(Socket, Reason)
