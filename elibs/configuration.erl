@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1, get_config/1]).
+-export([start_link/1, get_config/1, get_config/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -37,6 +37,9 @@ start_link(Config) ->
 
 get_config(Node) ->
 	gen_server:call({configuration, Node}, get_config, 1000).
+	
+get_config() ->
+  gen_server:call(configuration, get_config).
 
 %%====================================================================
 %% gen_server callbacks
@@ -66,7 +69,6 @@ init(Config) ->
 %%--------------------------------------------------------------------
 
 handle_call(get_config, {_, _From}, State) ->
-  error_logger:info_msg("supplying configuration to: ~p~n", [node(_From)]),
 	{reply, State#configuration.config, State};
 
 handle_call(_Request, _From, State) ->
