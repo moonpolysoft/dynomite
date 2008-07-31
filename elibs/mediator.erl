@@ -161,9 +161,9 @@ internal_get(Key, #mediator{config=Config}) ->
   Servers = membership:nodes_for_key(Key),
   Part = membership:partition_for_key(Key),
   Name = list_to_atom(lists:concat([storage_, Part])),
-  error_logger:info_msg("internal_get name ~w on ~n", [Name]),
+  % error_logger:info_msg("internal_get name ~w on ~n", [Name]),
   MapFun = fun(Server) ->
-    error_logger:info_msg("node ~w~n", [Server]),
+    % error_logger:info_msg("node ~w~n", [Server]),
     storage_server:get({Name, Server}, Key)
   end,
   {Good, Bad} = pcall(MapFun, Servers),
