@@ -1,7 +1,6 @@
 # ruby protocol handler for dynomite.
 
 require 'socket'
-include Socket::Constants
 
 class DynomiteError < Exception; end
 
@@ -13,7 +12,7 @@ class Dynomite
   
   def initialize(options={})
     options = DEFAULTS.merge(options)
-    @addr = Socket.pack_sockaddr_in(options[:port], options[:host])
+    @addr = options
     connect
   end
   
@@ -92,9 +91,9 @@ class Dynomite
   end
   
   def connect
-    @socket = Socket.new(AF_INET, SOCK_STREAM, 0)
-    @socket.connect(@addr)
+    @socket = TCPSocket.new(@addr[:host], @addr[:port])
     @socket.sync = true
+    @socket
   end
   
   def read(length)
