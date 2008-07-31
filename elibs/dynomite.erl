@@ -4,4 +4,5 @@
 
 start() ->
   application:load(dynomite),
+  crypto:start(),
   application:start(dynomite).
