@@ -75,6 +75,7 @@ stop() ->
 fire_gossip({A1, A2, A3}) ->
   random:seed(A1, A2, A3),
   State = state(),
+  Config = State#membership.config,
   Nodes = lists:filter(fun(E) -> E /= node() end, membership:nodes()),
   ModState = if
     length(Nodes) > 0 ->
@@ -84,7 +85,8 @@ fire_gossip({A1, A2, A3}) ->
       merge_states(RemoteState, State);
     true -> State
   end,
-  membership:state(ModState),
+  membership:state(ModState#membership{config=Config}),
+  reload_storage_servers(State, ModState),
   timer:apply_after(random:uniform(5000) + 5000, membership, fire_gossip, [random:seed()]).
 
 %%====================================================================
@@ -109,8 +111,9 @@ init(Config) ->
 		  join_node(Node, node());
 		true -> {ok, create_initial_state(Config)}
 	end,
-  timer:apply_after(random:uniform(5000) + 5000, membership, fire_gossip, [random:seed()]),
-	{ok, State}.
+	reload_storage_servers(empty, State),
+  timer:apply_after(random:uniform(1000) + 1000, membership, fire_gossip, [random:seed()]),
+	{ok, State#membership{config=Config}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -124,19 +127,24 @@ init(Config) ->
 %% @end 
 %%--------------------------------------------------------------------
 
-handle_call({join_node, Node}, {_, _From}, State) ->
+handle_call({join_node, Node}, {_, _From}, State = #membership{config=Config}) ->
   error_logger:info_msg("~p is joining the cluster.~n", [node(_From)]),
   NewState = int_join_node(Node, State),
-	{reply, {ok, NewState}, NewState};
+  reload_storage_servers(State, NewState),
+	{reply, {ok, NewState}, NewState#membership{config=Config}};
 	
-handle_call({share, NewState}, _From, State) ->
-  % error_logger:info_msg("sharing state ~p ~p~n", [State#membership.version, NewState#membership.version]),
+handle_call({share, NewState}, _From, State = #membership{config=Config}) ->
+  % error_logger:info_msg("sharing state ~p ~p~n", [State#membership.config, NewState#membership.config]),
   case vector_clock:compare(State#membership.version, NewState#membership.version) of
-    less -> {reply, NewState, NewState};
+    less -> 
+      reload_storage_servers(State, NewState),
+      {reply, NewState, NewState};
     greater -> {reply, State, State};
     equal -> {reply, State, State};
-    concurrent -> Merged = merge_states(State, NewState),
-      {reply, Merged, Merged}
+    concurrent -> 
+      Merged = merge_states(NewState, State),
+      reload_storage_servers(State, Merged),
+      {reply, Merged, Merged#membership{config=State#membership.config}}
   end;
 	
 handle_call(nodes, _From, State = #membership{nodes=Nodes}) ->
@@ -144,7 +152,7 @@ handle_call(nodes, _From, State = #membership{nodes=Nodes}) ->
   
 handle_call(state, _From, State) -> {reply, State, State};
 
-handle_call({state, NewState}, _From, State) -> {reply, ok, NewState};
+handle_call({state, NewState}, _From, State = #membership{config=Config}) -> {reply, ok, NewState#membership{config=Config}};
 	
 handle_call(old_partitions, _From, State = #membership{old_partitions=P}) when is_list(P) ->
   {reply, P, State};
@@ -233,7 +241,7 @@ random_node(Nodes) ->
 %       random_nodes(N-1, Split, [Head|Taken])
 %   end.
 
-%% partitions is a list starting with 0 which defines a partition space.
+%% partitions is a list starting with 1 which defines a partition space.
 create_initial_state(Config) ->
   Q = Config#config.q,
   #membership{
@@ -250,7 +258,7 @@ partition_range(Q) -> ?power_2(32-Q).
 merge_states(StateA, StateB) ->
   PartA = StateA#membership.partitions,
   PartB = StateB#membership.partitions,
-  Config = StateA#membership.config,
+  Config = StateB#membership.config,
   Nodes = lists:usort(lists:merge(StateA#membership.nodes, StateB#membership.nodes)),
   Partitions = merge_partitions(PartA, PartB, [], Config#config.n, Nodes),
   % error_logger:info_msg("Merged nodes ~p and partitions ~p~n", [Nodes, length(Partitions)]),
@@ -297,11 +305,53 @@ within(N, Last, nil, [Head|Nodes], First) ->
     _ -> within(N-1, Last, nil, Nodes, First)
   end.
 
+reload_storage_servers(empty, NewState) ->
+  Config = configuration:get_config(),
+  Partitions = int_partitions_for_node(node(), NewState, all),
+  Old = NewState#membership.old_partitions,
+  reload_storage_servers([], Partitions, Old, Config);
+
+reload_storage_servers(OldState, NewState) ->
+  Config = configuration:get_config(),
+  PartForNode = int_partitions_for_node(node(), NewState, all),
+  OldPartForNode = int_partitions_for_node(node(), OldState, all),
+  Old = OldState#membership.partitions,
+  NewPartitions = lists:filter(fun(E) ->
+      not lists:member(E, OldPartForNode)
+    end, PartForNode),
+  OldPartitions = lists:filter(fun(E) ->
+      not lists:member(E, PartForNode)
+    end, OldPartForNode),
+  reload_storage_servers(OldPartitions, NewPartitions, Old, Config).
+  
+reload_storage_servers(_, _, _, #config{live=Live}) when not Live ->
+  ok;
+  
+reload_storage_servers(OldParts, NewParts, Old, Config = #config{live=Live}) when Live ->
+  lists:foreach(fun(E) ->
+      Name = list_to_atom(lists:concat([storage_, E])),
+      supervisor:terminate_child(storage_server_sup, Name),
+      supervisor:delete_child(storage_server_sup, Name)
+    end, OldParts),
+  lists:foreach(fun(Part) ->
+    Name = list_to_atom(lists:concat([storage_, Part])),
+    DbKey = lists:concat([Config#config.directory, "/", Part]),
+    {Min,Max} = int_range(Part, Config),
+    Spec = case catch lists:keysearch(Part, 2, Old) of
+      {value, {OldNode, _}} -> {Name, {storage_server,start_link,[Config#config.storage_mod, DbKey, Name, Min, Max, OldNode]}, permanent, 1000, worker, [storage_server]};
+      _ -> {Name, {storage_server,start_link,[Config#config.storage_mod, DbKey, Name, Min, Max]}, permanent, 1000, worker, [storage_server]}
+    end,
+    case supervisor:start_child(storage_server_sup, Spec) of
+      already_present -> supervisor:restart_child(storage_server_sup, Name);
+      _ -> ok
+    end
+  end, NewParts).
+
 int_join_node(NewNode, #membership{config=Config,partitions=Partitions,version=Version,nodes=OldNodes}) ->
   Nodes = lists:sort([NewNode|OldNodes]),
   P = steal_partitions(NewNode, Partitions, Nodes, Config),
   #membership{config=Config,
-    partitions = P,
+    partitions=P,
     version = vector_clock:increment(node(), Version),
     nodes=Nodes,
     old_partitions=Partitions}.
@@ -363,12 +413,12 @@ int_partitions_for_node(Node, State, all) ->
     end, [], Nodes).
   
 int_nodes_for_key(Key, State) ->
-  error_logger:info_msg("inside int_nodes_for_key~n", []),
+  % error_logger:info_msg("inside int_nodes_for_key~n", []),
   KeyHash = lib_misc:hash(Key),
   Config = State#membership.config,
   Q = Config#config.q,
   Partition = find_partition(KeyHash, Q),
-  error_logger:info_msg("found partition ~w for key ~p~n", [Partition, Key]),
+  % error_logger:info_msg("found partition ~w for key ~p~n", [Partition, Key]),
   int_nodes_for_partition(Partition, State).
   
 int_nodes_for_partition(Partition, State) ->
@@ -377,7 +427,7 @@ int_nodes_for_partition(Partition, State) ->
   Q = Config#config.q,
   N = Config#config.n,
   {Node,Partition} = lists:nth(index_for_partition(Partition, Q), Partitions),
-  error_logger:info_msg("Node ~w Partition ~w N ~w~n", [Node, Partition, N]),
+  % error_logger:info_msg("Node ~w Partition ~w N ~w~n", [Node, Partition, N]),
   n_nodes(Node, N, State#membership.nodes).
   
 int_partition_for_key(Key, State) ->

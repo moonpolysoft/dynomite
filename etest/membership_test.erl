@@ -34,27 +34,6 @@ join_node_split_test() ->
   membership:stop(),
   receive _ -> ok end.
   
-  
-  
-  % Membership = #membership{
-  %   partitions = create_partitions(10, one),
-  %   config=#config{q=10,n=3},
-  %   version=vector_clock:create(one),
-  %   nodes=[one]},
-  % NewMem = int_join_node(two, Membership),
-  % Partitions = NewMem#membership.partitions,
-  % {Ones, Twos} = lists:partition(fun({Node,_}) -> Node == one end, Partitions),
-  % ?power_2(9) = length(Ones),
-  % ?power_2(9) = length(Twos),
-  % SecMem = int_join_node(three, Membership#membership{partitions=Partitions,nodes=[one, two]}),
-  % {Threes, Others} = lists:partition(fun({Node,_}) -> Node == three end, SecMem#membership.partitions),
-  % 341 = length(Threes),
-  % 683 = length(Others),
-  % ThrMem = int_join_node(four, SecMem#membership{nodes=[one, two, three]}),
-  % {Fours, Others2} = lists:partition(fun({Node,_}) -> Node == four end, ThrMem#membership.partitions),
-  % 256 = length(Fours),
-  % 768 = length(Others2).
-  
 find_partition_simple_test() ->
   1 = find_partition(500, 10).
   
@@ -144,3 +123,25 @@ join_node_weirdness_test() ->
     end, lists:seq(1, 10)),
   membership:stop(),
   receive _ -> ok end.
+  
+reload_storage_servers_startup_test() ->
+  Config = #config{n=1,r=1,w=1,q=6,storage_mod=dict_storage,live=true},
+  {ok, SupPid} = storage_server_sup:start_link(Config),
+  {ok, MemPid} = membership:start_link(Config),
+  64 = length(supervisor:which_children(storage_server_sup)),
+  membership:stop(),
+  receive _ -> ok end,
+  exit(SupPid, shutdown),
+  receive _ -> ok end.
+  
+reload_storage_servers_rebalance_test() ->
+  Config = #config{n=1,r=1,w=1,q=6,storage_mod=dict_storage,live=true},
+  {ok, SupPid} = storage_server_sup:start_link(Config),
+  {ok, MemPid} = membership:start_link(Config),
+  membership:join_node(node(), 'newnode'),
+  32 = length(supervisor:which_children(storage_server_sup)),
+  membership:stop(),
+  receive _ -> ok end,
+  exit(SupPid, shutdown),
+  receive _ -> ok end.
+  
