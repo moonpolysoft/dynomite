@@ -60,7 +60,7 @@ stop({_, Sup}) ->
 %%====================================================================
 
 process_arguments(Args) ->
-	process_arguments(Args, #config{n=3,r=2,w=2,q=6,port=11222,directory="/tmp/dynomite",storage_mod=fs_storage}).
+	process_arguments(Args, #config{n=3,r=2,w=2,q=6,port=11222,directory="/tmp/dynomite",storage_mod=fs_storage,live=true}).
 	
 process_arguments([], Config) -> Config;
 
