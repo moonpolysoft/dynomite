@@ -12,11 +12,10 @@ open(Directory, Name) ->
   ok = filelib:ensure_dir(Directory ++ "/"),
   TableName = list_to_atom(lists:concat([Name, '/', node()])),
   {ok, TableName} = dets:open_file(TableName, [{file, lists:concat([Directory, "/files.dets"])}, {keypos, 2}]),
-  crypto:start(),
   {Directory, TableName}.
 
 % noop
-close({_Directory, Table}) -> dets:close(Table), crypto:stop().
+close({_Directory, Table}) -> dets:close(Table).
 
 fold(Fun, {_Directory, Table}, AccIn) when is_function(Fun) ->
   dets:foldl(fun(#file{name=Key,path=Path,context=Context}, Acc) ->
