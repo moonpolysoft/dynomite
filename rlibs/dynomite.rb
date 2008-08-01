@@ -2,7 +2,7 @@
 
 require 'socket'
 
-class DynomiteError < Exception; end
+class DynomiteError < StandardError; end
 
 class Dynomite
   DEFAULTS = {
@@ -17,23 +17,29 @@ class Dynomite
   end
   
   def get(key)
-    write("get #{key.length} #{key}\n")
-    command = read_section
-    case command
-    when "fail"
-      reason = read_line
-      raise DynomiteError.new(reason)
-    when "succ"
-      items = read_section.to_i
-      ctx_length = read_section.to_i
-      ctx = read_binary(ctx_length)
-      data_items = []
-      items.times do
-        data_length = read_section.to_i
-        data_items << read_binary(data_length)
+    timeout(1) {
+      write("get #{key.length} #{key}\n")
+      command = read_section
+      case command
+      when "fail"
+        reason = read_line
+        raise DynomiteError.new(reason)
+      when "succ"
+        items = read_section.to_i
+        ctx_length = read_section.to_i
+        ctx = read_binary(ctx_length)
+        data_items = []
+        items.times do
+          data_length = read_section.to_i
+          data_items << read_binary(data_length)
+        end
+        [ctx, data_items]
       end
-      [ctx, data_items]
-    end
+    }
+  rescue TimeoutError => boom
+    
+  rescue => boom
+    
   end
   
   def put(key, context, data)
