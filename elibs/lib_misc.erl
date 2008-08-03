@@ -14,13 +14,15 @@ pmap(Fun, List) ->
   
 %32 bit fnv.  magic numbers ahoy
 hash(Term) when is_binary(Term) ->
-  fnv_int(?OFFSET_BASIS, Term);
+  fnv_int(?OFFSET_BASIS, 0, Term);
   
 hash(Term) ->
-  fnv_int(?OFFSET_BASIS, term_to_binary(Term)).
+  fnv_int(?OFFSET_BASIS, 0, term_to_binary(Term)).
   
-fnv_int(Hash, <<"">>) -> Hash;
+fnv_int(Hash, ByteOffset, Bin) when byte_size(Bin) == ByteOffset ->
+  Hash;
   
-fnv_int(Hash, <<Octet:8, Bin/binary>>) ->
+fnv_int(Hash, ByteOffset, Bin) ->
+  <<_:ByteOffset/binary, Octet:8, _/binary>> = Bin,
   Xord = Hash bxor Octet,
-  fnv_int((Xord * ?FNV_PRIME) rem (2 bsl 31), Bin).
+  fnv_int((Xord * ?FNV_PRIME) rem (2 bsl 31), ByteOffset+1, Bin).
