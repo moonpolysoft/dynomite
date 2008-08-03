@@ -43,35 +43,35 @@ start_link(StorageModule, DbKey, Name, Min, Max, OldNode) ->
   {ok, Pid}.
 
 get(Name, Key) ->
-	get(Name, Key, 1000).
+	get(Name, Key, infinity).
 	
 get(Name, Key, Timeout) ->
   gen_server:call(Name, {get, Key}, Timeout).
 	
 put(Name, Key, Context, Value) ->
-	put(Name, Key, Context, Value, 1000).
+	put(Name, Key, Context, infinity).
 	
 put(Name, Key, Context, Value, Timeout) ->
 	gen_server:call(Name, {put, Key, Context, Value}, Timeout).
 	
 has_key(Name, Key) ->
-	has_key(Name, Key, 1000).
+	has_key(Name, Key, infinity).
 	
 has_key(Name, Key, Timeout) ->
 	gen_server:call(Name, {has_key, Key}, Timeout).
 	
 delete(Name, Key) ->
-  delete(Name, Key, 1000).
+  delete(Name, Key, infinity).
 	
 sync(Local, Remote) ->
   TreeA = get_tree(Local),
   TreeB = get_tree(Remote),
   lists:foreach(fun(Key) ->
-      {ok, RetrieveA} = get(Local, Key),
-      {ok, RetrieveB} = get(Remote, Key),
+      RetrieveA = get(Local, Key),
+      RetrieveB = get(Remote, Key),
       case {RetrieveA, RetrieveB} of
-        {not_found, {Context, [Value]}} -> put(Local, Key, Context, Value);
-        {{Context, [Value]}, not_found} -> put(Remote, Key, Context, Value);
+        {not_found, {ok, {Context, [Value]}}} -> put(Local, Key, Context, Value);
+        {{ok, {Context, [Value]}}, not_found} -> put(Remote, Key, Context, Value);
         _ ->
           {Context, Values} = vector_clock:resolve(RetrieveA, RetrieveB),
           [Value|_] = Values,
@@ -95,7 +95,7 @@ fold(Name, Fun, AccIn) ->
   gen_server:call(Name, {fold, Fun, AccIn}).
 
 close(Name) ->
-  close(Name, 1000).
+  close(Name, infinity).
   
 close(Name, Timeout) ->
   gen_server:call(Name, close, Timeout).
