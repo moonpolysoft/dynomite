@@ -1,5 +1,5 @@
 -module (ext_listener).
--export ([start_link/1]).
+-export ([start_link/1, loop/1]).
 
 -ifdef(TEST).
 -include("etest/ext_listener_test.erl").
@@ -25,7 +25,7 @@ init(Config) ->
 par_connect(Listen) ->
   {ok, Socket} = gen_tcp:accept(Listen),
   error_logger:info_msg("got connection~n"),
-  spawn(fun() -> loop(Socket) end),
+  spawn_opt(ext_listener, loop, [Socket], [{fullsweep_after, 0}]),
   par_connect(Listen).
   
 loop(Socket) ->
