@@ -42,7 +42,7 @@ create(Min, Max) ->
       right=empty}}.
   
 delete(Key, Root = #root{max=Max,min=Min,node=Node}) ->
-  Root#root{node=delete(lib_misc:hash(Key), Key, Node)}.
+  Root#root{node=delete(hash(Key), Key, Node)}.
   
 delete(KeyHash, Key, Node = #node{left=Left,right=Right,middle=Middle}) ->
   {NewLeft,NewRight} = if
@@ -59,11 +59,10 @@ delete(KeyHash, Key, Leaf = #leaf{}) -> Leaf;
 delete(KeyHash, Key, empty) -> empty.
   
 update(Key, Value, Root = #root{max=Max,min=Min,node=Node}) ->
-  Root#root{node=update(lib_misc:hash(Key), Key, Value, Min, Max, Node)}.
+  Root#root{node=update(hash(Key), Key, Value, Min, Max, Node)}.
   
 update(KeyHash, Key, Value, Min, Max, Node = #node{middle=Middle}) ->
   % error_logger:info_msg("update node ~p with keyhash ~p min ~p max ~p~n", [Node, KeyHash, Min, Max]),
-  KeyHash = hash(Key),
   {Left,Right} = if
     KeyHash < Middle -> 
       {update(KeyHash, Key, Value, Min, Middle, Node#node.left), Node#node.right};
