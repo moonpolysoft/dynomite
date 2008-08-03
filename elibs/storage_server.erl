@@ -49,7 +49,7 @@ get(Name, Key, Timeout) ->
   gen_server:call(Name, {get, Key}, Timeout).
 	
 put(Name, Key, Context, Value) ->
-	put(Name, Key, Context, infinity).
+	put(Name, Key, Context, Value, infinity).
 	
 put(Name, Key, Context, Value, Timeout) ->
 	gen_server:call(Name, {put, Key, Context, Value}, Timeout).
