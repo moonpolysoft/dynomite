@@ -3,7 +3,7 @@ require 'rubygems'
 require 'rake'
 
 ERLC_TEST_FLAGS = "-pa ebin/eunit -I include/eunit -DTEST"
-ERLC_FLAGS = "+debug_info -W2 -I include -o ebin"
+ERLC_FLAGS = "+debug_info -W0 -I include -o ebin"
 ID2_VERSION = "0.0.0"
 
 task :default do
