@@ -18,7 +18,7 @@
 
 
 %% API
--export([open/1, open/2, update/3, delete/2, leaf_size/1, key_diff/2, close/1]).
+-export([open/1, open/2, equals/2, update/3, delete/2, leaf_size/1, key_diff/2, close/1]).
 
 -ifdef(TEST).
 -include("etest/dmerkle_test.erl").
@@ -62,6 +62,9 @@ update(Key, Value, Tree = #dmerkle{file=File,block=BlockSize,d=D,root=Root}) ->
     true -> Tree#dmerkle{root=update(hash(Key), Key, Value, Root, Tree)}
   end.
 
+equals(#dmerkle{root=RootA}, #dmerkle{root=RootB}) ->
+  hash(RootA) == hash(RootB).
+
 find(Key, Tree = #dmerkle{root=Root}) ->
   find(hash(Key), Key, Root, Tree).
 
@@ -69,7 +72,8 @@ delete(Key, Merkle) -> noop.
 
 leaf_size(Merkle) -> noop.
 
-key_diff(MerkleA, MerkleB) -> noop.
+key_diff(TreeA = #dmerkle{root=RootA}, TreeB = #dmerkle{root=RootB}) ->
+  lists:keysort(1, key_diff(RootA, RootB, TreeA, TreeB, [])).
 
 close(#dmerkle{file=File}) ->
   block_server:stop(File).
@@ -78,11 +82,127 @@ close(#dmerkle{file=File}) ->
 %% Internal functions
 %%====================================================================
 
+key_diff(_LeafA = #leaf{values=ValuesA}, _LeafB = #leaf{values=ValuesB}, 
+    #dmerkle{file=FileA}, #dmerkle{file=FileB}, Keys) ->
+  % error_logger:info_msg("leaf differences A~p~n B~p~n", [_LeafA, _LeafB]),
+  leaf_diff(ValuesA, ValuesB, FileA, FileB, Keys);
+
+key_diff(#node{keys=KeysA, children=ChildrenA},
+    #node{keys=KeysB, children=ChildrenB},
+    TreeA = #dmerkle{file=FileA}, TreeB = #dmerkle{file=FileB}, Keys) ->
+  % error_logger:info_msg("node differences ~n"),
+  node_diff(ChildrenA, ChildrenB, TreeA, TreeB, Keys);
+  
+key_diff(Leaf = #leaf{}, Node = #node{}, TreeA, TreeB, Keys) ->
+  % error_logger:info_msg("leaf node differences ~n"),
+  leaves(Node, TreeB, leaves(Leaf, TreeA, Keys));
+  
+key_diff(Node = #node{}, Leaf = #leaf{}, TreeA, TreeB, Keys) ->
+  % error_logger:info_msg("node leaf differences ~n"),
+  leaves(Leaf, TreeA, leaves(Node, TreeB, Keys)).
+
+node_diff([], [], TreeA, TreeB, Keys) -> Keys;
+
+node_diff([], ChildrenB, TreeA, TreeB = #dmerkle{file=File,block=BlockSize}, Keys) ->
+  % error_logger:info_msg("node_diff empty children ~n"),
+  lists:foldl(fun({_, Ptr}, Keys) ->
+      Child = read(File, Ptr, BlockSize),
+      leaves(Child, TreeB, Keys)
+    end, Keys, ChildrenB);
+    
+node_diff(ChildrenA, [], TreeA = #dmerkle{file=File,block=BlockSize}, TreeB, Keys) ->
+  % error_logger:info_msg("node_diff children empty ~n"),
+  lists:foldl(fun({_, Ptr}, Keys) ->
+      Child = read(File, Ptr, BlockSize),
+      leaves(Child, TreeA, Keys)
+    end, Keys, ChildrenA);
+    
+node_diff([{Hash,PtrA}|ChildrenA], [{Hash,PtrB}|ChildrenB], TreeA, TreeB, Keys) ->
+  % error_logger:info_msg("equal nodes ~n"),
+  node_diff(ChildrenA, ChildrenB, TreeA, TreeB, Keys);
+  
+node_diff([{HashA,PtrA}|ChildrenA], [{HashB,PtrB}|ChildrenB], 
+    TreeA=#dmerkle{file=FileA, block=BlockSizeA}, 
+    TreeB=#dmerkle{file=FileB,block=BlockSizeB}, Keys) ->
+  % error_logger:info_msg("nodes are different ~n"),
+  ChildA = read(FileA, PtrA, BlockSizeA),
+  ChildB = read(FileB, PtrB, BlockSizeB),
+  node_diff(ChildrenA, ChildrenB, TreeA, TreeB, key_diff(ChildA, ChildB, TreeA, TreeB, Keys)).
+
+leaf_diff([], [], _, _, Keys) -> Keys;
+
+leaf_diff([], [{_, Ptr, Val}|ValuesB], FileA, FileB, Keys) ->
+  % error_logger:info_msg("leaf_diff empty values ~n"),
+  Key = block_server:read_key(FileB, Ptr),
+  NewKeys = case lists:keytake(Key, 1, Keys) of
+    {value, {Key, Val}, Taken} -> Taken;
+    {value, {Key, _}, _} -> Keys;
+    false -> [{Key, Val}|Keys]
+  end,
+  leaf_diff([], ValuesB, FileA, FileB, NewKeys);
+  
+leaf_diff([{_, Ptr, Val}|ValuesA], [], FileA, FileB, Keys) ->
+  % error_logger:info_msg("leaf_diff values empty ~n"),
+  Key = block_server:read_key(FileA, Ptr),
+  NewKeys = case lists:keytake(Key, 1, Keys) of
+    {value, {Key, Val}, Taken} -> Taken;
+    {value, {Key, _}, _} -> Keys;
+    false -> [{Key, Val}|Keys]
+  end,
+  leaf_diff(ValuesA, [], FileA, FileB, NewKeys);
+  
+leaf_diff([{Hash, _, Val}|ValuesA], [{Hash, _, Val}|ValuesB], FileA, FileB, Keys) ->
+  % error_logger:info_msg("leaf_diff equals ~n"),
+  leaf_diff(ValuesA, ValuesB, FileA, FileB, Keys);
+  
+leaf_diff([{Hash, PtrA, ValA}|ValuesA], [{Hash, PtrB, ValB}|ValuesB], FileA, FileB, Keys) ->
+  % error_logger:info_msg("leaf_diff equal keys, diff vals ~n"),
+  Key = block_server:read_key(FileA, PtrA),
+  leaf_diff(ValuesA, ValuesB, FileA, FileB, [{Key,ValA}|Keys]);
+  
+leaf_diff([{HashA, PtrA, ValA}|ValuesA], [{HashB, PtrB, ValB}|ValuesB], FileA, FileB, Keys) when HashA < HashB ->
+  % error_logger:info_msg("leaf_diff complete diff ~p < ~p ~n", [HashA, HashB]),
+  Key = block_server:read_key(FileA, PtrA),
+  NewKeys = case lists:keytake(Key, 1, Keys) of
+    {value, {Key, ValA}, Taken} -> Taken;
+    {value, {Key, _}, _} -> Keys;
+    false -> [{Key, ValA}|Keys]
+  end,
+  leaf_diff(ValuesA, [{HashB, PtrB, ValB}|ValuesB], FileA, FileB, NewKeys);
+  
+leaf_diff([{HashA, PtrA, ValA}|ValuesA], [{HashB, PtrB, ValB}|ValuesB], FileA, FileB, Keys) when HashA > HashB ->
+  % error_logger:info_msg("leaf_diff complete diff ~p > ~p ~n", [HashA, HashB]),
+  Key = block_server:read_key(FileB, PtrB),
+  NewKeys = case lists:keytake(Key, 1, Keys) of
+    {value, {Key, ValB}, Taken} -> Taken;
+    {value, {Key, _}, _} -> Keys;
+    false -> [{Key, ValB}|Keys]
+  end,
+  leaf_diff([{HashA, PtrA, ValA}|ValuesA], ValuesB, FileA, FileB, NewKeys).
+
+leaves(#node{children=Children}, Tree = #dmerkle{file=File,block=BlockSize}, Key) ->
+  lists:foldl(fun({_,Ptr}, Keys) ->
+      Node = read(File, Ptr, BlockSize),
+      leaves(Node, Tree, Keys)
+    end, [], Children);
+    
+leaves(#leaf{values=Values}, Tree = #dmerkle{file=File,block=BlockSize}, Keys) ->
+  lists:foldl(fun({_, Ptr, Val}, Keys) ->
+      Key = block_server:read_key(File, Ptr),
+      case lists:keytake(Key, 1, Keys) of
+        {value, {Key, Val}, Taken} -> Taken;
+        {value, {Key, _}, _} -> Keys;
+        false -> [{Key, Val}|Keys]
+      end
+    end, Keys, Values).
+
 find(KeyHash, Key, Node = #node{keys=Keys,children=Children}, Tree = #dmerkle{file=File,block=BlockSize}) ->
-  {_, {_,ChildPointer}} = find_child(KeyHash, Keys, Children),
+  {_FoundKey, {_,ChildPointer}} = find_child(KeyHash, Keys, Children),
+  % error_logger:info_msg("finding keyhash ~p in ~p got ~p~n", [KeyHash, Keys, _FoundKey]),
   find(KeyHash, Key, read(File,ChildPointer,BlockSize), Tree);
   
 find(KeyHash, Key, Leaf = #leaf{values=Values}, Tree = #dmerkle{file=File,block=BlockSize}) ->
+  % error_logger:info_msg("looking for ~p in ~p~n", [KeyHash, Values]),
   case lists:keysearch(KeyHash, 1, Values) of
     {value, {KeyHash,_,ValHash}} -> ValHash;
     false -> not_found
@@ -104,12 +224,12 @@ update(KeyHash, Key, Value, Leaf = #leaf{values=Values}, Tree = #dmerkle{d=D,fil
     {value, {KeyHash,Pointer,ValHash}} ->
       case block_server:read_key(File, Pointer) of
         Key -> 
-          error_logger:info_msg("we found the key ~p~n", [Key]),
+          % error_logger:info_msg("we found the key ~p~n", [Key]),
           write(File, BlockSize, Leaf#leaf{
               values=lists:keyreplace(KeyHash, 1, Values, {KeyHash,Pointer,NewValHash})
             });
         _ ->  %we still need to deal with collision here
-          error_logger:info_msg("hash found but no key found, inserting new ~n"),
+          % error_logger:info_msg("hash found but no key found, inserting new ~n"),
           {ok, NewPointer} = block_server:write_key(File, eof, Key),
           write(File, BlockSize, Leaf#leaf{
               values=lists:keymerge(1, Values, [{KeyHash,NewPointer,NewValHash}])
@@ -119,7 +239,6 @@ update(KeyHash, Key, Value, Leaf = #leaf{values=Values}, Tree = #dmerkle{d=D,fil
       % error_logger:info_msg("no hash or key found, inserting new ~n"),
       {ok, NewPointer} = block_server:write_key(File, eof, Key),
       NewValues = lists:keymerge(1, Values, [{KeyHash,NewPointer,NewValHash}]),
-      % error_logger:info_msg("new values: ~p~n", [NewValues]),
       write(File, BlockSize, Leaf#leaf{
           m=length(NewValues),
           values=NewValues
@@ -136,24 +255,25 @@ find_child(KeyHash, [Key|Keys], [Child|Children]) ->
   end.
 
 split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #leaf{values=Values,m=M}, #dmerkle{file=File,block=BlockSize}) ->
+  % error_logger:info_msg("splitting leaf with offset~p parent with offset~p ~n", [Child#leaf.offset, Parent#node.offset]),
   {KeyHash, _, _} = lists:nth(M div 2, Values),
   {LeftValues, RightValues} = lists:partition(fun({Hash,_,_}) ->
       Hash =< KeyHash
     end, Values),
+  % error_logger:info_msg("left ~p right ~p orig ~p~n", [length(LeftValues), length(RightValues), length(Values)]),
+  % error_logger:info_msg("lhas ~p rhas ~p orighas ~p~n", [lists:keymember(3784569674, 1, LeftValues), lists:keymember(3784569674, 1, RightValues), lists:keymember(3784569674, 1, Values)]),
   Left = write(File, BlockSize, #leaf{m=length(LeftValues),values=LeftValues}),
   Right = write(File, BlockSize, Child#leaf{m=length(RightValues),values=RightValues}),
   write(File, BlockSize, replace(Parent, ToReplace, Left, Right));
   
 split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #node{m=M,keys=ChildKeys,children=ChildChildren}, #dmerkle{file=File,block=BlockSize}) ->
+  % error_logger:info_msg("splitting node ~n"),
   KeyHash = lists:nth(M div 2, Keys),
   {LeftKeys, RightKeys} = lists:split((M div 2)-1, ChildKeys),
   {LeftChildren, RightChildren} = lists:split(M div 2, ChildChildren),
   Left = write(File, BlockSize, #node{m=length(LeftKeys),keys=LeftKeys,children=LeftChildren}),
   Right = write(File, BlockSize, Child#node{m=length(RightKeys),keys=RightKeys,children=RightChildren}),
   write(File, BlockSize, replace(Parent, ToReplace, Left, Right)).
-  
-insert_nonfull() ->
-  noop.
 
 replace(Parent = #node{keys=Keys,children=Children}, empty, Left, Right) ->
   KeyHash = last_key(Left),
@@ -162,33 +282,52 @@ replace(Parent = #node{keys=Keys,children=Children}, empty, Left, Right) ->
     keys=[KeyHash],
     children=[{hash(Left),offset(Left)},{hash(Right),offset(Right)}]
   };
+  
+replace(Parent = #node{keys=Keys,children=Children}, last, Left, Right) ->
+  KeyHash = last_key(Left),
+  Parent#node{
+    m=length(Keys)+1,
+    keys=Keys ++ [KeyHash],
+    children = lists:sublist(Children, length(Children)-1) ++ 
+      [{hash(Left),offset(Left)}, {hash(Right),offset(Right)}]
+  };
 
 replace(Parent = #node{keys=Keys,children=Children}, ToReplace, Left, Right) ->
   N = lib_misc:position(ToReplace, Keys),
-  error_logger:info_msg("replace toreplace ~p n ~p~n", [ToReplace, N]),
   KeyHash = last_key(Left),
+  % error_logger:info_msg("replace toreplace ~p n ~p keyhash ~p keys ~p~n children ~p~n left ~p~n right ~p~n", [ToReplace, N, KeyHash, Keys, Children, Left, Right]),
+  KeyTail = if
+    N-1 >= length(Keys) -> [];
+    true -> lists:nthtail(N-1, Keys)
+  end,
+  ChildTail = if
+    N >= length(Children) -> [];
+    true -> lists:nthtail(N, Children)
+  end,
   Parent#node{
-    keys = lists:sublist(Keys, N-1) ++ [KeyHash] ++ lists:nthtail(N, Keys),
-    children = lists:sublist(Children, N-1) ++ [{hash(Left), offset(Left)}, {hash(Right), offset(Right)}] ++ lists:nthtail(N+1, Children)
+    keys = lists:sublist(Keys, N-1) ++ [KeyHash] ++ KeyTail,
+    children = lists:sublist(Children, N-1) ++ 
+      [{hash(Left), offset(Left)}, {hash(Right), offset(Right)}] ++ 
+      ChildTail
   }.
 
 create_or_read_root(File, BlockSize) ->
   case block_server:read_block(File,4,8) of
     eof -> 
-      error_logger:info_msg("could not find offset ~n"),
+      % error_logger:info_msg("could not find offset ~n"),
       block_server:write_block(File,4,<<0:64>>), %placeholder
       Root = write(File, BlockSize, #leaf{}),
       update_root_pointer(File, Root),
       Root;
     {ok, Bin} -> 
       <<Offset:64>> = Bin,
-      error_logger:info_msg("read offset ~p ~p~n", [Bin, Offset]),
+      % error_logger:info_msg("read offset ~p ~p~n", [Bin, Offset]),
       read(File, Offset, BlockSize)
   end.
 
 update_root_pointer(File, Root) ->
   Offset = offset(Root),
-  error_logger:info_msg("writing root offset ~p~n", [Offset]),
+  % error_logger:info_msg("writing root offset ~p~n", [Offset]),
   {ok, 4} = block_server:write_block(File,4,<<Offset:64>>).
 
 %node is denoted by a 0
@@ -322,4 +461,12 @@ last_key(#leaf{values=Values}) ->
   {KeyHash, _, _} = lists:last(Values),
   KeyHash.
 
+%%%
+% hashes need to be based off of value hashes, not anything storage specific
+hash(Node = #node{children=Children}) ->
+  lists:sum(lists:map(fun({Hash, _Pointer}) -> Hash end, Children)) rem (2 bsl 31);
+  
+hash(Leaf = #leaf{values=Values}) ->
+  lists:sum(lists:map(fun({_, _, Hash}) -> Hash end, Values)) rem (2 bsl 31);
+  
 hash(V) -> lib_misc:hash(V).

@@ -2,8 +2,9 @@
 
 test_cleanup() ->
   file:delete("/Users/cliff/data/dmerkle.idx"),
-  file:delete("/Users/cliff/data/dmerkle.keys").
-
+  file:delete("/Users/cliff/data/dmerkle.keys"),
+  file:delete("/Users/cliff/data/dmerkle1.idx"),
+  file:delete("/Users/cliff/data/dmerkle1.keys").
 
 deserialize_node_test() ->
   NodeBin = <<0:8, 2:32, 
@@ -100,7 +101,90 @@ open_and_insert_260_test() ->
   Hash = find("key200", Tree),
   close(Tree),
   NewTree = open("/Users/cliff/data/dmerkle", 4096),
-  timer:sleep(1000),
   Hash2 = hash("value133"),
   Hash2 = find("key133", NewTree),
   close(NewTree).
+  
+open_and_insert_1000_test() ->
+  test_cleanup(),
+  Tree = lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, open("/Users/cliff/data/dmerkle", 4096), lists:seq(1,1000)),
+  true = lists:all(fun(N) -> 
+      Hash = hash(lists:concat(["value", N])),
+      Result = Hash == find(lists:concat(["key", N]), Tree),
+      if
+        Result -> Result;
+        true -> 
+          error_logger:info_msg("could not get ~p was ~p~n", [N, find(lists:concat(["key", N]), Tree)]),
+          timer:sleep(1000),
+          Result
+      end
+    end, lists:seq(1, 1000)),
+  close(Tree).
+  
+open_and_insert_3000_test() ->
+  test_cleanup(),
+  Tree = lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, open("/Users/cliff/data/dmerkle", 4096), lists:seq(1,3000)),
+  true = lists:all(fun(N) -> 
+      Hash = hash(lists:concat(["value", N])),
+      Result = Hash == find(lists:concat(["key", N]), Tree),
+      if
+        Result -> Result;
+        true -> 
+          error_logger:info_msg("could not get ~p was ~p~n", [N, find(lists:concat(["key", N]), Tree)]),
+          Result
+      end
+    end, lists:seq(1, 3000)),
+  close(Tree).
+  
+insert_500_both_ways_test() ->
+  test_cleanup(),
+  TreeA = lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, open("/Users/cliff/data/dmerkle", 4096), lists:seq(1,500)),
+  TreeB = lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, open("/Users/cliff/data/dmerkle1", 4096), lists:reverse(lists:seq(1,500))),
+  % error_logger:info_msg("rootA ~p~nrootB ~p~n", [TreeA#dmerkle.root, TreeB#dmerkle.root]),
+  true = equals(TreeA, TreeB).
+  
+insert_realistic_scenario_equality_test() ->
+  test_cleanup(),
+  TreeA = lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, open("/Users/cliff/data/dmerkle", 4096), lists:seq(1,500)),
+  TreeB = lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, open("/Users/cliff/data/dmerkle1", 4096), lists:seq(1,505)),
+  error_logger:info_msg("rootA ~p~nrootB ~p~n", [TreeA#dmerkle.root, TreeB#dmerkle.root]),
+  timer:sleep(100),
+  false = equals(TreeA, TreeB).
+
+insert_realistic_scenario_diff_test() ->
+  test_cleanup(),
+  TreeA = lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, open("/Users/cliff/data/dmerkle", 4096), lists:seq(1,495)),
+  TreeB = lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, open("/Users/cliff/data/dmerkle1", 4096), lists:seq(1,500)),
+  error_logger:info_msg("rootA ~p~nrootB ~p~n", [TreeA#dmerkle.root, TreeB#dmerkle.root]),
+  Diff = key_diff(TreeA, TreeB),
+  timer:sleep(100),
+  Keys = lists:map(fun(N) -> 
+      {lists:concat(["key", N]), hash(lists:concat(["value", N]))}
+    end, lists:seq(496, 500)),
+  Keys = Diff.
+  
+insert_500_both_ways_diff_test() ->
+  test_cleanup(),
+  TreeA = lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, open("/Users/cliff/data/dmerkle", 4096), lists:seq(1,500)),
+  TreeB = lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, open("/Users/cliff/data/dmerkle1", 4096), lists:reverse(lists:seq(1,500))),
+  [] = key_diff(TreeA, TreeB).

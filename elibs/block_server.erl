@@ -87,7 +87,7 @@ handle_call({read_block, Offset, Size}, _From, State = #state{index=Index}) ->
 handle_call({write_block, Offset, Data}, _From, State = #state{index=Index}) ->
   {ok, Position} = file:position(Index, Offset),
   % error_logger:info_msg("writing ~p bytes at ~p~n", [byte_size(Data), Position]),
-  Reply = file:pwrite(Index, Offset, Data),
+  Reply = file:write(Index, Data),
   {reply, {Reply, Position}, State};
   
 handle_call({read_key, Offset}, _From, State = #state{keys=Keys}) ->
