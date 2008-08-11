@@ -87,6 +87,7 @@ fire_gossip({A1, A2, A3}) ->
   end,
   membership:state(ModState#membership{config=Config}),
   reload_storage_servers(State, ModState),
+  save_state(ModState),
   timer:apply_after(random:uniform(5000) + 5000, membership, fire_gossip, [random:seed()]).
 
 %%====================================================================
@@ -104,13 +105,18 @@ fire_gossip({A1, A2, A3}) ->
 init(Config) ->
   process_flag(trap_exit, true),
   Nodes = erlang:nodes(),
-	{ok, State} = if
-		length(Nodes) > 0 -> 
-		  Node = random_node(Nodes),
-		  error_logger:info_msg("joining node ~p~n", [Node]),
-		  join_node(Node, node());
-		true -> {ok, create_initial_state(Config)}
-	end,
+  {ok, State} = case load_state(Config) of
+    {ok, Value} -> 
+      error_logger:info_msg("loading membership from disk~n", []),
+      {ok, Value};
+    _ -> if
+		  length(Nodes) > 0 -> 
+  		  Node = random_node(Nodes),
+  		  error_logger:info_msg("joining node ~p~n", [Node]),
+  		  join_node(Node, node());
+  		true -> {ok, create_initial_state(Config)}
+  	end
+  end,
 	reload_storage_servers(empty, State),
   timer:apply_after(random:uniform(1000) + 1000, membership, fire_gossip, [random:seed()]),
 	{ok, State#membership{config=Config}}.
@@ -131,6 +137,7 @@ handle_call({join_node, Node}, {_, _From}, State = #membership{config=Config}) -
   error_logger:info_msg("~p is joining the cluster.~n", [node(_From)]),
   NewState = int_join_node(Node, State),
   reload_storage_servers(State, NewState),
+  save_state(NewState),
 	{reply, {ok, NewState}, NewState#membership{config=Config}};
 	
 handle_call({share, NewState}, _From, State = #membership{config=Config}) ->
@@ -144,6 +151,7 @@ handle_call({share, NewState}, _From, State = #membership{config=Config}) ->
     concurrent -> 
       Merged = merge_states(NewState, State),
       reload_storage_servers(State, Merged),
+      save_state(Merged),
       {reply, Merged, Merged#membership{config=State#membership.config}}
   end;
 	
@@ -240,6 +248,20 @@ random_node(Nodes) ->
 %       [Head|Split] = One,
 %       random_nodes(N-1, Split, [Head|Taken])
 %   end.
+
+load_state(#config{directory=Directory}) ->
+  case file:read_file(lists:concat([Directory, "/membership.bin"])) of
+    {ok, Binary} -> 
+      {ok, binary_to_term(Binary)};
+    _ -> not_found
+  end. 
+
+save_state(State) ->
+  Config = configuration:get_config(),
+  Binary = term_to_binary(State),
+  {ok, File} = file:open(lists:concat([Config#config.directory, "/membership.bin"]), [write, raw]),
+  ok = file:write(File, Binary),
+  ok = file:close(File).
 
 %% partitions is a list starting with 1 which defines a partition space.
 create_initial_state(Config) ->
