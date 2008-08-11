@@ -72,8 +72,9 @@ sync(Local, Remote) ->
       case {RetrieveA, RetrieveB} of
         {not_found, {ok, {Context, [Value]}}} -> put(Local, Key, Context, Value);
         {{ok, {Context, [Value]}}, not_found} -> put(Remote, Key, Context, Value);
-        _ ->
-          {Context, Values} = vector_clock:resolve(RetrieveA, RetrieveB),
+        {not_found, not_found} -> error_logger:info_msg("not found~n", []);
+        {{ok, ValueA}, {ok, ValueB}} ->
+          {Context, Values} = vector_clock:resolve(ValueA, ValueB),
           [Value|_] = Values,
           if
             length(Values) == 1 -> 
@@ -135,7 +136,8 @@ handle_call({get, Key}, _From, State = #storage{module=Module,table=Table}) ->
 	{reply, catch Module:get(sanitize_key(Key), Table), State};
 	
 handle_call({put, Key, Context, Value}, _From, State = #storage{module=Module,table=Table,tree=Tree}) ->
-  UpdatedTree = merkle:update(Key, Value, Tree),
+  % UpdatedTree = merkle:update(Key, Value, Tree),
+  UpdatedTree = Tree,
   case catch Module:put(sanitize_key(Key), Context, Value, Table) of
     {ok, ModifiedTable} -> {reply, ok, State#storage{table=ModifiedTable,tree=UpdatedTree}};
     Failure -> {reply, Failure, State}
@@ -145,7 +147,8 @@ handle_call({has_key, Key}, _From, State = #storage{module=Module,table=Table}) 
 	{reply, catch Module:has_key(sanitize_key(Key),Table), State};
 	
 handle_call({delete, Key}, _From, State = #storage{module=Module,table=Table,tree=Tree}) ->
-  UpdatedTree = merkle:delete(Key, Tree),
+  % UpdatedTree = merkle:delete(Key, Tree),
+  UpdatedTree = Tree,
   case catch Module:delete(sanitize_key(Key), Table) of
     {ok, ModifiedTable} -> 
       {reply, ok, State#storage{table=ModifiedTable,tree=Tree}};
