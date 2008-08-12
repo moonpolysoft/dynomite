@@ -40,7 +40,7 @@ start(_Type, []) ->
   			pong -> process_arguments([directory, port], configuration:get_config(NodeName));
   			pang -> {error, io_lib:format("Could not connect to ~p.  Exiting.~n", [NodeName])}
   		end;
-		undefined -> process_arguments([r, w, n, q, directory, port, storage_mod])
+		undefined -> process_arguments([r, w, n, q, directory, blocksize, port, storage_mod])
 	end,
   dynomite_sup:start_link(Config).
 
@@ -60,7 +60,7 @@ stop({_, Sup}) ->
 %%====================================================================
 
 process_arguments(Args) ->
-	process_arguments(Args, #config{n=3,r=2,w=2,q=6,port=11222,directory="/tmp/dynomite",storage_mod=fs_storage,live=true}).
+	process_arguments(Args, #config{n=3,r=2,w=2,q=6,port=11222,blocksize=4096,directory="/tmp/dynomite",storage_mod=fs_storage,live=true}).
 	
 process_arguments([], Config) -> Config;
 

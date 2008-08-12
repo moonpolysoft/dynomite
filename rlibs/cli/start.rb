@@ -12,6 +12,10 @@ OptionParser.new do |opts|
   opts.separator ""
   opts.separator "Specific options:"
   
+  opts.on("-b", "--blocksize [BLOCKSIZE]", "Blocksize of the hard disk") do |blocksize|
+    options[:blocksize] = "-dynomite blocksize #{blocksize}"
+  end
+  
   opts.on("-p", "--port [PORT]", "The port to listen on") do |port|
     options[:port] = "-dynomite port #{port}"
   end
@@ -77,6 +81,7 @@ str = "erl \
   #{options[:r]} \
   #{options[:w]} \
   #{options[:q]} \
+  #{options[:blocksize]} \
   -setcookie #{cookie} \
   -run dynomite start \
   #{options[:detached]}"

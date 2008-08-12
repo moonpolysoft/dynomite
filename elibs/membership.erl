@@ -358,10 +358,11 @@ reload_storage_servers(OldParts, NewParts, Old, Config = #config{live=Live}) whe
   lists:foreach(fun(Part) ->
     Name = list_to_atom(lists:concat([storage_, Part])),
     DbKey = lists:concat([Config#config.directory, "/", Part]),
+    BlockSize = Config#config.blocksize,
     {Min,Max} = int_range(Part, Config),
     Spec = case catch lists:keysearch(Part, 2, Old) of
-      {value, {OldNode, _}} -> {Name, {storage_server,start_link,[Config#config.storage_mod, DbKey, Name, Min, Max, OldNode]}, permanent, 1000, worker, [storage_server]};
-      _ -> {Name, {storage_server,start_link,[Config#config.storage_mod, DbKey, Name, Min, Max]}, permanent, 1000, worker, [storage_server]}
+      {value, {OldNode, _}} -> {Name, {storage_server,start_link,[Config#config.storage_mod, DbKey, Name, Min, Max, BlockSize, OldNode]}, permanent, 1000, worker, [storage_server]};
+      _ -> {Name, {storage_server,start_link,[Config#config.storage_mod, DbKey, Name, Min, Max, BlockSize]}, permanent, 1000, worker, [storage_server]}
     end,
     case supervisor:start_child(storage_server_sup, Spec) of
       already_present -> supervisor:restart_child(storage_server_sup, Name);

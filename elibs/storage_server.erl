@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/5, start_link/6, get/2, get/3, put/4, put/5, fold/3, sync/2, get_tree/1, has_key/2, has_key/3, delete/2, delete/3, close/1, close/2]).
+-export([start_link/6, start_link/7, get/2, get/3, put/4, put/5, fold/3, sync/2, get_tree/1, has_key/2, has_key/3, delete/2, delete/3, close/1, close/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -34,11 +34,11 @@
 %% @doc Starts the server
 %% @end 
 %%--------------------------------------------------------------------
-start_link(StorageModule, DbKey, Name, Min, Max) ->
-   gen_server:start_link({local, Name}, ?MODULE, {StorageModule,DbKey,Name,Min,Max}, []).
+start_link(StorageModule, DbKey, Name, Min, Max, BlockSize) ->
+   gen_server:start_link({local, Name}, ?MODULE, {StorageModule,DbKey,Name,Min,Max, BlockSize}, []).
    
-start_link(StorageModule, DbKey, Name, Min, Max, OldNode) ->
-  {ok, Pid} = start_link(StorageModule, DbKey, Name, Min, Max),
+start_link(StorageModule, DbKey, Name, Min, Max, BlockSize, OldNode) ->
+  {ok, Pid} = start_link(StorageModule, DbKey, Name, Min, Max, BlockSize),
   spawn(fun() -> sync(Pid, {Name, OldNode}) end),
   {ok, Pid}.
 
@@ -66,7 +66,7 @@ delete(Name, Key) ->
 sync(Local, Remote) ->
   TreeA = get_tree(Local),
   TreeB = get_tree(Remote),
-  lists:foreach(fun(Key) ->
+  lists:foreach(fun({Key,_}) ->
       RetrieveA = get(Local, Key),
       RetrieveB = get(Remote, Key),
       case {RetrieveA, RetrieveB} of
@@ -84,7 +84,7 @@ sync(Local, Remote) ->
               error_logger:info_msg("Cannot resolve key ~p with ~p~n", [Key, Remote])
           end
       end
-    end, merkle:key_diff(TreeA, TreeB)).
+    end, dmerkle:key_diff(TreeA, TreeB)).
 	
 get_tree(Server) ->
   gen_server:call(Server, get_tree).
@@ -113,12 +113,10 @@ close(Name, Timeout) ->
 %% @doc Initiates the server
 %% @end 
 %%--------------------------------------------------------------------
-init({StorageModule,DbKey,Name,Min,Max}) ->
+init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
   process_flag(trap_exit, true),
   Table = StorageModule:open(DbKey,Name),
-  Tree = StorageModule:fold(fun({Key, _, Value}, Acc) -> 
-      merkle:update(Key, Value, Acc)
-    end, Table, merkle:create(Min, Max)),
+  Tree = dmerkle:open(lists:concat([DbKey, "/dmerkle"]), BlockSize),
   {ok, #storage{module=StorageModule,table=Table,name=Name,tree=Tree}}.
 
 %%--------------------------------------------------------------------
@@ -136,8 +134,7 @@ handle_call({get, Key}, _From, State = #storage{module=Module,table=Table}) ->
 	{reply, catch Module:get(sanitize_key(Key), Table), State};
 	
 handle_call({put, Key, Context, Value}, _From, State = #storage{module=Module,table=Table,tree=Tree}) ->
-  % UpdatedTree = merkle:update(Key, Value, Tree),
-  UpdatedTree = Tree,
+  UpdatedTree = dmerkle:update(Key, Value, Tree),
   case catch Module:put(sanitize_key(Key), Context, Value, Table) of
     {ok, ModifiedTable} -> {reply, ok, State#storage{table=ModifiedTable,tree=UpdatedTree}};
     Failure -> {reply, Failure, State}
@@ -147,8 +144,7 @@ handle_call({has_key, Key}, _From, State = #storage{module=Module,table=Table}) 
 	{reply, catch Module:has_key(sanitize_key(Key),Table), State};
 	
 handle_call({delete, Key}, _From, State = #storage{module=Module,table=Table,tree=Tree}) ->
-  % UpdatedTree = merkle:delete(Key, Tree),
-  UpdatedTree = Tree,
+  UpdatedTree = merkle:delete(Key, Tree),
   case catch Module:delete(sanitize_key(Key), Table) of
     {ok, ModifiedTable} -> 
       {reply, ok, State#storage{table=ModifiedTable,tree=Tree}};
@@ -196,8 +192,9 @@ handle_info(_Info, State) ->
 %% The return value is ignored.
 %% @end 
 %%--------------------------------------------------------------------
-terminate(_Reason, #storage{module=Module,table=Table}) ->
-  Module:close(Table).
+terminate(_Reason, #storage{module=Module,table=Table,tree=Tree}) ->
+  Module:close(Table),
+  dmerkle:close(Tree).
 
 %%--------------------------------------------------------------------
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}

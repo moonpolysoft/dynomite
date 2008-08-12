@@ -68,7 +68,7 @@ equals(#dmerkle{root=RootA}, #dmerkle{root=RootB}) ->
 find(Key, Tree = #dmerkle{root=Root}) ->
   find(hash(Key), Key, Root, Tree).
 
-delete(Key, Merkle) -> noop.
+delete(Key, Merkle) -> Merkle.
 
 leaf_size(Merkle) -> noop.
 
