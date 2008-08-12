@@ -37,52 +37,66 @@ class Dynomite
       end
     }
   rescue TimeoutError => boom
-    
-  rescue => boom
-    
+    close
+    retry
   end
   
   def put(key, context, data)
-    ctx_length = context ? context.length : 0
-    write("put #{key.length} #{key} #{ctx_length} #{context} #{data.length} ")
-    write(data)
-    write("\n")
-    command = read_section
-    case command
-    when "fail"
-      reason = read_line
-      raise DynomiteError.new(reason)
-    when "succ"
-      return read_section.to_i
-    end
+    timeout(30) {
+      ctx_length = context ? context.length : 0
+      write("put #{key.length} #{key} #{ctx_length} #{context} #{data.length} ")
+      write(data)
+      write("\n")
+      command = read_section
+      case command
+      when "fail"
+        reason = read_line
+        raise DynomiteError.new(reason)
+      when "succ"
+        return read_section.to_i
+      end
+    }
+  rescue TimeoutError => boom
+    close
+    retry
   end
   
   def has_key(key)
-    write("has #{key.length} #{key}\n")
-    command = read_section
-    case command
-    when "fail"
-      reason = read_line
-      raise DynomiteError.new(reason)
-    when "yes"
-      n = read_section.to_i
-      [true, n]
-    when "no"
-      n = read_section.to_i
-      [false, n]
-    end
+    timeout(1) {
+      write("has #{key.length} #{key}\n")
+      command = read_section
+      case command
+      when "fail"
+        reason = read_line
+        raise DynomiteError.new(reason)
+      when "yes"
+        n = read_section.to_i
+        [true, n]
+      when "no"
+        n = read_section.to_i
+        [false, n]
+      end
+    }
+  rescue TimeoutError => boom
+    close
+    retry
   end
   
   def delete(key)
-    write("del #{key.length} #{key}\n")
-    command = read_section
-    case command
-    when "fail"
-      reason = read_line
-      raise DynomiteError.new(reason)
-    when "succ"
-      read_section.to_i
-    end
+    timeout(30) {
+      write("del #{key.length} #{key}\n")
+      command = read_section
+      case command
+      when "fail"
+        reason = read_line
+        raise DynomiteError.new(reason)
+      when "succ"
+        read_section.to_i
+      end
+    }
+  rescue TimeoutError => boom
+    close
+    retry
   end
   
   def close
@@ -92,7 +106,7 @@ class Dynomite
   private
   
   def socket
-    connect if !@socket or @socket.closed?
+    connect if (!@socket or @socket.closed?)
     @socket
   end
   
