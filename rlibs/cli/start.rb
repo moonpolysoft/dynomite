@@ -69,6 +69,7 @@ str = "erl \
   +A 128 \
   -smp enable \
   -pz #{ROOT}/ebin/ \
+  -pz #{ROOT}/deps/mochiweb/ebin \
   -sname #{options[:name]} \
   #{options[:sasl]} \
   #{options[:log]} \
