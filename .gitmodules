@@ -1,0 +1,6 @@
+[submodule "deps/eunit"]
+	path = deps/eunit
+	url = git://github.com/cliffmoon/eunit.git
+[submodule "deps/mochiweb"]
+	path = deps/mochiweb
+	url = git://github.com/cliffmoon/mochiweb.git
