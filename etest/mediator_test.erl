@@ -1,4 +1,4 @@
--include_lib("include/eunit/eunit.hrl").
+-include_lib("eunit.hrl").
 
 init_integrated(Good, Bad, Config) ->
   {ok, _} = membership:start_link(Config),

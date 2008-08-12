@@ -1,4 +1,4 @@
--include_lib("include/eunit/eunit.hrl").
+-include_lib("eunit.hrl").
 
 dict_storage_test() ->
   storage_server:start_link(dict_storage, ok, store, 0, (2 bsl 31)),

@@ -1,4 +1,4 @@
--include_lib("include/eunit/eunit.hrl").
+-include_lib("eunit.hrl").
 
 increment_clock_test() ->
   Clock = create(a),

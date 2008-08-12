@@ -1,4 +1,4 @@
--include_lib("include/eunit/eunit.hrl").
+-include_lib("eunit.hrl").
 
 test_cleanup() ->
   file:delete("/Users/cliff/data/dmerkle.idx"),
