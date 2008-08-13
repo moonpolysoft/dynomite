@@ -4,3 +4,6 @@
 [submodule "deps/mochiweb"]
 	path = deps/mochiweb
 	url = git://github.com/cliffmoon/mochiweb.git
+[submodule "deps/erlyweb"]
+	path = deps/erlyweb
+	url = git://github.com/cliffmoon/erlyweb.git
