@@ -1,9 +1,0 @@
-[submodule "src/deps/eunit"]
-	path = src/deps/eunit
-	url = git://github.com/cliffmoon/eunit.git
-[submodule "src/deps/mochiweb"]
-	path = src/deps/mochiweb
-	url = git://github.com/cliffmoon/mochiweb.git
-[submodule "src/deps/rfc4627"]
-	path = src/deps/rfc4627
-	url = git://github.com/cliffmoon/rfc4627.git
