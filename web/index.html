@@ -1,0 +1,28 @@
+<html>
+  <head>
+    <script type="text/javascript" src="/javascripts/jquery-1.2.6.js"></script>
+    <script type="text/javascript" src="/javascripts/domec.js"></script>
+    <script type="text/javascript">
+      $(document).ready(function(data) {
+        $.getJSON("/rpc/info/stats", function(stats) {
+          $("#node").text(stats.node);
+          $.each(stats.running_nodes, function(i, node) {
+            $.create("li", {}, node).appendTo("#running_nodes");
+          });
+          $.each(stats.member_nodes, function(i, node) {
+            $.create("li", {}, node).appendTo("#member_nodes");
+          });
+        });
+      });
+    </script>
+  </head>
+  <body>
+    <h1>Dynomite</h1>
+    <h2>Dashboard For <span id="node"></span></h2>
+    <h3>Cluster Stats</h3>
+    <ul>
+      <li>Running Nodes:</li><ul id="running_nodes"></ul>
+      <li>Member Nodes:</li><ul id="member_nodes"></ul>
+    </ul>
+  </body>
+</html>

@@ -15,7 +15,7 @@
 -define(VIRTUALNODES, 100).
 
 %% API
--export([start_link/1, join_node/2, nodes_for_key/1, nodes/0, state/0, state/1, old_partitions/0, partitions_for_node/2, fire_gossip/1, partition_for_key/1, stop/0, range/1]).
+-export([start_link/1, join_node/2, nodes_for_key/1, partitions/1, nodes/0, state/0, state/1, old_partitions/0, partitions_for_node/2, fire_gossip/1, partition_for_key/1, stop/0, range/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -56,6 +56,9 @@ state() ->
   
 state(State) ->
   gen_server:call(membership, {state, State}).
+  
+partitions() ->
+  gen_server:call(membership, partitions).
   
 partitions_for_node(Node, Option) ->
   gen_server:call(membership, {partitions_for_node, Node, Option}).
@@ -166,6 +169,8 @@ handle_call(old_partitions, _From, State = #membership{old_partitions=P}) when i
   {reply, P, State};
   
 handle_call(old_partitions, _From, State) -> {reply, [], State};
+	
+handle_call(partitions, _From, State) -> {reply, State#membership.partitions, State};
 	
 handle_call({range, Partition}, _From, State) ->
   {reply, int_range(Partition, State#membership.config), State};
