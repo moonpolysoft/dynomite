@@ -1,0 +1,9 @@
+# Package Information for pkg-config
+
+prefix=@prefix@
+exec_prefix=@exec_prefix@
+
+Name: @PACKAGE_NAME@
+Description: "@SHORT_DESCRIPTION@"
+Version: @PACKAGE_VERSION@
+Requires: @RUNTIME_PREREQUISITES_PKGCONFIG@
