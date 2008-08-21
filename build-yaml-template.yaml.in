@@ -1,0 +1,15 @@
+FILE_FORMAT:
+  format: powerset_package
+  version: 1.0
+PKG_SUMMARY: "@SHORT_DESCRIPTION@"
+PKG_NAME: @PACKAGE_NAME@_build
+PKG_VERSION: '@PACKAGE_VERSION@'
+PKG_RELEASE: '@PACKAGE_RELEASE@'
+PKG_LICENSE: commercial
+PKG_GROUP: Powerset
+PKG_TARGETS: x86_64-linux, i386-linux, i386-darwin, noarch
+PKG_MAINTAINER: @PACKAGE_BUGREPORT@
+PKG_DEPENDS: @BUILD_DEPENDS_LIST@
+  
+PKG_DESCRIPTION: 
+  <%= encode_files('@top_srcdir@/README', '@top_srcdir@/ChangeLog') %>
