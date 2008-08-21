@@ -1,6 +1,7 @@
 # ruby protocol handler for dynomite.
 
 require 'socket'
+require 'timeout'
 
 class DynomiteError < StandardError; end
 
@@ -17,7 +18,7 @@ class Dynomite
   end
   
   def get(key)
-    timeout(1) {
+    timeout_retry(1, 3) {
       write("get #{key.length} #{key}\n")
       command = read_section
       case command
@@ -36,13 +37,11 @@ class Dynomite
         [ctx, data_items]
       end
     }
-  rescue TimeoutError => boom
-    close
-    retry
   end
   
   def put(key, context, data)
-    timeout(30) {
+    timeout_retry(30, 2) {
+      clear_read_buffer
       ctx_length = context ? context.length : 0
       write("put #{key.length} #{key} #{ctx_length} #{context} #{data.length} ")
       write(data)
@@ -56,13 +55,11 @@ class Dynomite
         return read_section.to_i
       end
     }
-  rescue TimeoutError => boom
-    close
-    retry
   end
   
   def has_key(key)
-    timeout(1) {
+    timeout_retry(1, 3) {
+      clear_read_buffer
       write("has #{key.length} #{key}\n")
       command = read_section
       case command
@@ -77,13 +74,10 @@ class Dynomite
         [false, n]
       end
     }
-  rescue TimeoutError => boom
-    close
-    retry
   end
   
   def delete(key)
-    timeout(30) {
+    timeout_retry(30, 2) {
       write("del #{key.length} #{key}\n")
       command = read_section
       case command
@@ -94,9 +88,6 @@ class Dynomite
         read_section.to_i
       end
     }
-  rescue TimeoutError => boom
-    close
-    retry
   end
   
   def close
@@ -104,6 +95,13 @@ class Dynomite
   end
   
   private
+  
+  def timeout_retry(time, retries, &block)
+    timeout(time, &block)
+  rescue TimeoutError
+    retries -= 1
+    retry unless retries < 0
+  end
   
   def socket
     connect if (!@socket or @socket.closed?)
