@@ -40,6 +40,9 @@ get_config(Node) ->
 	
 get_config() ->
   gen_server:call(configuration, get_config).
+  
+set_config(Config) ->
+  gen_server:call(configuration, {set_config, Config}).
 
 %%====================================================================
 %% gen_server callbacks
@@ -70,6 +73,9 @@ init(Config) ->
 
 handle_call(get_config, {_, _From}, State) ->
 	{reply, State#configuration.config, State};
+	
+handle_call({set_config, Config}, _From, State) ->
+  {reply, ok, State#configuration{config=Config}}
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
