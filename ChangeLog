@@ -1,3 +1,55 @@
+Version 0.2.2 (cliff)
+	* (Cliff Moon) membership interface
+	* (Cliff Moon) export set_config
+	* (Cliff Moon) fixed logging output
+	* (Cliff Moon) added set config
+	* (Cliff Moon) better loading of configuration from disk
+	* (Cliff Moon) better timeout/retry logic in ruby library
+
+Version 0.2.1 (cliff)
+  * (Cliff Moon) robustifying the ruby client
+
+Version 0.2.0 (cliff)
+	* (Cliff Moon) stress testing script
+	* (Cliff Moon) integrate disk merkle trees
+	* (Cliff Moon) get rid of annoying warnings.
+	* (Cliff Moon) fixed not_found error.  removed merkle update call.
+	* (Cliff Moon) loading membership info from disk
+	* (Cliff Moon) dmerkle trees are working reasonably well now.
+	* (Cliff Moon) disk based merkle trees
+
+Version 0.1.5 (cliff)
+  * (Cliff Moon) put got boned up. sigh.
+
+Version 0.1.4 (cliff)
+	* (Cliff Moon) fixed issues with the sync function and changed default timeout to infinity
+	* (Cliff Moon) remove extraneous hashing
+	* (Cliff Moon) lessening the memory impact of the hashing function
+	* (Cliff Moon) spawn_opts to give GC hints for external listeners
+	* (Cliff Moon) membership command
+	* (Cliff Moon) commands
+
+Version 0.1.3 (cliff)
+  * (Cliff Moon) fixed up the ruby client library
+	* (Cliff Moon) removed initialization from supervisor
+	* (Cliff Moon) reload storage servers when membership info changes
+	* (Cliff Moon) removing extraneous logging
+	* (Cliff Moon) removed crypto start and stop from fs storage
+	* (Cliff Moon) moved up storage sup init
+	* (Cliff Moon) added live parameter to config
+	* (Cliff Moon) crypto start in the initialization
+	* (Cliff Moon) added get_config/0
+
+Version 0.1.2 (cliff)
+	* (Cliff Moon) rewrote sanitize key for giggles
+	* (Cliff Moon) removing logging
+	* (Cliff Moon) fixed membership tests, node randomization, state accumulation in gossip, and fair partitioning.
+	* (Cliff Moon) keys always need to be lists
+
+Version 0.1.1 (cliff)
+	* (Cliff Moon) af_inet blues
+	* (Cliff Moon) wired up detached to the command line
+
 Version 0.1.0 (cliff)
 	* (Cliff Moon) adding compare to export
 	* (Cliff Moon) storage server synchronization on start
