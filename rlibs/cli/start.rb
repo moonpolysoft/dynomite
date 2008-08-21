@@ -20,12 +20,8 @@ OptionParser.new do |opts|
     options[:port] = "-dynomite port #{port}"
   end
   
-  opts.on("-s", "--sasl-log [LOGFILE]", "sasl log path") do |log|
-    options[:sasl] = "-sasl sasl_error_logger #{log}"
-  end
-  
   opts.on("-l", "--log [LOGFILE]", "error log path") do |log|
-    options[:log] = "-kernel error_logger #{log}"
+    options[:log] = %Q[-kernel error_logger '{file,"#{File.join(log, 'dynomite.log')}"}' -sasl sasl_error_logger '{file,"#{File.join(log, 'sasl.log')}"}']
   end
   
   opts.on('-j', "--join [NODENAME]", 'node to join with') do |node|
@@ -72,7 +68,6 @@ str = "erl \
   -pz #{ROOT}/deps/mochiweb/ebin \
   -pz #{ROOT}/deps/rfc4627/ebin \
   -sname #{options[:name]} \
-  #{options[:sasl]} \
   #{options[:log]} \
   -noshell \
   #{options[:port]} \
