@@ -15,7 +15,7 @@
 -define(VIRTUALNODES, 100).
 
 %% API
--export([start_link/1, join_node/2, nodes_for_key/1, partitions/1, nodes/0, state/0, state/1, old_partitions/0, partitions_for_node/2, fire_gossip/1, partition_for_key/1, stop/0, range/1]).
+-export([start_link/1, join_node/2, nodes_for_key/1, partitions/0, nodes/0, state/0, state/1, old_partitions/0, partitions_for_node/2, fire_gossip/1, partition_for_key/1, stop/0, range/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -105,24 +105,25 @@ fire_gossip({A1, A2, A3}) ->
 %% @doc Initiates the server
 %% @end 
 %%--------------------------------------------------------------------
-init(Config) ->
+init(ConfigIn) ->
   process_flag(trap_exit, true),
   Nodes = erlang:nodes(),
-  {ok, State} = case load_state(Config) of
+  {ok, State} = case load_state(ConfigIn) of
     {ok, Value} -> 
       error_logger:info_msg("loading membership from disk~n", []),
+      configuration:set_config(Value#membership.config),
       {ok, Value};
     _ -> if
 		  length(Nodes) > 0 -> 
   		  Node = random_node(Nodes),
   		  error_logger:info_msg("joining node ~p~n", [Node]),
   		  join_node(Node, node());
-  		true -> {ok, create_initial_state(Config)}
+  		true -> {ok, create_initial_state(ConfigIn)}
   	end
   end,
 	reload_storage_servers(empty, State),
   timer:apply_after(random:uniform(1000) + 1000, membership, fire_gossip, [random:seed()]),
-	{ok, State#membership{config=Config}}.
+	{ok, State#membership{config=configuration:get_config()}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
