@@ -6,11 +6,19 @@
       $(document).ready(function(data) {
         $.getJSON("/rpc/info/stats", function(stats) {
           $("#node").text(stats.node);
-          $.each(stats.running_nodes, function(i, node) {
+          $.each(stats.running_nodes, function(n, node) {
             $.create("li", {}, node).appendTo("#running_nodes");
           });
-          $.each(stats.member_nodes, function(i, node) {
-            $.create("li", {}, node).appendTo("#member_nodes");
+          $.each(stats.member_nodes, function(n, node_struct) {
+            var node = node_struct[0];
+            var partitions = node_struct[1];
+						$.create("a", {'href' : '#'}, "+").click(function() {
+							$("#" + node.split("@").join("at") + "_partitions").toggle("slow");
+						}).appendTo($.create("li", {}, node + " ").appendTo("#member_nodes"));
+            var children = $.map(partitions, function(part) {
+              return $.create("li", {}, "" + part);
+            });
+            $.create("ul", {'id' : node.split("@").join("at") + "_partitions", 'style' : 'display: none;'}, children).appendTo('#member_nodes');
           });
         });
       });
@@ -18,7 +26,7 @@
   </head>
   <body>
     <h1>Dynomite</h1>
-    <h2>Dashboard For <span id="node"></span></h2>
+    <h2>Dashboard for <span id="node"></span></h2>
     <h3>Cluster Stats</h3>
     <ul>
       <li>Running Nodes:</li><ul id="running_nodes"></ul>

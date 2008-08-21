@@ -35,13 +35,13 @@ info(stats) ->
 %%====================================================================
 
 transform_partitions([], [{Node,Part}|Parts]) ->
-  transform_partitions([{Node,[Part]}], Parts);
+  transform_partitions([[Node,[Part]]], Parts);
   
 transform_partitions(NodeParts, []) ->
-  [{Node, lists:sort(Parts)} || {Node, Parts} <- lists:sort(NodeParts)]; 
+  [[Node, lists:sort(Parts)] || [Node, Parts] <- lists:sort(NodeParts)]; 
   
-transform_partitions([{Node,NodeParts}|Others], [{Node,Part}|Parts]) ->
-  transform_partitions([{Node,[Part|NodeParts]}|Others], Parts);
+transform_partitions([[Node,NodeParts]|Others], [{Node,Part}|Parts]) ->
+  transform_partitions([[Node,[Part|NodeParts]]|Others], Parts);
   
 transform_partitions(Others, [{Node,Part}|Parts]) ->
-  transform_partitions([{Node,[Part]}|Others], Parts).
+  transform_partitions([[Node,[Part]]|Others], Parts).
