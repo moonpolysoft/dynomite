@@ -18,7 +18,7 @@ class Dynomite
   end
   
   def get(key)
-    timeout_retry(1, 3) {
+    timeout_retry(10, 3) {
       write("get #{key.length} #{key}\n")
       command = read_section
       case command
@@ -41,7 +41,6 @@ class Dynomite
   
   def put(key, context, data)
     timeout_retry(30, 2) {
-      clear_read_buffer
       ctx_length = context ? context.length : 0
       write("put #{key.length} #{key} #{ctx_length} #{context} #{data.length} ")
       write(data)
@@ -58,8 +57,7 @@ class Dynomite
   end
   
   def has_key(key)
-    timeout_retry(1, 3) {
-      clear_read_buffer
+    timeout_retry(10, 3) {
       write("has #{key.length} #{key}\n")
       command = read_section
       case command
