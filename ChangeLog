@@ -1,3 +1,8 @@
+Version 0.2.3 (cliff)
+	* (Cliff Moon) more reasonable defaults in the client lib
+	* (Cliff Moon) execution flag
+	* (Cliff Moon) readme
+
 Version 0.2.2 (cliff)
 	* (Cliff Moon) membership interface
 	* (Cliff Moon) export set_config
