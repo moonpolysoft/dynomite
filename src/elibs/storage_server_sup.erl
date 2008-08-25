@@ -60,7 +60,7 @@ init(Config) ->
   %     end
   %   end, Partitions),
   ChildSpecs = [],
-  {ok,{{one_for_one,100,1}, ChildSpecs}}.
+  {ok,{{one_for_one,10,1}, ChildSpecs}}.
 
 %%====================================================================
 %% Internal functions
