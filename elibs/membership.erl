@@ -149,6 +149,7 @@ handle_call({share, NewState}, _From, State = #membership{config=Config}) ->
   case vector_clock:compare(State#membership.version, NewState#membership.version) of
     less -> 
       reload_storage_servers(State, NewState),
+      save_state(NewState),
       {reply, NewState, NewState};
     greater -> {reply, State, State};
     equal -> {reply, State, State};
