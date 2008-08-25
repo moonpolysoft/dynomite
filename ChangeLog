@@ -1,3 +1,8 @@
+Version 0.2.4 (cliff)
+	* (Cliff Moon) merkle -> dmerkle
+	* (Cliff Moon) sort partitions first
+	* (Cliff Moon) more reasonable restart policy
+
 Version 0.2.3 (cliff)
 	* (Cliff Moon) more reasonable defaults in the client lib
 	* (Cliff Moon) execution flag
