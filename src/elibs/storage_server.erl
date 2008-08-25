@@ -144,7 +144,7 @@ handle_call({has_key, Key}, _From, State = #storage{module=Module,table=Table}) 
 	{reply, catch Module:has_key(sanitize_key(Key),Table), State};
 	
 handle_call({delete, Key}, _From, State = #storage{module=Module,table=Table,tree=Tree}) ->
-  UpdatedTree = merkle:delete(Key, Tree),
+  UpdatedTree = dmerkle:delete(Key, Tree),
   case catch Module:delete(sanitize_key(Key), Table) of
     {ok, ModifiedTable} -> 
       {reply, ok, State#storage{table=ModifiedTable,tree=Tree}};

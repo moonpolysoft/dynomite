@@ -48,7 +48,7 @@ start_link(Config) ->
 %% @end 
 %%--------------------------------------------------------------------
 init(Config) ->
-    {ok,{{one_for_all,0,1}, [
+    {ok,{{one_for_all,100,1}, [
 			{configuration, {configuration,start_link,[Config]}, permanent, 1000, worker, [configuration]},
       {storage_server_sup, {storage_server_sup,start_link,[Config]}, permanent, 10000, supervisor, [storage_server_sup]},
       {membership, {membership,start_link,[Config]}, permanent, 1000, worker, [membership]},

@@ -27,7 +27,7 @@ info(stats) ->
   {obj, [
     {node,node()}, 
     {running_nodes,nodes([this,visible])},
-    {member_nodes,transform_partitions([], membership:partitions())}
+    {member_nodes,transform_partitions([], lists:keysort(1, membership:partitions()))}
   ]}.
 
 %%====================================================================
