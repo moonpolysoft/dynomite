@@ -134,7 +134,8 @@ handle_call({get, Key}, _From, State = #storage{module=Module,table=Table}) ->
 	{reply, catch Module:get(sanitize_key(Key), Table), State};
 	
 handle_call({put, Key, Context, Value}, _From, State = #storage{module=Module,table=Table,tree=Tree}) ->
-  UpdatedTree = dmerkle:update(Key, Value, Tree),
+  % UpdatedTree = dmerkle:update(Key, Value, Tree),
+  UpdatedTree = Tree,
   case catch Module:put(sanitize_key(Key), Context, Value, Table) of
     {ok, ModifiedTable} -> {reply, ok, State#storage{table=ModifiedTable,tree=UpdatedTree}};
     Failure -> {reply, Failure, State}
@@ -144,7 +145,8 @@ handle_call({has_key, Key}, _From, State = #storage{module=Module,table=Table}) 
 	{reply, catch Module:has_key(sanitize_key(Key),Table), State};
 	
 handle_call({delete, Key}, _From, State = #storage{module=Module,table=Table,tree=Tree}) ->
-  UpdatedTree = dmerkle:delete(Key, Tree),
+  % UpdatedTree = dmerkle:delete(Key, Tree),
+  UpdatedTree = Tree,
   case catch Module:delete(sanitize_key(Key), Table) of
     {ok, ModifiedTable} -> 
       {reply, ok, State#storage{table=ModifiedTable,tree=Tree}};
