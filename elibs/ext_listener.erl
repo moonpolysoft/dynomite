@@ -18,7 +18,7 @@ init(Config) ->
     {ok, Val} -> Val;
     undefined -> 11222
   end,
-  {ok, Listen} = gen_tcp:listen(Port, [binary, inet6, {active, false}, {packet, 0}]),
+  {ok, Listen} = gen_tcp:listen(Port, [binary, inet6, {active, false}, {packet, 0}, {reuseaddr, true}]),
   error_logger:info_msg("listening on ~p~n", [Port]),
   par_connect(Listen).
   
@@ -29,9 +29,15 @@ par_connect(Listen) ->
   par_connect(Listen).
   
 loop(Socket) ->
-  Cmd = read_section(Socket),
-  execute_command(Cmd, Socket),
-  loop(Socket).
+  case read_section(Socket) of
+    {ok, Cmd} -> 
+      error_logger:info_msg("got cmd ~p~n", [Cmd]),
+      execute_command(Cmd, Socket),
+      loop(Socket);
+    {error, Reason} ->
+      gen_tcp:close(Socket),
+      exit({error, Reason})
+  end.
 
 execute_command("get", Socket) ->
   Length = read_length(Socket),
@@ -115,17 +121,22 @@ read_data(Socket, Length) ->
   Data.
   
 read_length(Socket) ->
-  Blah = read_section(Socket),
-  list_to_integer(Blah).
+  case read_section(Socket) of
+    {ok, Blah} -> list_to_integer(Blah);
+    {error, Reason} ->
+      gen_tcp:close(Socket),
+      exit({error, Reason})
+  end.
 
 read_section(Socket) ->
   read_section([], Socket).
 
 read_section(Cmd, Socket) ->
   case gen_tcp:recv(Socket, 1) of
-    {ok, <<" ">>} -> lists:reverse(Cmd);
-    {ok, <<"\n">>} -> lists:reverse(Cmd);
-    {ok, <<Char>>} -> read_section([Char|Cmd], Socket)
+    {ok, <<" ">>} -> {ok, lists:reverse(Cmd)};
+    {ok, <<"\n">>} -> {ok, lists:reverse(Cmd)};
+    {ok, <<Char>>} -> read_section([Char|Cmd], Socket);
+    {error, Reason} -> {error, Reason}
   end.
   
 write_binary(Socket, Bin, Term) ->
