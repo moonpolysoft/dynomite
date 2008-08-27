@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0]).
+-export([start_link/1, accept_loop/3, connections/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -32,8 +32,11 @@
 %% @doc Starts the server
 %% @end 
 %%--------------------------------------------------------------------
-start_link() ->
-  gen_server:start_link({local, socket_servers}, ?MODULE, [], []).
+start_link(Config) ->
+  gen_server:start_link({local, socket_server}, ?MODULE, Config, []).
+
+connections() ->
+  gen_server:call(socket_server, connections).
 
 %%====================================================================
 %% gen_server callbacks
@@ -47,9 +50,9 @@ start_link() ->
 %% @doc Initiates the server
 %% @end 
 %%--------------------------------------------------------------------
-init([]) ->
+init(Config) ->
   process_flag(trap_exit, true),
-  {ok, #state{}}.
+  listen(Config, #socket_server{}).
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -62,6 +65,9 @@ init([]) ->
 %% @doc Handling call messages
 %% @end 
 %%--------------------------------------------------------------------
+handle_call(connections, _From, State = #socket_server{connections=Conn}) ->
+  {reply, Conn, State};
+
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -73,7 +79,7 @@ handle_call(_Request, _From, State) ->
 %% @doc Handling cast messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_cast({accepted, Pid}, State#socket_server{acceptor=Pid,connections=Conn}) ->
+handle_cast({accepted, Pid}, State = #socket_server{acceptor=Pid,connections=Conn}) ->
   {noreply, spawn_acceptor(State#socket_server{connections=Conn+1})};
 
 handle_cast(stop, State) ->
@@ -89,7 +95,7 @@ handle_cast(stop, State) ->
 handle_info({'EXIT', Pid, normal}, State=#socket_server{acceptor=Pid}) ->
   {noreply, spawn_acceptor(State)};
     
-handle_info({'EXIT' Pid, Reason}, State=#socket_server{acceptor=Pid}) ->
+handle_info({'EXIT', Pid, Reason}, State=#socket_server{acceptor=Pid}) ->
   error_logger:error_report([{?MODULE, ?LINE}, {acceptor_error, Reason}]),
   timer:sleep(100),
   {noreply, spawn_acceptor(State)};
@@ -133,7 +139,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 
 listen(Config = #config{port=Port}, State) ->
-  case gen_tcp:listen(Port, [binary, inet6, {active,false}, {packet, 0}]) of
+  case gen_tcp:listen(Port, [binary, inet6, {active,false}, {packet, 0}, {reuseaddr, true}]) of
     {ok, Listen} ->
       {ok, spawn_acceptor(State#socket_server{listen=Listen})};
     {error, Reason} ->
@@ -145,7 +151,7 @@ spawn_acceptor(State = #socket_server{max=Max,connections=ConnSize}) when Max ==
   State#socket_server{acceptor=undefined};
 
 spawn_acceptor(State = #socket_server{listen=Listen}) ->
-  Pid = proc_lib:spawn_link(?MODULE, accept_loop, [self(), Listen, State]);
+  Pid = proc_lib:spawn_link(?MODULE, accept_loop, [self(), Listen, State]),
   State#socket_server{acceptor=Pid}.
   
 accept_loop(Server, Listen, _State) ->
@@ -167,7 +173,7 @@ connection_loop(Socket) ->
       connection_loop(Socket);
     {error, Reason} ->
       gen_tcp:close(Socket),
-      exit({error, Reason})
+      exit(shutdown)
   end. 
   
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -255,8 +261,12 @@ read_data(Socket, Length) ->
   Data.
 
 read_length(Socket) ->
-  Blah = read_section(Socket),
-  list_to_integer(Blah).
+  case read_section(Socket) of
+    {ok, Blah} -> list_to_integer(Blah);
+    {error, Reason} ->
+      gen_tcp:close(Socket),
+      exit({error, Reason})
+  end.
 
 read_section(Socket) ->
   read_section([], Socket).
