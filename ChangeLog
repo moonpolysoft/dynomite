@@ -1,3 +1,6 @@
+Version 0.2.6 (cliff)
+  * (Cliff Moon) fixed a lot of stuff in the ext listener.  resuseaddr.
+
 Version 0.2.5 (cliff)
 	* (Cliff Moon) save state in all cases during share
 	* (Cliff Moon) much more reasonableness in the supervisors
