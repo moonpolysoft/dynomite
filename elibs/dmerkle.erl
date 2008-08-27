@@ -18,7 +18,7 @@
 
 
 %% API
--export([open/1, open/2, equals/2, update/3, delete/2, leaf_size/1, key_diff/2, close/1]).
+-export([open/1, open/2, equals/2, update/3, delete/2, leaf_size/1, key_diff/2, close/1, scan_for_empty/1]).
 
 -ifdef(TEST).
 -include("etest/dmerkle_test.erl").
@@ -55,8 +55,7 @@ update(Key, Value, Tree = #dmerkle{file=File,block=BlockSize,d=D,root=Root}) ->
   M = m(Root),
   if
     M >= D-1 -> %allocate new root, move old root and split
-      NewRoot = #node{},
-      FinalRoot = split_child(NewRoot, empty, Root, Tree),
+      FinalRoot = split_child(#node{}, empty, Root, Tree),
       update_root_pointer(File, FinalRoot),
       Tree#dmerkle{root=update(hash(Key), Key, Value, FinalRoot, Tree)};
     true -> Tree#dmerkle{root=update(hash(Key), Key, Value, Root, Tree)}
@@ -78,9 +77,28 @@ key_diff(TreeA = #dmerkle{root=RootA}, TreeB = #dmerkle{root=RootB}) ->
 close(#dmerkle{file=File}) ->
   block_server:stop(File).
 
+scan_for_empty(Tree = #dmerkle{root=Root}) ->
+  scan_for_empty(Tree, Root).
+
 %%====================================================================
 %% Internal functions
 %%====================================================================
+
+scan_for_empty(Tree = #dmerkle{file=File,block=Block}, Node = #node{children=Children,keys=Keys}) ->
+  if
+    length(Keys) == 0 -> io:format("node was empty: ~p", [Node]);
+    true -> noop
+  end,
+  lists:foreach(fun({_, ChldPtr}) -> scan_for_empty(Tree, read(File, ChldPtr, Block)) end, Children);
+  
+scan_for_empty(Tree = #dmerkle{file=File,block=Block}, Leaf = #leaf{values=Values}) ->
+  if 
+    length(Values) == 0 -> io:format("leaf was empty: ~p", [Leaf]);
+    true -> noop
+  end;
+  
+scan_for_empty(_, undefined) ->
+  io:format("got an undefined!").
 
 key_diff(_LeafA = #leaf{values=ValuesA}, _LeafB = #leaf{values=ValuesB}, 
     #dmerkle{file=FileA}, #dmerkle{file=FileB}, Keys) ->
@@ -210,6 +228,7 @@ find(KeyHash, Key, Leaf = #leaf{values=Values}, Tree = #dmerkle{file=File,block=
 
 update(KeyHash, Key, Value, Node = #node{children=Children,keys=Keys}, Tree = #dmerkle{d=D,file=File,block=BlockSize}) ->
   {FoundKey, {ChildHash,ChildPointer}} = find_child(KeyHash, Keys, Children),
+  % error_logger:info_msg("reading child at ~p~n for ~p~n", [ChildPointer, Node]),
   Child = read(File,ChildPointer,BlockSize),
   case m(Child) of
     M when M >= D -> update(KeyHash, Key, Value, split_child(Node, FoundKey, Child, Tree), Tree);
@@ -254,6 +273,16 @@ find_child(KeyHash, [Key|Keys], [Child|Children]) ->
     true -> find_child(KeyHash, Keys, Children)
   end.
 
+split_child(_, empty, Child = #node{m=M,keys=Keys,children=Children}, #dmerkle{file=File,block=BlockSize}) ->
+  {LeftKeys, [_ | RightKeys]} = lists:split((M div 2)-1, Keys),
+  {LeftChildren, RightChildren} = lists:split(M div 2, Children),
+  % error_logger:info_msg("rightkeys ~p rightchildren ~p leftkeys ~p leftchildren ~p~n", [length(RightKeys), length(RightChildren), length(LeftKeys), length(LeftChildren)]),
+  Left = write(File, BlockSize, #node{m=length(LeftKeys),keys=LeftKeys,children=LeftChildren}),
+  Right = write(File, BlockSize, Child#node{m=length(RightKeys),keys=RightKeys,children=RightChildren}),
+  write(File, BlockSize, #node{m=1,
+    keys=[lists:last(LeftKeys)],
+    children=[{hash(Left),offset(Left)},{hash(Right),offset(Right)}]});
+
 split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #leaf{values=Values,m=M}, #dmerkle{file=File,block=BlockSize}) ->
   % error_logger:info_msg("splitting leaf with offset~p parent with offset~p ~n", [Child#leaf.offset, Parent#node.offset]),
   {KeyHash, _, _} = lists:nth(M div 2, Values),
@@ -267,10 +296,11 @@ split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #lea
   write(File, BlockSize, replace(Parent, ToReplace, Left, Right));
   
 split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #node{m=M,keys=ChildKeys,children=ChildChildren}, #dmerkle{file=File,block=BlockSize}) ->
-  % error_logger:info_msg("splitting node ~n"),
-  KeyHash = lists:nth(M div 2, Keys),
+  % error_logger:info_msg("splitting node ~p~n", [Parent]),
+  % KeyHash = lists:nth(M div 2, Keys),
   {LeftKeys, RightKeys} = lists:split((M div 2)-1, ChildKeys),
   {LeftChildren, RightChildren} = lists:split(M div 2, ChildChildren),
+    % error_logger:info_msg("rightkeys ~p rightchildren ~p leftkeys ~p leftchildren ~p~n", [length(RightKeys), length(RightChildren), length(LeftKeys), length(LeftChildren)]),
   Left = write(File, BlockSize, #node{m=length(LeftKeys),keys=LeftKeys,children=LeftChildren}),
   Right = write(File, BlockSize, Child#node{m=length(RightKeys),keys=RightKeys,children=RightChildren}),
   write(File, BlockSize, replace(Parent, ToReplace, Left, Right)).
@@ -441,8 +471,13 @@ write(File, BlockSize, Node) ->
   offset(Node, NewOffset).
   
 read(File, Offset, BlockSize) ->
-  {ok, Bin} = block_server:read_block(File, Offset, BlockSize),
-  deserialize(Bin,Offset).
+  case block_server:read_block(File, Offset, BlockSize) of
+    {ok, Bin} -> deserialize(Bin, Offset);
+    eof -> error_logger:info_msg("hit an eof for offset ~p", [Offset]),
+      undefined;
+    {error, Reason} -> error_logger:info_msg("error ~p at offset", [Reason, Offset]),
+      undefined
+  end.
   
 offset(#leaf{offset=Offset}) -> Offset;
 offset(#node{offset=Offset}) -> Offset.
