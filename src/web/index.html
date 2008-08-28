@@ -2,6 +2,7 @@
   <head>
     <script type="text/javascript" src="/javascripts/jquery-1.2.6.js"></script>
     <script type="text/javascript" src="/javascripts/domec.js"></script>
+    <script type="text/javascript" src="/javascripts/jquery.timer.js"></script>
     <script type="text/javascript">
       $(document).ready(function(data) {
         $.getJSON("/rpc/info/stats", function(stats) {
@@ -20,13 +21,32 @@
             });
             $.create("ul", {'id' : node.split("@").join("at") + "_partitions", 'style' : 'display: none;'}, children).appendTo('#member_nodes');
           });
+          $.timer(1000, function(timer) {
+            $.getJSON("/rpc/rates/" + escape(stats.node), function(rates) {
+              $("#get_rate").text(rates.get_rate);
+              $("#put_rate").text(rates.put_rate);
+              $("#in_rate").text(rates.in_rate);
+              $("#out_rate").text(rates.out_rate);
+              $("#connections").text(rates.connections);
+            });
+            timer.reset(1000);
+          });
         });
       });
     </script>
   </head>
   <body>
     <h1>Dynomite</h1>
+    <div style="float: right;"><img src="/images/dynomite_logo.png"/></div>
     <h2>Dashboard for <span id="node"></span></h2>
+    <h3>Node States</h3>
+    <ul>
+      <li><span id="get_rate">0.0</span> gets/sec</li>
+      <li><span id="put_rate">0.0</span> puts/sec</li>
+      <li><span id="out_rate">0.0</span> bytes/sec out</li>
+      <li><span id="in_rate">0.0</span> bytes/sec in</li>
+      <li><span id="connections">0.0</span> connections</li>
+    </ul>
     <h3>Cluster Stats</h3>
     <ul>
       <li>Running Nodes:</li><ul id="running_nodes"></ul>
