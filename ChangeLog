@@ -1,3 +1,10 @@
+Version 0.2.8 (cliff)
+  * (Cliff Moon) interface changes
+  * (Cliff Moon) periodically updating rates
+  * (Cliff Moon) a rate server to calculate request/transfer rates
+  * (Cliff Moon) Merge branch 'master' into socket_server
+  * (Cliff Moon) fixing root splitting in the dmerkle
+
 Version 0.2.7 (cliff)
   * (Cliff Moon) temporarily disabling merkle trees
 
