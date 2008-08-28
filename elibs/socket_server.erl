@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1, accept_loop/3, connections/0]).
+-export([start_link/1, accept_loop/3, connections/1, rate/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -22,7 +22,7 @@
 
 -include("config.hrl").
 
--record(socket_server, {max=100,connections=0,acceptor,listen}).
+-record(socket_server, {max=100,connections=0,acceptor,listen,get_rate,put_rate,out_rate,in_rate}).
 
 %%====================================================================
 %% API
@@ -35,8 +35,11 @@
 start_link(Config) ->
   gen_server:start_link({local, socket_server}, ?MODULE, Config, []).
 
-connections() ->
-  gen_server:call(socket_server, connections).
+connections(Node) ->
+  gen_server:call({socket_server, Node}, connections).
+  
+rate(Node, Type, Period) ->
+  gen_server:call({socket_server, Node}, {Type, Period}).
 
 %%====================================================================
 %% gen_server callbacks
@@ -52,7 +55,11 @@ connections() ->
 %%--------------------------------------------------------------------
 init(Config) ->
   process_flag(trap_exit, true),
-  listen(Config, #socket_server{}).
+  {ok, GetRate} = rate:start_link(300),
+  {ok, PutRate} = rate:start_link(300),
+  {ok, OutRate} = rate:start_link(300),
+  {ok, InRate} = rate:start_link(300),
+  listen(Config, #socket_server{get_rate=GetRate,put_rate=PutRate,out_rate=OutRate,in_rate=InRate}).
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -68,6 +75,18 @@ init(Config) ->
 handle_call(connections, _From, State = #socket_server{connections=Conn}) ->
   {reply, Conn, State};
 
+handle_call({get_rate, Period}, _From, State = #socket_server{get_rate=Rate}) ->
+  {reply, rate:get_rate(Rate, Period), State};
+  
+handle_call({put_rate, Period}, _From, State = #socket_server{put_rate=Rate}) ->
+  {reply, rate:get_rate(Rate, Period), State};
+  
+handle_call({in_rate, Period}, _From, State = #socket_server{in_rate=Rate}) ->
+  {reply, rate:get_rate(Rate, Period), State};
+  
+handle_call({out_rate, Period}, _From, State = #socket_server{out_rate=Rate}) ->
+  {reply, rate:get_rate(Rate, Period), State};
+
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
@@ -81,6 +100,16 @@ handle_call(_Request, _From, State) ->
 %%--------------------------------------------------------------------
 handle_cast({accepted, Pid}, State = #socket_server{acceptor=Pid,connections=Conn}) ->
   {noreply, spawn_acceptor(State#socket_server{connections=Conn+1})};
+
+handle_cast({request, get, Size}, State = #socket_server{get_rate=GetRate,out_rate=OutRate}) ->
+  rate:add_datapoint(GetRate, 1, now()),
+  rate:add_datapoint(OutRate, Size, now()),
+  {noreply, State};
+  
+handle_cast({request, put, Size}, State = #socket_server{put_rate=PutRate,in_rate=InRate}) ->
+  rate:add_datapoint(PutRate, 1, now()),
+  rate:add_datapoint(InRate, Size, now()),
+  {noreply, State};
 
 handle_cast(stop, State) ->
   {stop, normal, State}.
@@ -158,7 +187,7 @@ accept_loop(Server, Listen, _State) ->
   case catch gen_tcp:accept(Listen) of
     {ok, Socket} ->
       gen_server:cast(Server, {accepted, self()}),
-      connection_loop(Socket);
+      connection_loop(Socket, Server);
     {error, closed} ->
       exit({error, closed});
     Other ->
@@ -166,11 +195,11 @@ accept_loop(Server, Listen, _State) ->
       exit({error, accept_failed})
   end.
   
-connection_loop(Socket) ->
+connection_loop(Socket, Server) ->
   case read_section(Socket) of
     {ok, Cmd} ->
-      catch execute_command(Cmd, Socket),
-      connection_loop(Socket);
+      catch execute_command(Cmd, Socket, Server),
+      connection_loop(Socket, Server);
     {error, Reason} ->
       gen_tcp:close(Socket),
       exit(shutdown)
@@ -179,16 +208,18 @@ connection_loop(Socket) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% command implementation
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-execute_command("get", Socket) ->
+execute_command("get", Socket, Server) ->
   Length = read_length(Socket),
   Key = binary_to_list(read_data(Socket, Length)),
   case mediator:get(Key) of
     {ok, not_found} -> send_not_found(Socket);
-    {ok, {Context, Values}} -> send_get(Socket, Context, Values);
+    {ok, {Context, Values}} -> 
+      gen_server:cast(Server, {request, get, lists:foldl(fun(Bin, Acc) -> Acc + byte_size(Bin) end, 0, Values)}),
+      send_get(Socket, Context, Values);
     {failure, Reason} -> send_failure(Socket, Reason)
   end;
 
-execute_command("put", Socket) ->
+execute_command("put", Socket, Server) ->
   Key = binary_to_list(read_length_data(Socket)),
   ContextData = read_length_data(Socket),
   Context = if
@@ -196,12 +227,13 @@ execute_command("put", Socket) ->
     true -> []
   end,
   Data = read_length_data(Socket),
+  gen_server:cast(Server, {request, put, byte_size(Data)}),
   case mediator:put(Key, Context, Data) of
     {failure, Reason} -> send_failure(Socket, Reason);
     {ok, N} -> send_msg(Socket, "succ", N)
   end;
 
-execute_command("has", Socket) ->
+execute_command("has", Socket, Server) ->
   Key = binary_to_list(read_length_data(Socket)),
   case mediator:has_key(Key) of
     {ok, {true, N}} -> send_msg(Socket, "yes", N);
@@ -209,14 +241,14 @@ execute_command("has", Socket) ->
     {failure, Reason} -> send_failure(Socket, Reason)
   end;
 
-execute_command("del", Socket) ->
+execute_command("del", Socket, Server) ->
   Key = binary_to_list(read_length_data(Socket)),
   case mediator:delete(Key) of
     {ok, N} -> send_msg(Socket, "succ", N);
     {failure, Reason} -> send_failure(Socket, Reason)
   end;
 
-execute_command("close", Socket) ->
+execute_command("close", Socket, Server) ->
   gen_tcp:send(Socket, "close\n"),
   gen_tcp:close(Socket),
   exit(closed).

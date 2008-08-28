@@ -12,7 +12,7 @@
 -author('cliff@powerset.com').
 
 %% API
--export([info/1]).
+-export([info/1, rates/1]).
 
 %%====================================================================
 %% API
@@ -26,8 +26,17 @@
 info(stats) ->
   {obj, [
     {node,node()}, 
-    {running_nodes,nodes([this,visible])},
+    {running_nodes,lists:sort(nodes([this,visible]))},
     {member_nodes,transform_partitions([], lists:keysort(1, membership:partitions()))}
+  ]}.
+
+rates(Node) ->
+  {obj, [
+    {get_rate, socket_server:rate(Node, get_rate, 1)},
+    {put_rate, socket_server:rate(Node, put_rate, 1)},
+    {in_rate, socket_server:rate(Node, in_rate, 1)},
+    {out_rate, socket_server:rate(Node, out_rate, 1)},
+    {connections, socket_server:connections(Node)}
   ]}.
 
 %%====================================================================
