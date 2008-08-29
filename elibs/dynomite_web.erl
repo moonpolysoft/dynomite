@@ -35,7 +35,7 @@ stop() ->
 
 loop(Req, DocRoot) ->
   "/" ++ Path = Req:get(path),
-  error_logger:info_msg("path: ~p~n", [Path]),
+  % error_logger:info_msg("path: ~p~n", [Path]),
   case Req:get(method) of
     'GET' ->
       case filelib:is_file(DocRoot ++ "/" ++ Path) of
@@ -66,7 +66,7 @@ loop(Req, DocRoot) ->
 rpc_invoke(Path, Req) ->
   [Meth, Arg] = [list_to_atom(M) || M <- string:tokens(Path, "/")],
   Result = web_rpc:Meth(Arg),
-  error_logger:info_msg("invoking web_rpc:~p(~p) got ~p~n", [Meth, Arg, Result]),
+  % error_logger:info_msg("invoking web_rpc:~p(~p) got ~p~n", [Meth, Arg, Result]),
   Req:ok({rfc4627:mime_type(), rfc4627:encode(Result)}).
 
 get_option(Option, Options) ->

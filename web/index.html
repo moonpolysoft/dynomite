@@ -4,6 +4,13 @@
     <script type="text/javascript" src="/javascripts/domec.js"></script>
     <script type="text/javascript" src="/javascripts/jquery.timer.js"></script>
     <script type="text/javascript">
+      function decimals(number, value) {
+        with(Math) {
+          var coefficient = pow(10, number);
+          return round(value * coefficient) / coefficient;
+        }
+      }
+    
       $(document).ready(function(data) {
         $.getJSON("/rpc/info/stats", function(stats) {
           $("#node").text(stats.node);
@@ -15,6 +22,7 @@
             var partitions = node_struct[1];
 						$.create("a", {'href' : '#'}, "+").click(function() {
 							$("#" + node.split("@").join("at") + "_partitions").toggle("slow");
+							return false;
 						}).appendTo($.create("li", {}, node + " ").appendTo("#member_nodes"));
             var children = $.map(partitions, function(part) {
               return $.create("li", {}, "" + part);
@@ -23,11 +31,21 @@
           });
           $.timer(1000, function(timer) {
             $.getJSON("/rpc/rates/" + escape(stats.node), function(rates) {
-              $("#get_rate").text(rates.get_rate);
-              $("#put_rate").text(rates.put_rate);
-              $("#in_rate").text(rates.in_rate);
-              $("#out_rate").text(rates.out_rate);
+              $("#get_rate").text(decimals(2, rates.get_rate));
+              $("#put_rate").text(decimals(2, rates.put_rate));
+              $("#in_rate").text(decimals(2, rates.in_rate / Math.pow(2, 10)));
+              $("#out_rate").text(decimals(2, rates.out_rate / Math.pow(2, 10)));
               $("#connections").text(rates.connections);
+            });
+            timer.reset(1000);
+          });
+          $.timer(1000, function(timer) {
+            $.getJSON("/rpc/rates/cluster", function(rates) {
+              $("#c_get_rate").text(decimals(2, rates.get_rate));
+              $("#c_put_rate").text(decimals(2, rates.put_rate));
+              $("#c_in_rate").text(decimals(2, rates.in_rate / Math.pow(2, 10)));
+              $("#c_out_rate").text(decimals(2, rates.out_rate / Math.pow(2, 10)));
+              $("#c_connections").text(rates.connections);
             });
             timer.reset(1000);
           });
@@ -43,12 +61,17 @@
     <ul>
       <li><span id="get_rate">0.0</span> gets/sec</li>
       <li><span id="put_rate">0.0</span> puts/sec</li>
-      <li><span id="out_rate">0.0</span> bytes/sec out</li>
-      <li><span id="in_rate">0.0</span> bytes/sec in</li>
+      <li><span id="out_rate">0.0</span> KB/sec out</li>
+      <li><span id="in_rate">0.0</span> KB/sec in</li>
       <li><span id="connections">0.0</span> connections</li>
     </ul>
     <h3>Cluster Stats</h3>
     <ul>
+      <li><span id="c_get_rate">0.0</span> gets/sec</li>
+      <li><span id="c_put_rate">0.0</span> puts/sec</li>
+      <li><span id="c_out_rate">0.0</span> KB/sec out</li>
+      <li><span id="c_in_rate">0.0</span> KB/sec in</li>
+      <li><span id="c_connections">0.0</span> connections</li>
       <li>Running Nodes:</li><ul id="running_nodes"></ul>
       <li>Member Nodes:</li><ul id="member_nodes"></ul>
     </ul>

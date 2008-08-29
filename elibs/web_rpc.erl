@@ -30,6 +30,15 @@ info(stats) ->
     {member_nodes,transform_partitions([], lists:keysort(1, membership:partitions()))}
   ]}.
 
+rates(cluster) ->
+  {obj, [
+    {get_rate, lists:foldl(fun(Node, Acc) -> Acc + socket_server:rate(Node, get_rate, 1) end, 0, nodes([this,visible]))},
+    {put_rate, lists:foldl(fun(Node, Acc) -> Acc + socket_server:rate(Node, put_rate, 1) end, 0, nodes([this,visible]))},
+    {in_rate, lists:foldl(fun(Node, Acc) -> Acc + socket_server:rate(Node, in_rate, 1) end, 0, nodes([this,visible]))},
+    {out_rate, lists:foldl(fun(Node, Acc) -> Acc + socket_server:rate(Node, out_rate, 1) end, 0, nodes([this,visible]))},
+    {connections, lists:foldl(fun(Node, Acc) -> Acc + socket_server:connections(Node) end, 0, nodes([this,visible]))}
+  ]};
+
 rates(Node) ->
   {obj, [
     {get_rate, socket_server:rate(Node, get_rate, 1)},
