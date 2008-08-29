@@ -3,7 +3,7 @@ dnl - It should be specified as major.minor.revision [1.3.0]
 dnl - The third argument, should be replaced with the package 
 dnl - maintainers email address.
 
-AC_INIT([dynomite], [0.2.8], [cliff@powerset.com])
+AC_INIT([dynomite], [0.2.9], [cliff@powerset.com])
 SHORT_DESCRIPTION="The dynomite datastore.  It is a highly available, low latency key value store.  Word."
 
 dnl - The following prerequisites line can be used to specify

@@ -1,3 +1,6 @@
+Version 0.2.9 (cliff)
+  * (Cliff Moon) fixed timestamps in datapoints
+
 Version 0.2.8 (cliff)
   * (Cliff Moon) interface changes
   * (Cliff Moon) periodically updating rates
