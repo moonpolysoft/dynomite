@@ -71,7 +71,10 @@ init(Period) ->
 handle_call({get_rate, OverPeriod}, _From, State = #rate{datapoints=DataPoints,period=Period}) ->
   Trimmed = trim_datapoints(Period,DataPoints),
   Rate = calculate_rate(DataPoints, Period, OverPeriod),
-  {reply, Rate, State#rate{datapoints=Trimmed}}.
+  {reply, Rate, State#rate{datapoints=Trimmed}};
+  
+handle_call(datapoints, _From, State = #rate{datapoints=DataPoints}) ->
+  {reply, DataPoints, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -81,7 +84,7 @@ handle_call({get_rate, OverPeriod}, _From, State = #rate{datapoints=DataPoints,p
 %% @end 
 %%--------------------------------------------------------------------
 handle_cast({datapoint, {Value, Time}}, State = #rate{datapoints=DataPoints,period=Period}) ->
-  ModifiedDP = lists:keysort(2, [{Value, Time} | trim_datapoints(Period,DataPoints)]),
+  ModifiedDP = lists:keysort(2, [{Value, time_to_epoch(Time)} | trim_datapoints(Period,DataPoints)]),
   {noreply, State#rate{datapoints=ModifiedDP}};
   
 handle_cast(close, State) ->
