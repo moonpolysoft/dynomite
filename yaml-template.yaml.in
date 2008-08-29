@@ -28,7 +28,7 @@ PKG_FILES:
       owner: webapp
       group: webapp
   links:
-    - source: ../share/dynomite/bin/dynomite
+    - source: /p/share/dynomite/bin/dynomite
       destination: bin/dynomite
 
 PKG_DESCRIPTION: 
