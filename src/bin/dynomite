@@ -3,7 +3,9 @@
 require 'optparse'
 require 'digest/md5'
 
-ROOT = File.expand_path(File.dirname(__FILE__) + "/..")
+FILE = File.symlink?(__FILE__) ? File.readlink(__FILE__) : __FILE__
+
+ROOT = File.expand_path(File.dirname(FILE) + "/..")
 COMMAND_DIR = File.join(ROOT, 'rlibs', 'cli')
 $:.unshift COMMAND_DIR
 COMMANDS = Dir[COMMAND_DIR + "/*.rb"].map { |fname| File.basename(fname).split(".")[0].downcase }
