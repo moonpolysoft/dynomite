@@ -165,7 +165,9 @@ handle_call(nodes, _From, State = #membership{nodes=Nodes}) ->
   
 handle_call(state, _From, State) -> {reply, State, State};
 
-handle_call({state, NewState}, _From, State = #membership{config=Config}) -> {reply, ok, NewState#membership{config=Config}};
+handle_call({state, NewState}, _From, State = #membership{config=Config}) -> 
+  save_state(NewState#membership{config=Config}),
+  {reply, ok, NewState#membership{config=Config}};
 	
 handle_call(old_partitions, _From, State = #membership{old_partitions=P}) when is_list(P) ->
   {reply, P, State};
