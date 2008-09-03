@@ -1,3 +1,9 @@
+Version 0.2.11 (cliff)
+	* (Cliff Moon) typo
+	* (Cliff Moon) save state on force
+	* (Cliff Moon) fixing symlink
+	* (Cliff Moon) fixed symlinked script
+
 Version 0.2.10 (cliff)
   * (Cliff Moon) fixed timestamps in datapoints
 
