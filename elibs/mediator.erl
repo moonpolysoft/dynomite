@@ -150,7 +150,7 @@ internal_put(Key, Context, Value, #mediator{config=Config}) ->
   MapFun = fun(Server) ->
     storage_server:put({list_to_atom(lists:concat([storage_, Part])), Server}, Key, Incremented, Value)
   end,
-  {Good, Bad} = pcall(MapFun, Servers),
+  {Good, Bad} = pcall(MapFun, Servers, W),
   if
     length(Good) >= W -> {ok, length(Good)};
     true -> {failure, error_message(Good, Bad, N, W)}
@@ -161,12 +161,11 @@ internal_get(Key, #mediator{config=Config}) ->
   Servers = membership:nodes_for_key(Key),
   Part = membership:partition_for_key(Key),
   Name = list_to_atom(lists:concat([storage_, Part])),
-  % error_logger:info_msg("internal_get name ~w on ~n", [Name]),
+
   MapFun = fun(Server) ->
-    % error_logger:info_msg("node ~w~n", [Server]),
     storage_server:get({Name, Server}, Key)
   end,
-  {Good, Bad} = pcall(MapFun, Servers),
+  {Good, Bad} = pcall(MapFun, Servers, R),
   NotFound = resolve_not_found(Bad, R),
   if
     length(Good) >= R -> {ok, resolve_read(Good)};
@@ -181,7 +180,7 @@ internal_has_key(Key, #mediator{config=Config}) ->
   MapFun = fun(Server) ->
     storage_server:has_key({list_to_atom(lists:concat([storage_, Part])), Server}, Key)
   end,
-  {Good, Bad} = pcall(MapFun, Servers),
+  {Good, Bad} = pcall(MapFun, Servers, R),
   if
     length(Good) >= R -> {ok, resolve_has_key(Good)};
     true -> {failure, error_message(Good, Bad, N, R)}
@@ -194,7 +193,7 @@ internal_delete(Key, #mediator{config=Config}) ->
   MapFun = fun(Server) ->
     storage_server:delete({list_to_atom(lists:concat([storage_, Part])), Server}, Key, 10000)
   end,
-  Blah = pcall(MapFun, Servers),
+  Blah = pcall(MapFun, Servers, W),
   {Good, Bad} = Blah,
   % ok = Blah,
   if
@@ -227,8 +226,8 @@ resolve_not_found(Bad, R) ->
     true -> false
   end.
   
-pcall(MapFun, Servers) ->
-  Replies = lib_misc:pmap(MapFun, Servers),
+pcall(MapFun, Servers, N) ->
+  Replies = lib_misc:pmap(MapFun, Servers, N),
   {GoodReplies, Bad} = lists:partition(fun valid/1, Replies),
   Good = lists:map(fun strip_ok/1, GoodReplies),
   % membership:mark_as_bad(lists:map(fun({Server, _}) -> Server end, Bad)),
