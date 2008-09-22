@@ -14,6 +14,8 @@ pmap(Fun, List, N) ->
   SuperParent = self(),
   SuperRef = erlang:make_ref(),
   Ref = erlang:make_ref(),
+  %% we spawn an intermediary to collect the results
+  %% this is so that there will be no leaked messages sitting in our mailbox
   Parent = spawn(fun() ->
       L = gather(N, Ref, []),
       SuperParent ! {SuperRef, L}
