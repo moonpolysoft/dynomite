@@ -14,13 +14,13 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/6, start_link/7, get/2, get/3, put/4, put/5, fold/3, sync/2, get_tree/1, has_key/2, has_key/3, delete/2, delete/3, close/1, close/2]).
+-export([start_link/6, start_link/7, get/2, get/3, put/4, put/5, fold/3, sync/2, get_tree/1, rebuild_tree/1, has_key/2, has_key/3, delete/2, delete/3, close/1, close/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(storage, {module,table,name,tree}).
+-record(storage, {module,table,name,tree,dbkey,blocksize}).
 
 -ifdef(TEST).
 -include("etest/storage_server_test.erl").
@@ -62,6 +62,9 @@ has_key(Name, Key, Timeout) ->
 	
 delete(Name, Key) ->
   delete(Name, Key, infinity).
+  
+rebuild_tree(Name) ->
+  gen_server:call(Name, rebuild_tree).
 	
 sync(Local, Remote) ->
   TreeA = get_tree(Local),
@@ -117,7 +120,7 @@ init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
   process_flag(trap_exit, true),
   Table = StorageModule:open(DbKey,Name),
   Tree = dmerkle:open(lists:concat([DbKey, "/dmerkle"]), BlockSize),
-  {ok, #storage{module=StorageModule,table=Table,name=Name,tree=Tree}}.
+  {ok, #storage{module=StorageModule,dbkey=DbKey,blocksize=BlockSize,table=Table,name=Name,tree=Tree}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -153,6 +156,9 @@ handle_call({delete, Key}, _From, State = #storage{module=Module,table=Table,tre
     Failure -> {reply, {failure, Failure}, State}
   end;
   
+handle_call(name, _From, State = #storage{name=Name}) ->
+  {reply, Name, State};
+  
 handle_call(get_tree, _From, State = #storage{tree=Tree}) ->
   {reply, Tree, State};
   
@@ -162,6 +168,22 @@ handle_call({fold, Fun, AccIn}, _From, State = #storage{module=Module,table=Tabl
   
 handle_call(info, _From, State = #storage{module=Module, table=Table}) ->
   {reply, State, State};
+  
+handle_call({swap_tree, NewDmerkle}, _From, State = #storage{tree=Dmerkle}) ->
+  {reply, ok, State#storage{tree=dmerkle:swap_tree(Dmerkle, NewDmerkle)}};
+	
+handle_call(rebuild_tree, {FromPid, _Tag}, State = #storage{dbkey=DbKey,table=Table,blocksize=BlockSize,module=Module}) ->
+  Parent = self(),
+  spawn(fun() -> 
+      NewDmerkle = dmerkle:open(lists:concat([DbKey, "/dmerkle_new"]), BlockSize),
+      FoldFun = fun({Key, Context, Value}, Dmerkle) ->
+        dmerkle:update(Key, Value, Dmerkle)
+      end,
+      FinalDmerkle = Module:fold(FoldFun, Table, NewDmerkle),
+      gen_server:call(Parent, {swap_tree, FinalDmerkle})
+    end),
+  {reply, ok, State};
+  
 	
 handle_call(close, _From, State) ->
 	{stop, shutdown, ok, State}.

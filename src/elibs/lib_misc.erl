@@ -4,13 +4,34 @@
 -define(OFFSET_BASIS, 2166136261).
 -define(FNV_PRIME, 16777619).
 
--export([pmap/2, hash/1, position/2]).
+-export([pmap/3, hash/1, position/2]).
 
-pmap(Fun, List) ->
-  Parent = self(),
-  Pids = [spawn(fun() -> Parent ! {self(), {Elem, (catch Fun(Elem))}} end)
+-ifdef(TEST).
+-include("etest/lib_misc_test.erl").
+-endif.
+
+pmap(Fun, List, N) ->
+  SuperParent = self(),
+  SuperRef = erlang:make_ref(),
+  Ref = erlang:make_ref(),
+  %% we spawn an intermediary to collect the results
+  %% this is so that there will be no leaked messages sitting in our mailbox
+  Parent = spawn(fun() ->
+      L = gather(N, Ref, []),
+      SuperParent ! {SuperRef, L}
+    end),
+  _Pids = [spawn(fun() -> Parent ! {Ref, {Elem, (catch Fun(Elem))}} end)
     || Elem <- List],
-  [receive {Pid, Val} -> Val end || Pid <- Pids].
+  receive
+    {SuperRef, Ret} -> Ret
+  end.
+  
+gather(0, _, L) -> L;
+gather(N, Ref, L) ->
+  receive
+	  {Ref, Ret} -> gather(N-1, Ref, [Ret|L])
+  end.
+
   
 %32 bit fnv.  magic numbers ahoy
 hash(Term) when is_binary(Term) ->

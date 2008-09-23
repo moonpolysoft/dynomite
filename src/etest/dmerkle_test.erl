@@ -188,3 +188,15 @@ insert_500_both_ways_diff_test() ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
     end, open("/Users/cliff/data/dmerkle1", 4096), lists:reverse(lists:seq(1,500))),
   [] = key_diff(TreeA, TreeB).
+
+swap_tree_test() ->
+  test_cleanup(),
+  TreeA = lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, open("/Users/cliff/data/dmerkle", 4096), lists:seq(1,500)),
+  TreeB = lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, open("/Users/cliff/data/dmerkle1", 4096), lists:reverse(lists:seq(1,250))),
+  NewTree = swap_tree(TreeB, TreeA),
+  SameTree = open("/Users/cliff/data/dmerkle", 4096),
+  [] = key_diff(NewTree, SameTree).

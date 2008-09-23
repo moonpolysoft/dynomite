@@ -14,7 +14,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/1]).
+-export([start_link/1, storage_servers/0]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -32,7 +32,15 @@
 %% @end 
 %%--------------------------------------------------------------------
 start_link(Config) ->
-    supervisor:start_link({local, storage_server_sup}, storage_server_sup, Config).
+  supervisor:start_link({local, storage_server_sup}, storage_server_sup, Config).
+    
+storage_servers() ->
+  lists:filter(fun
+      (undefined) -> false;
+      (Child) -> true
+    end, lists:map(fun({_Id, Child, _Type, _Modules}) -> 
+        Child
+      end, supervisor:which_children(storage_server_sup))).
 
 %%====================================================================
 %% Supervisor callbacks
