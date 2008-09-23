@@ -14,7 +14,7 @@ dyn = Dynomite.new
 time = -Time.now.to_f
 
 ary = (1..500).to_a.map do |i|
-  ["key#{i}", random_bytes(100)]
+  ["key#{rand(9000)}", random_bytes(100)]
 end
 
 ary.each do |key, val|

@@ -11,14 +11,14 @@
 -module(dmerkle).
 -author('cliff moon').
 
--record(dmerkle, {file, block, root, d}).
+-record(dmerkle, {file, block, root, d, filename}).
 
 -record(node, {m=0, keys=[], children=[], offset=eof}).
 -record(leaf, {m=0, values=[], offset=eof}).
 
 
 %% API
--export([open/1, open/2, equals/2, update/3, delete/2, leaf_size/1, key_diff/2, close/1, scan_for_empty/1]).
+-export([open/1, open/2, equals/2, update/3, delete/2, leaf_size/1, key_diff/2, close/1, scan_for_empty/1, swap_tree/2]).
 
 -ifdef(TEST).
 -include("etest/dmerkle_test.erl").
@@ -49,7 +49,7 @@ open(FileName, BlockSize) ->
       ModBlockSize
   end,
   Root = create_or_read_root(File, FinalBlockSize),
-  #dmerkle{file=File,block=FinalBlockSize,root=Root,d=D}.
+  #dmerkle{file=File,block=FinalBlockSize,root=Root,d=D,filename=FileName}.
 
 update(Key, Value, Tree = #dmerkle{file=File,block=BlockSize,d=D,root=Root}) ->
   M = m(Root),
@@ -79,6 +79,15 @@ close(#dmerkle{file=File}) ->
 
 scan_for_empty(Tree = #dmerkle{root=Root}) ->
   scan_for_empty(Tree, Root).
+
+swap_tree(OldTree = #dmerkle{filename=OldFilename}, NewTree = #dmerkle{filename=NewFilename,block=BlockSize}) ->
+  close(OldTree),
+  close(NewTree),
+  file:copy(block_server:index_name(NewFilename), block_server:index_name(OldFilename)),
+  file:copy(block_server:key_name(NewFilename), block_server:key_name(OldFilename)),
+  file:delete(block_server:index_name(NewFilename)),
+  file:delete(block_server:key_name(NewFilename)),
+  open(OldFilename, BlockSize).
 
 %%====================================================================
 %% Internal functions

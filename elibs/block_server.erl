@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/2, stop/1, read_block/3, write_block/3, read_key/2, write_key/3]).
+-export([start_link/2, stop/1, read_block/3, write_block/3, read_key/2, write_key/3, index_name/1, key_name/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -48,6 +48,12 @@ read_key(Pid, Offset) ->
 write_key(Pid, Offset, Key) ->
   gen_server:call(Pid, {write_key, Offset, Key}).
 
+index_name(Path) ->
+  lists:concat([Path, ".idx"]).
+
+key_name(Path) ->
+  lists:concat([Path, ".keys"]).
+
 %%====================================================================
 %% gen_server callbacks
 %%====================================================================
@@ -62,12 +68,8 @@ write_key(Pid, Offset, Key) ->
 %%--------------------------------------------------------------------
 init([FileName, BlockSize]) ->
   process_flag(trap_exit, true),
-  {ok, Index} = file:open(
-    lists:concat([FileName, ".idx"]), 
-    [read, write, binary]),
-  {ok, Keys} = file:open(
-    lists:concat([FileName, ".keys"]), 
-    [read, write, {read_ahead, BlockSize}]),
+  {ok, Index} = file:open(index_name(FileName), [read, write, binary]),
+  {ok, Keys} = file:open(key_name(FileName), [read, write, {read_ahead, BlockSize}]),
   {ok, #state{index=Index,keys=Keys}}.
 
 %%--------------------------------------------------------------------
