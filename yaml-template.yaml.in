@@ -29,7 +29,7 @@ PKG_FILES:
       group: webapp
   links:
     - source: /p/share/dynomite/bin/dynomite
-      destination: bin/dynomite
+      destination: /p/bin/dynomite
 
 PKG_DESCRIPTION: 
   <%= encode_files('@top_srcdir@/README', '@top_srcdir@/ChangeLog') %>
