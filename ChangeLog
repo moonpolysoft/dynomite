@@ -1,3 +1,7 @@
+Version 0.2.13 (cliff)
+	* (Cliff Moon) cwd for the start script
+	* (Cliff Moon) fixing symlink
+
 Version 0.2.12 (cliff)
 	* (Cliff Moon) capabilities to rebuild the merkle trees of storage servers
 	* (Cliff Moon) fixed pmap to bank out after the minimum comes back
