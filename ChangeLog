@@ -1,3 +1,7 @@
+Version 0.2.14 (cliff)
+	* (Cliff Moon) safeguard against asking for more results than we can possibly supply
+	* (Cliff Moon) issues with wrong configuration in the mediator
+
 Version 0.2.13 (cliff)
 	* (Cliff Moon) cwd for the start script
 	* (Cliff Moon) fixing symlink
