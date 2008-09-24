@@ -10,7 +10,11 @@
 -include("etest/lib_misc_test.erl").
 -endif.
 
-pmap(Fun, List, N) ->
+pmap(Fun, List, ReturnNum) ->
+  N = if
+    ReturnNum > length(List) -> length(List);
+    true -> ReturnNum
+  end,
   SuperParent = self(),
   SuperRef = erlang:make_ref(),
   Ref = erlang:make_ref(),
