@@ -237,13 +237,16 @@ find(KeyHash, Key, Leaf = #leaf{values=Values}, Tree = #dmerkle{file=File,block=
 
 update(KeyHash, Key, Value, Node = #node{children=Children,keys=Keys}, Tree = #dmerkle{d=D,file=File,block=BlockSize}) ->
   {FoundKey, {ChildHash,ChildPointer}} = find_child(KeyHash, Keys, Children),
-  % error_logger:info_msg("reading child at ~p~n for ~p~n", [ChildPointer, Node]),
+  if
+    ChildPointer == 0 -> error_logger:info_msg("reading child at ~p~n for node with M ~p keys ~p children ~p~n", [ChildPointer, m(Node), length(Keys), length(Children)]);
+    true -> ok
+  end,
   Child = read(File,ChildPointer,BlockSize),
   case m(Child) of
     M when M >= D -> update(KeyHash, Key, Value, split_child(Node, FoundKey, Child, Tree), Tree);
     _ -> 
       NewChildHash = hash(update(KeyHash, Key, Value, Child, Tree)),
-      write(File, BlockSize, Node#node{children=lists:keyreplace(ChildPointer, 2, Children, {NewChildHash,ChildPointer})})
+      write(File, BlockSize, Node#node{m=length(Node#node.keys),children=lists:keyreplace(ChildPointer, 2, Children, {NewChildHash,ChildPointer})})
   end;
   
 update(KeyHash, Key, Value, Leaf = #leaf{values=Values}, Tree = #dmerkle{d=D,file=File,block=BlockSize}) ->
@@ -285,7 +288,7 @@ find_child(KeyHash, [Key|Keys], [Child|Children]) ->
 split_child(_, empty, Child = #node{m=M,keys=Keys,children=Children}, #dmerkle{file=File,block=BlockSize}) ->
   {LeftKeys, [_ | RightKeys]} = lists:split((M div 2)-1, Keys),
   {LeftChildren, RightChildren} = lists:split(M div 2, Children),
-  % error_logger:info_msg("rightkeys ~p rightchildren ~p leftkeys ~p leftchildren ~p~n", [length(RightKeys), length(RightChildren), length(LeftKeys), length(LeftChildren)]),
+  % error_logger:info_msg("splitchild(empty rightkeys ~p rightchildren ~p leftkeys ~p leftchildren ~p~n", [length(RightKeys), length(RightChildren), length(LeftKeys), length(LeftChildren)]),
   Left = write(File, BlockSize, #node{m=length(LeftKeys),keys=LeftKeys,children=LeftChildren}),
   Right = write(File, BlockSize, Child#node{m=length(RightKeys),keys=RightKeys,children=RightChildren}),
   write(File, BlockSize, #node{m=1,
@@ -298,32 +301,32 @@ split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #lea
   {LeftValues, RightValues} = lists:partition(fun({Hash,_,_}) ->
       Hash =< KeyHash
     end, Values),
-  % error_logger:info_msg("left ~p right ~p orig ~p~n", [length(LeftValues), length(RightValues), length(Values)]),
+  % error_logger:info_msg("split_child(leaf left ~p right ~p orig ~p~n", [length(LeftValues), length(RightValues), length(Values)]),
   % error_logger:info_msg("lhas ~p rhas ~p orighas ~p~n", [lists:keymember(3784569674, 1, LeftValues), lists:keymember(3784569674, 1, RightValues), lists:keymember(3784569674, 1, Values)]),
   Left = write(File, BlockSize, #leaf{m=length(LeftValues),values=LeftValues}),
   Right = write(File, BlockSize, Child#leaf{m=length(RightValues),values=RightValues}),
-  write(File, BlockSize, replace(Parent, ToReplace, Left, Right));
+  write(File, BlockSize, replace(Parent, ToReplace, Left, Right, last_key(Left)));
   
 split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #node{m=M,keys=ChildKeys,children=ChildChildren}, #dmerkle{file=File,block=BlockSize}) ->
   % error_logger:info_msg("splitting node ~p~n", [Parent]),
   % KeyHash = lists:nth(M div 2, Keys),
-  {LeftKeys, RightKeys} = lists:split((M div 2)-1, ChildKeys),
+  {PreLeftKeys, RightKeys} = lists:split(M div 2, ChildKeys),
   {LeftChildren, RightChildren} = lists:split(M div 2, ChildChildren),
-    % error_logger:info_msg("rightkeys ~p rightchildren ~p leftkeys ~p leftchildren ~p~n", [length(RightKeys), length(RightChildren), length(LeftKeys), length(LeftChildren)]),
+  [LeftKeyHash| ReversedLeftKeys] = lists:reverse(PreLeftKeys),
+  LeftKeys = lists:reverse(ReversedLeftKeys),
+  % error_logger:info_msg("split_child(node rightkeys ~p rightchildren ~p leftkeys ~p leftchildren ~p~n", [length(RightKeys), length(RightChildren), length(LeftKeys), length(LeftChildren)]),
   Left = write(File, BlockSize, #node{m=length(LeftKeys),keys=LeftKeys,children=LeftChildren}),
   Right = write(File, BlockSize, Child#node{m=length(RightKeys),keys=RightKeys,children=RightChildren}),
-  write(File, BlockSize, replace(Parent, ToReplace, Left, Right)).
+  write(File, BlockSize, replace(Parent, ToReplace, Left, Right, LeftKeyHash)).
 
-replace(Parent = #node{keys=Keys,children=Children}, empty, Left, Right) ->
-  KeyHash = last_key(Left),
+replace(Parent = #node{keys=Keys,children=Children}, empty, Left, Right, KeyHash) ->
   Parent#node{
     m=1,
     keys=[KeyHash],
     children=[{hash(Left),offset(Left)},{hash(Right),offset(Right)}]
   };
   
-replace(Parent = #node{keys=Keys,children=Children}, last, Left, Right) ->
-  KeyHash = last_key(Left),
+replace(Parent = #node{keys=Keys,children=Children}, last, Left, Right, KeyHash) ->
   Parent#node{
     m=length(Keys)+1,
     keys=Keys ++ [KeyHash],
@@ -331,9 +334,9 @@ replace(Parent = #node{keys=Keys,children=Children}, last, Left, Right) ->
       [{hash(Left),offset(Left)}, {hash(Right),offset(Right)}]
   };
 
-replace(Parent = #node{keys=Keys,children=Children}, ToReplace, Left, Right) ->
+replace(Parent = #node{keys=Keys,children=Children}, ToReplace, Left, Right, KeyHash) ->
   N = lib_misc:position(ToReplace, Keys),
-  KeyHash = last_key(Left),
+  % KeyHash = last_key(Left),
   % error_logger:info_msg("replace toreplace ~p n ~p keyhash ~p keys ~p~n children ~p~n left ~p~n right ~p~n", [ToReplace, N, KeyHash, Keys, Children, Left, Right]),
   KeyTail = if
     N-1 >= length(Keys) -> [];
@@ -375,6 +378,10 @@ deserialize(<<0:8, Binary/binary>>, Offset) ->
   KeyBinSize = D*4,
   ChildBinSize = (D+1)*12,
   <<M:32, KeyBin:KeyBinSize/binary, ChildBin:ChildBinSize/binary>> = Binary,
+  if
+    M > D -> error_logger:info_msg("M is larger than D M ~p D ~p offset~p~n", [M, D, Offset]);
+    true -> ok
+  end,
   Keys = unpack_keys(M, KeyBin),
   Children = unpack_children(M+1, ChildBin),
   #node{m=M,children=Children,keys=Keys,offset=Offset};
@@ -386,18 +393,39 @@ deserialize(<<1:8, Bin/binary>>, Offset) ->
   Values = unpack_values(M, ValuesBin),
   #leaf{m=M,values=Values,offset=Offset}.
   
-serialize(#node{keys=Keys,children=Children,m=M}, BlockSize) ->
+serialize(Node = #node{keys=Keys,children=Children,m=M}, BlockSize) ->
   D = d_from_blocksize(BlockSize),
+  if
+    M > D -> error_logger:info_msg("M is larger than D M ~p D ~p~n", [M, D]);
+    length(Keys) == length(Children) -> error_logger:info_msg("There are as many children as keys for ~p~n", [Node]);
+    true -> ok
+  end,
   KeyBin = pack_keys(Keys, D),
   ChildBin = pack_children(Children, D+1),
   LeftOverBits = (BlockSize - byte_size(KeyBin) - byte_size(ChildBin) - 5)*8,
-  <<0:8, M:32, KeyBin/binary, ChildBin/binary, 0:LeftOverBits>>;
+  OutBin = <<0:8, M:32, KeyBin/binary, ChildBin/binary, 0:LeftOverBits>>,
+  if 
+    byte_size(OutBin) /= BlockSize ->
+      error_logger:info_msg("outbin is wrong size! keys: ~p children: ~p m: ~p outbin ~p~n", [length(Keys), length(Children), M, byte_size(OutBin)]);
+    true -> ok
+  end,
+  OutBin;
   
 serialize(#leaf{values=Values,m=M}, BlockSize) ->
   D = d_from_blocksize(BlockSize),
+  if
+    M > D -> error_logger:info_msg("M is larger than D M ~p D ~p~n", [M, D]);
+    true -> ok
+  end,
   ValuesBin = pack_values(Values),
   LeftOverBits = (BlockSize - byte_size(ValuesBin) - 5)*8,
-  <<1:8, M:32, ValuesBin/binary, 0:LeftOverBits>>.
+  OutBin = <<1:8, M:32, ValuesBin/binary, 0:LeftOverBits>>,
+  if 
+    byte_size(OutBin) /= BlockSize ->
+      error_logger:info_msg("outbin is wrong size! values: ~p m: ~p outbin ~p~n", [length(Values), M, byte_size(OutBin)]);
+    true -> ok
+  end,
+  OutBin.
   
 d_from_blocksize(BlockSize) ->
   trunc((BlockSize - 17)/16).
@@ -442,6 +470,11 @@ unpack_keys(M, M, Bin, Keys) -> lists:reverse(Keys);
   
 unpack_keys(M, N, Bin, Keys) ->
   SkipSize = N*4,
+  if
+    SkipSize+4 > byte_size(Bin) ->
+      error_logger:info_msg("Whoops, ran out of unpack space M ~p N ~p Bin ~p~n", [M, N, byte_size(Bin)]);
+    true -> noop
+  end,
   <<_:SkipSize/binary, KeyHash:32, _/binary>> = Bin,
   unpack_keys(M, N+1, Bin, [KeyHash|Keys]).
   
@@ -469,6 +502,10 @@ unpack_values(M, N, Bin, Values) ->
 write(File, BlockSize, Node) ->
   Offset = offset(Node),
   Bin = serialize(Node, BlockSize),
+  if
+    Offset == 0 -> error_logger:info_msg("writing node at 0: BlockSize ~p, M ~p byte_size(Bin): ~p~n", [BlockSize, m(Node), byte_size(Bin)]);
+    true -> ok
+  end,
   % error_logger:info_msg("writing out node ~p~n", [Node]),
   
   {ok, NewOffset} = block_server:write_block(File,Offset,Bin),

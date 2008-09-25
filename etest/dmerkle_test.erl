@@ -207,6 +207,9 @@ swap_tree_test() ->
 stress() ->
   test_cleanup(),
   process_flag(trap_exit, true),
-  TreeA = lists:foldl(fun(N, Tree) ->
+  spawn_link(
+    fun() -> lists:foldl(fun(N, Tree) ->
         update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-      end, open("/Users/cliff/data/dmerkle", 4096), lists:seq(1,1000000)).
+      end, open("/Users/cliff/data/dmerkle", 4096), lists:seq(1,100000)) 
+    end),
+  receive _ -> timer:sleep(1) end.
