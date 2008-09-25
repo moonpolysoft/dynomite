@@ -1,5 +1,7 @@
 -include_lib("eunit.hrl").
 
+-export([stress/0]).
+
 test_cleanup() ->
   file:delete("/Users/cliff/data/dmerkle.idx"),
   file:delete("/Users/cliff/data/dmerkle.keys"),
@@ -200,3 +202,11 @@ swap_tree_test() ->
   NewTree = swap_tree(TreeB, TreeA),
   SameTree = open("/Users/cliff/data/dmerkle", 4096),
   [] = key_diff(NewTree, SameTree).
+  
+  
+stress() ->
+  test_cleanup(),
+  process_flag(trap_exit, true),
+  TreeA = lists:foldl(fun(N, Tree) ->
+        update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+      end, open("/Users/cliff/data/dmerkle", 4096), lists:seq(1,1000000)).
