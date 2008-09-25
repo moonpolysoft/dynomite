@@ -1,7 +1,7 @@
 Implementation of a btree based merkle tree.  The original merkle tree would not scale out to a large number of keys due to the limitation of keeping the tree in main memory.  Therefore we will try and store the 
 
 btree file:
-preamble: blocksize
+preamble: blocksize, rootpointer
 node:{0,m:32,[keyhash:32],[childhash:32,child:64]}
 
 leaf:{1,m:32,[keyhash:32,keypointer:64,valhash:32]}
