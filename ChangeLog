@@ -1,3 +1,10 @@
+Version 0.2.15 (cliff)
+	* (Cliff Moon) fixed issue with splitting regular nodes in merkle trees
+	* (Cliff Moon) fix stress test
+	* (Cliff Moon) clarify header
+	* (Cliff Moon) dmerkle stress test
+	* (Cliff Moon) mods to rakefile
+
 Version 0.2.14 (cliff)
 	* (Cliff Moon) safeguard against asking for more results than we can possibly supply
 	* (Cliff Moon) issues with wrong configuration in the mediator
