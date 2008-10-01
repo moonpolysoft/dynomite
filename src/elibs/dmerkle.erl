@@ -18,7 +18,7 @@
 
 
 %% API
--export([open/1, open/2, equals/2, update/3, delete/2, leaf_size/1, key_diff/2, close/1, scan_for_empty/1, swap_tree/2]).
+-export([open/1, open/2, equals/2, update/3, delete/2, leaves/1, find/2, leaf_size/1, visualized_find/2, key_diff/2, close/1, scan_for_empty/1, swap_tree/2]).
 
 -ifdef(TEST).
 -include("etest/dmerkle_test.erl").
@@ -51,12 +51,17 @@ open(FileName, BlockSize) ->
   Root = create_or_read_root(File, FinalBlockSize),
   #dmerkle{file=File,block=FinalBlockSize,root=Root,d=D,filename=FileName}.
 
+leaves(Tree = #dmerkle{root=Root}) ->
+  leaves(Root, Tree, []).
+
 update(Key, Value, Tree = #dmerkle{file=File,block=BlockSize,d=D,root=Root}) ->
+  % error_logger:info_msg("inserting ~p~n", [Key]),
   M = m(Root),
   if
     M >= D-1 -> %allocate new root, move old root and split
       FinalRoot = split_child(#node{}, empty, Root, Tree),
       update_root_pointer(File, FinalRoot),
+      % error_logger:info_msg("found: ~p~n", [visualized_find("key60", Tree#dmerkle{root=FinalRoot})]),
       Tree#dmerkle{root=update(hash(Key), Key, Value, FinalRoot, Tree)};
     true -> Tree#dmerkle{root=update(hash(Key), Key, Value, Root, Tree)}
   end.
@@ -65,7 +70,11 @@ equals(#dmerkle{root=RootA}, #dmerkle{root=RootB}) ->
   hash(RootA) == hash(RootB).
 
 find(Key, Tree = #dmerkle{root=Root}) ->
+  % error_logger:info_msg("looking for: ~p hash(~p)~n", [Key, hash(Key)]),
   find(hash(Key), Key, Root, Tree).
+  
+visualized_find(Key, Tree = #dmerkle{root=Root}) ->
+  visualized_find(hash(Key), Key, Root, Tree, []).
 
 delete(Key, Merkle) -> Merkle.
 
@@ -111,7 +120,6 @@ scan_for_empty(_, undefined) ->
 
 key_diff(_LeafA = #leaf{values=ValuesA}, _LeafB = #leaf{values=ValuesB}, 
     #dmerkle{file=FileA}, #dmerkle{file=FileB}, Keys) ->
-  % error_logger:info_msg("leaf differences A~p~n B~p~n", [_LeafA, _LeafB]),
   leaf_diff(ValuesA, ValuesB, FileA, FileB, Keys);
 
 key_diff(#node{keys=KeysA, children=ChildrenA},
@@ -120,13 +128,19 @@ key_diff(#node{keys=KeysA, children=ChildrenA},
   % error_logger:info_msg("node differences ~n"),
   node_diff(ChildrenA, ChildrenB, TreeA, TreeB, Keys);
   
-key_diff(Leaf = #leaf{}, Node = #node{}, TreeA, TreeB, Keys) ->
+key_diff(Leaf = #leaf{}, Node = #node{children=Children}, TreeA, TreeB=#dmerkle{file=File,block=BlockSize}, Keys) ->
   % error_logger:info_msg("leaf node differences ~n"),
-  leaves(Node, TreeB, leaves(Leaf, TreeA, Keys));
+  lists:foldl(fun({_, Ptr}, Acc) ->
+      Child = read(File, Ptr, BlockSize),
+      key_diff(Leaf, Child, TreeA, TreeB, Acc)
+    end, Keys, Children);
   
-key_diff(Node = #node{}, Leaf = #leaf{}, TreeA, TreeB, Keys) ->
-  % error_logger:info_msg("node leaf differences ~n"),
-  leaves(Leaf, TreeA, leaves(Node, TreeB, Keys)).
+key_diff(Node = #node{children=Children}, Leaf = #leaf{}, TreeA=#dmerkle{file=File,block=BlockSize}, TreeB, Keys) ->
+  % error_logger:info_msg("node leaf differences  ~n"),
+  lists:foldl(fun({_, Ptr}, Acc) ->
+      Child = read(File, Ptr, BlockSize),
+      key_diff(Child, Leaf, TreeA, TreeB, Acc)
+    end).
 
 node_diff([], [], TreeA, TreeB, Keys) -> Keys;
 
@@ -207,21 +221,39 @@ leaf_diff([{HashA, PtrA, ValA}|ValuesA], [{HashB, PtrB, ValB}|ValuesB], FileA, F
   end,
   leaf_diff([{HashA, PtrA, ValA}|ValuesA], ValuesB, FileA, FileB, NewKeys).
 
-leaves(#node{children=Children}, Tree = #dmerkle{file=File,block=BlockSize}, Key) ->
-  lists:foldl(fun({_,Ptr}, Keys) ->
+leaves(#node{children=Children}, Tree = #dmerkle{file=File,block=BlockSize}, Keys) ->
+  lists:foldl(fun({_,Ptr}, Acc) ->
       Node = read(File, Ptr, BlockSize),
-      leaves(Node, Tree, Keys)
-    end, [], Children);
+      leaves(Node, Tree, Acc)
+    end, Keys, Children);
     
 leaves(#leaf{values=Values}, Tree = #dmerkle{file=File,block=BlockSize}, Keys) ->
-  lists:foldl(fun({_, Ptr, Val}, Keys) ->
+  lists:foldl(fun({KeyHash, Ptr, ValHash}, Acc) ->
       Key = block_server:read_key(File, Ptr),
-      case lists:keytake(Key, 1, Keys) of
-        {value, {Key, Val}, Taken} -> Taken;
-        {value, {Key, _}, _} -> Keys;
-        false -> [{Key, Val}|Keys]
+      case lists:keytake(Key, 1, Acc) of
+        {value, {Key, ValHash}, Left} -> Left;
+        {value, {Key, _}, _} -> Acc;
+        false -> [{Key, ValHash}|Acc]
       end
     end, Keys, Values).
+
+visualized_find(KeyHash, Key, Node = #node{keys=Keys,children=Children}, Tree = #dmerkle{file=File,block=BlockSize}, Trail) ->
+  {FoundKey, {_,ChildPointer}} = find_child(KeyHash, Keys, Children),
+  {Before, After} = lists:partition(fun(E) -> E =< FoundKey end, Keys),
+  % error_logger:info_msg("finding keyhash ~p in ~p got ~p~n", [KeyHash, Keys, _FoundKey]),
+  visualized_find(KeyHash, Key, read(File,ChildPointer,BlockSize), Tree, [{FoundKey, offset(Node), length(Before)} | Trail]);
+
+visualized_find(KeyHash, Key, Leaf = #leaf{values=Values}, Tree = #dmerkle{file=File,block=BlockSize}, Trail) ->
+  % error_logger:info_msg("looking for ~p in ~p~n", [KeyHash, Values]),
+  case lists:keysearch(KeyHash, 1, Values) of
+    {value, {KeyHash,_,ValHash}} -> 
+      error_logger:info_msg("find trail for ~p(~p): ~p~n", [Key, KeyHash, lists:reverse([{KeyHash, offset(Leaf)} | Trail])]),
+      ValHash;
+    false -> 
+      error_logger:info_msg("find trail for ~p(~p): ~p~n", [Key, KeyHash, lists:reverse(Trail)]),
+      not_found
+  end.
+
 
 find(KeyHash, Key, Node = #node{keys=Keys,children=Children}, Tree = #dmerkle{file=File,block=BlockSize}) ->
   {_FoundKey, {_,ChildPointer}} = find_child(KeyHash, Keys, Children),
@@ -236,6 +268,7 @@ find(KeyHash, Key, Leaf = #leaf{values=Values}, Tree = #dmerkle{file=File,block=
   end.
 
 update(KeyHash, Key, Value, Node = #node{children=Children,keys=Keys}, Tree = #dmerkle{d=D,file=File,block=BlockSize}) ->
+  % error_logger:info_msg("update(~p, ~p, Value, #node ~p, Tree)~n", [KeyHash, Key, offset(Node)]),
   {FoundKey, {ChildHash,ChildPointer}} = find_child(KeyHash, Keys, Children),
   if
     ChildPointer == 0 -> error_logger:info_msg("reading child at ~p~n for node with M ~p keys ~p children ~p~n", [ChildPointer, m(Node), length(Keys), length(Children)]);
@@ -250,6 +283,7 @@ update(KeyHash, Key, Value, Node = #node{children=Children,keys=Keys}, Tree = #d
   end;
   
 update(KeyHash, Key, Value, Leaf = #leaf{values=Values}, Tree = #dmerkle{d=D,file=File,block=BlockSize}) ->
+  % error_logger:info_msg("update(~p, ~p, Value, #leaf ~p, Tree)~n", [KeyHash, Key, offset(Leaf)]),
   NewValHash = hash(Value),
   case lists:keysearch(KeyHash, 1, Values) of
     {value, {KeyHash,Pointer,ValHash}} ->
@@ -285,14 +319,17 @@ find_child(KeyHash, [Key|Keys], [Child|Children]) ->
     true -> find_child(KeyHash, Keys, Children)
   end.
 
-split_child(_, empty, Child = #node{m=M,keys=Keys,children=Children}, #dmerkle{file=File,block=BlockSize}) ->
-  {LeftKeys, [_ | RightKeys]} = lists:split((M div 2)-1, Keys),
+split_child(_, empty, Child = #node{m=M,keys=Keys,children=Children}, Tree=#dmerkle{file=File,block=BlockSize}) ->
+  {PreLeftKeys, RightKeys} = lists:split((M div 2), Keys),
   {LeftChildren, RightChildren} = lists:split(M div 2, Children),
+  [LeftKeyHash| ReversedLeftKeys] = lists:reverse(PreLeftKeys),
+  LeftKeys = lists:reverse(ReversedLeftKeys),
+  % error_logger:info_msg("splitting: ~p~n", [find("key122", Tree)]),
   % error_logger:info_msg("splitchild(empty rightkeys ~p rightchildren ~p leftkeys ~p leftchildren ~p~n", [length(RightKeys), length(RightChildren), length(LeftKeys), length(LeftChildren)]),
   Left = write(File, BlockSize, #node{m=length(LeftKeys),keys=LeftKeys,children=LeftChildren}),
   Right = write(File, BlockSize, Child#node{m=length(RightKeys),keys=RightKeys,children=RightChildren}),
   write(File, BlockSize, #node{m=1,
-    keys=[lists:last(LeftKeys)],
+    keys=[LeftKeyHash],
     children=[{hash(Left),offset(Left)},{hash(Right),offset(Right)}]});
 
 split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #leaf{values=Values,m=M}, #dmerkle{file=File,block=BlockSize}) ->

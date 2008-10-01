@@ -1,6 +1,6 @@
 -include_lib("eunit.hrl").
 
--export([stress/0]).
+% -export([stress/0]).
 
 test_cleanup() ->
   file:delete("/Users/cliff/data/dmerkle.idx"),
@@ -68,7 +68,7 @@ leaf_round_trip_test() ->
   
 open_and_close_test() ->
   test_cleanup(),
-  Merkle = open("/Users/cliff/data/dmerkle", 4096),
+  Merkle = open("/Users/cliff/data/dmerkle", 256),
   Root = Merkle#dmerkle.root,
   error_logger:info_msg("root ~p~n", [Root]),
   12 = Root#leaf.offset,
@@ -77,7 +77,7 @@ open_and_close_test() ->
   
 open_and_insert_one_test() ->
   test_cleanup(),
-  Tree = update("mykey", <<"myvalue">>, open("/Users/cliff/data/dmerkle", 4096)),
+  Tree = update("mykey", <<"myvalue">>, open("/Users/cliff/data/dmerkle", 256)),
   Root = Tree#dmerkle.root,
   error_logger:info_msg("root w/ one ~p merkle~p~n", [Root, Tree]),
   1 = Root#leaf.m,
@@ -87,31 +87,22 @@ open_and_insert_one_test() ->
   
 open_and_reopen_test() ->
   test_cleanup(),
-  Tree = update("mykey", <<"myvalue">>, open("/Users/cliff/data/dmerkle", 4096)),
+  Tree = update("mykey", <<"myvalue">>, open("/Users/cliff/data/dmerkle", 256)),
   close(Tree),
-  NewTree = open("/Users/cliff/data/dmerkle", 4096),
+  NewTree = open("/Users/cliff/data/dmerkle", 256),
   Hash = hash(<<"myvalue">>),
   Hash = find("mykey", NewTree),
   close(NewTree).
-  
+
 open_and_insert_260_test() ->
-  test_cleanup(),
-  Tree = lists:foldl(fun(N, Tree) ->
-      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, open("/Users/cliff/data/dmerkle", 4096), lists:seq(1,260)),
-  Hash = hash("value200"),
-  Hash = find("key200", Tree),
-  close(Tree),
-  NewTree = open("/Users/cliff/data/dmerkle", 4096),
-  Hash2 = hash("value133"),
-  Hash2 = find("key133", NewTree),
-  close(NewTree).
+  open_and_insert_n(260).
   
 open_and_insert_1000_test() ->
   test_cleanup(),
+  error_logger:info_msg("D: ~p", [d_from_blocksize(256)]),
   Tree = lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, open("/Users/cliff/data/dmerkle", 4096), lists:seq(1,1000)),
+    end, open("/Users/cliff/data/dmerkle", 256), lists:seq(1,1000)),
   true = lists:all(fun(N) -> 
       Hash = hash(lists:concat(["value", N])),
       Result = Hash == find(lists:concat(["key", N]), Tree),
@@ -129,7 +120,7 @@ open_and_insert_3000_test() ->
   test_cleanup(),
   Tree = lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, open("/Users/cliff/data/dmerkle", 4096), lists:seq(1,3000)),
+    end, open("/Users/cliff/data/dmerkle", 256), lists:seq(1,3000)),
   true = lists:all(fun(N) -> 
       Hash = hash(lists:concat(["value", N])),
       Result = Hash == find(lists:concat(["key", N]), Tree),
@@ -141,15 +132,15 @@ open_and_insert_3000_test() ->
       end
     end, lists:seq(1, 3000)),
   close(Tree).
-  
+   
 insert_500_both_ways_test() ->
   test_cleanup(),
   TreeA = lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, open("/Users/cliff/data/dmerkle", 4096), lists:seq(1,500)),
+    end, open("/Users/cliff/data/dmerkle", 256), lists:seq(1,500)),
   TreeB = lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, open("/Users/cliff/data/dmerkle1", 4096), lists:reverse(lists:seq(1,500))),
+    end, open("/Users/cliff/data/dmerkle1", 256), lists:reverse(lists:seq(1,500))),
   % error_logger:info_msg("rootA ~p~nrootB ~p~n", [TreeA#dmerkle.root, TreeB#dmerkle.root]),
   true = equals(TreeA, TreeB).
   
@@ -157,10 +148,10 @@ insert_realistic_scenario_equality_test() ->
   test_cleanup(),
   TreeA = lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, open("/Users/cliff/data/dmerkle", 4096), lists:seq(1,500)),
+    end, open("/Users/cliff/data/dmerkle", 256), lists:seq(1,500)),
   TreeB = lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, open("/Users/cliff/data/dmerkle1", 4096), lists:seq(1,505)),
+    end, open("/Users/cliff/data/dmerkle1", 256), lists:seq(1,505)),
   error_logger:info_msg("rootA ~p~nrootB ~p~n", [TreeA#dmerkle.root, TreeB#dmerkle.root]),
   timer:sleep(100),
   false = equals(TreeA, TreeB).
@@ -169,41 +160,79 @@ insert_realistic_scenario_diff_test() ->
   test_cleanup(),
   TreeA = lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, open("/Users/cliff/data/dmerkle", 4096), lists:seq(1,495)),
+    end, open("/Users/cliff/data/dmerkle", 256), lists:seq(1,495)),
   TreeB = lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, open("/Users/cliff/data/dmerkle1", 4096), lists:seq(1,500)),
+    end, open("/Users/cliff/data/dmerkle1", 256), lists:seq(1,500)),
   error_logger:info_msg("rootA ~p~nrootB ~p~n", [TreeA#dmerkle.root, TreeB#dmerkle.root]),
   Diff = key_diff(TreeA, TreeB),
   timer:sleep(100),
   Keys = lists:map(fun(N) -> 
       {lists:concat(["key", N]), hash(lists:concat(["value", N]))}
     end, lists:seq(496, 500)),
+  error_logger:info_msg("realistic diff: ~p~n", [Diff]),
   Keys = Diff.
   
 insert_500_both_ways_diff_test() ->
   test_cleanup(),
   TreeA = lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, open("/Users/cliff/data/dmerkle", 4096), lists:seq(1,500)),
+    end, open("/Users/cliff/data/dmerkle", 256), lists:seq(1,500)),
   TreeB = lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, open("/Users/cliff/data/dmerkle1", 4096), lists:reverse(lists:seq(1,500))),
-  [] = key_diff(TreeA, TreeB).
+    end, open("/Users/cliff/data/dmerkle1", 256), lists:reverse(lists:seq(1,500))),
+  Diff = key_diff(TreeA, TreeB),
+  error_logger:info_msg("both ways diff: ~p~n", [Diff]),
+  [] = Diff.
 
-swap_tree_test() ->
+% swap_tree_test() ->
+%   test_cleanup(),
+%   TreeA = lists:foldl(fun(N, Tree) ->
+%       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+%     end, open("/Users/cliff/data/dmerkle", 256), lists:seq(1,500)),
+%   TreeB = lists:foldl(fun(N, Tree) ->
+%       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+%     end, open("/Users/cliff/data/dmerkle1", 256), lists:reverse(lists:seq(1,250))),
+%   NewTree = swap_tree(TreeA, TreeB),
+%   SameTree = open("/Users/cliff/data/dmerkle", 256),
+%   error_logger:info_msg("trees: ~p ~p~n", [NewTree, SameTree]),
+%   timer:sleep(100),
+%   [] = key_diff(NewTree, SameTree).
+%   
+% leaves_test() ->
+%   test_cleanup(),
+%   Tree = lists:foldl(fun(N, Tree) ->
+%       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+%     end, open("/Users/cliff/data/dmerkle", 256), lists:seq(1,500)),
+%   500 = length(leaves(Tree)).
+  % 
+  % empty_diff_test() ->
+  %   test_cleanup(),
+  %   TreeA = lists:foldl(fun(N, Tree) ->
+  %       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+  %     end, open("/Users/cliff/data/dmerkle", 256), lists:seq(1,500)),
+  %   TreeB = open("/Users/cliff/data/dmerkle1", 256),
+  %   500 = length(key_diff(TreeA, TreeB)).
+  
+open_and_insert_n(N) ->
   test_cleanup(),
-  TreeA = lists:foldl(fun(N, Tree) ->
+  Tree = lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, open("/Users/cliff/data/dmerkle", 4096), lists:seq(1,500)),
-  TreeB = lists:foldl(fun(N, Tree) ->
-      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, open("/Users/cliff/data/dmerkle1", 4096), lists:reverse(lists:seq(1,250))),
-  NewTree = swap_tree(TreeB, TreeA),
-  SameTree = open("/Users/cliff/data/dmerkle", 4096),
-  [] = key_diff(NewTree, SameTree).
-  
-  
+    end, open("/Users/cliff/data/dmerkle", 256), lists:seq(1,N)),
+  true = lists:all(fun(N) -> 
+      Hash = hash(lists:concat(["value", N])),
+      Result = Hash == find(lists:concat(["key", N]), Tree),
+      if
+        Result -> Result;
+        true -> 
+          error_logger:info_msg("could not get ~p was ~p~n", [N, find(lists:concat(["key", N]), Tree)]),
+          timer:sleep(1000),
+          Result
+      end
+    end, lists:seq(1, N)),
+  timer:sleep(100),
+  close(Tree).
+
 stress() ->
   test_cleanup(),
   process_flag(trap_exit, true),
