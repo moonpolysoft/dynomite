@@ -132,7 +132,7 @@ handle_info(_Info, State) ->
 %% @end 
 %%--------------------------------------------------------------------
 terminate(_Reason, #state{index=Index,keys=Keys}) ->
-  error_logger:info_msg("shutting down and closing~n"),
+  % error_logger:info_msg("shutting down and closing~n"),
   ok = file:close(Index),
   ok = file:close(Keys).
 
