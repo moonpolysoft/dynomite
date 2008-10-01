@@ -70,19 +70,23 @@ sync(Local, Remote) ->
   TreeA = get_tree(Local),
   TreeB = get_tree(Remote),
   lists:foreach(fun({Key,_}) ->
-      RetrieveA = get(Local, Key),
-      RetrieveB = get(Remote, Key),
+      RetrieveA = storage_server:get(Local, Key),
+      RetrieveB = storage_server:get(Remote, Key),
       case {RetrieveA, RetrieveB} of
-        {not_found, {ok, {Context, [Value]}}} -> put(Local, Key, Context, Value);
-        {{ok, {Context, [Value]}}, not_found} -> put(Remote, Key, Context, Value);
+        {not_found, {ok, {Context, [Value]}}} -> 
+          error_logger:info_msg("put ~p to local~n", [Key]),
+          storage_server:put(Local, Key, Context, Value);
+        {{ok, {Context, [Value]}}, not_found} -> 
+          error_logger:info_msg("put ~p to remote~n", [Key]),
+          storage_server:put(Remote, Key, Context, Value);
         {not_found, not_found} -> error_logger:info_msg("not found~n", []);
         {{ok, ValueA}, {ok, ValueB}} ->
           {Context, Values} = vector_clock:resolve(ValueA, ValueB),
           [Value|_] = Values,
           if
             length(Values) == 1 -> 
-              put(Remote, Key, Context, Value),
-              put(Local, Key, Context, Value);
+              storage_server:put(Remote, Key, Context, Value),
+              storage_server:put(Local, Key, Context, Value);
             true ->
               error_logger:info_msg("Cannot resolve key ~p with ~p~n", [Key, Remote])
           end
