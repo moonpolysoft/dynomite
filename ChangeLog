@@ -1,3 +1,6 @@
+Version 0.2.17 (cliff)
+  * (Cliff Moon) fixed foldl bug
+
 Version 0.2.16 (cliff)
 	* (Cliff Moon) minor changes to the storage server
 	* (Cliff Moon) fixed a multitude of merkle issues.  splitting the root node is now fixed.  so is the diff algorithm.  more public functio
