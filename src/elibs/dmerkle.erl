@@ -140,7 +140,7 @@ key_diff(Node = #node{children=Children}, Leaf = #leaf{}, TreeA=#dmerkle{file=Fi
   lists:foldl(fun({_, Ptr}, Acc) ->
       Child = read(File, Ptr, BlockSize),
       key_diff(Child, Leaf, TreeA, TreeB, Acc)
-    end).
+    end, Keys, Children).
 
 node_diff([], [], TreeA, TreeB, Keys) -> Keys;
 
