@@ -81,7 +81,8 @@ delete(Key, Merkle) -> Merkle.
 leaf_size(Merkle) -> noop.
 
 key_diff(TreeA = #dmerkle{root=RootA}, TreeB = #dmerkle{root=RootB}) ->
-  lists:keysort(1, key_diff(RootA, RootB, TreeA, TreeB, [])).
+  {KeysA, KeysB} = key_diff(RootA, RootB, TreeA, TreeB, [], []),
+  diff_merge(TreeA, TreeB, lists:keysort(1, KeysA), lists:keysort(1, KeysB), []).
 
 close(#dmerkle{file=File}) ->
   block_server:stop(File).
@@ -102,6 +103,44 @@ swap_tree(OldTree = #dmerkle{filename=OldFilename}, NewTree = #dmerkle{filename=
 %% Internal functions
 %%====================================================================
 
+diff_merge(TreeA, TreeB, [], [], Ret) ->
+  lists:sort(Ret);
+
+diff_merge(TreeA = #dmerkle{file=File}, TreeB, [{Hash,Ptr,_}|KeysA], [], Ret) ->
+  Key = block_server:read_key(File, Ptr),
+  if
+    Key == eof -> error_logger:info_msg("Key is eof: ([{~p, ~p}|KeysA], [], Ret)~n", [Hash, Ptr]);
+    true -> ok
+  end,
+  diff_merge(TreeA, TreeB, KeysA, [], [Key|Ret]);
+
+diff_merge(TreeA, TreeB = #dmerkle{file=File}, [], [{Hash,Ptr,_}|KeysB], Ret) ->
+  Key = block_server:read_key(File, Ptr),
+  if
+    Key == eof -> error_logger:info_msg("Key is eof: ([], [{~p, ~p}|KeysB], Ret)~n", [Hash, Ptr]);
+    true -> ok
+  end,
+  diff_merge(TreeA, TreeB, [], KeysB, [Key|Ret]);
+
+diff_merge(TreeA = #dmerkle{file=FileA}, TreeB = #dmerkle{file=FileB}, [{Hash,PtrA,Val}|KeysA], [{Hash,PtrB,Val}|KeysB], Ret) ->
+  diff_merge(TreeA, TreeB, KeysA, KeysB, Ret);
+
+diff_merge(TreeA = #dmerkle{file=FileA}, TreeB = #dmerkle{file=FileB}, [{Hash,PtrA,_}|KeysA], [{Hash,PtrB,_}|KeysB], Ret) ->
+  Key = block_server:read_key(FileA, PtrA),
+  if
+    Key == eof -> error_logger:info_msg("Key is eof: ([{~p, ~p}|KeysA], [{~p, ~p}|KeysB], Ret)~n", [Hash, PtrA, Hash, PtrB]);
+    true -> ok
+  end,
+  diff_merge(TreeA, TreeB, KeysA, KeysB, [Key|Ret]);
+
+diff_merge(TreeA = #dmerkle{file=FileA}, TreeB = #dmerkle{file=FileB}, [{HashA,PtrA,_}|KeysA], [{HashB,PtrB,ValB}|KeysB], Ret) when HashA < HashB ->
+  KeyA = block_server:read_key(FileA, PtrA),
+  diff_merge(TreeA, TreeB, KeysA, [{HashB,PtrB,ValB}|KeysB], [KeyA|Ret]);
+
+diff_merge(TreeA = #dmerkle{file=FileA}, TreeB = #dmerkle{file=FileB}, [{HashA,PtrA,ValA}|KeysA], [{HashB,PtrB,_}|KeysB], Ret) when HashA > HashB ->
+  KeyB = block_server:read_key(FileB, PtrB),
+  diff_merge(TreeA, TreeB, [{HashA,PtrA,ValA}|KeysA], KeysB, [KeyB|Ret]).
+
 scan_for_empty(Tree = #dmerkle{file=File,block=Block}, Node = #node{children=Children,keys=Keys}) ->
   if
     length(Keys) == 0 -> io:format("node was empty: ~p", [Node]);
@@ -119,107 +158,118 @@ scan_for_empty(_, undefined) ->
   io:format("got an undefined!").
 
 key_diff(_LeafA = #leaf{values=ValuesA}, _LeafB = #leaf{values=ValuesB}, 
-    #dmerkle{file=FileA}, #dmerkle{file=FileB}, Keys) ->
-  leaf_diff(ValuesA, ValuesB, FileA, FileB, Keys);
+    #dmerkle{file=FileA}, #dmerkle{file=FileB}, KeysA, KeysB) ->
+  leaf_diff(ValuesA, ValuesB, FileA, FileB, KeysA, KeysB);
 
-key_diff(#node{keys=KeysA, children=ChildrenA},
-    #node{keys=KeysB, children=ChildrenB},
-    TreeA = #dmerkle{file=FileA}, TreeB = #dmerkle{file=FileB}, Keys) ->
+key_diff(#node{children=ChildrenA}, #node{children=ChildrenB},
+    TreeA = #dmerkle{file=FileA}, TreeB = #dmerkle{file=FileB}, KeysA, KeysB) ->
   % error_logger:info_msg("node differences ~n"),
-  node_diff(ChildrenA, ChildrenB, TreeA, TreeB, Keys);
+  node_diff(ChildrenA, ChildrenB, TreeA, TreeB, KeysA, KeysB);
   
-key_diff(Leaf = #leaf{}, Node = #node{children=Children}, TreeA, TreeB=#dmerkle{file=File,block=BlockSize}, Keys) ->
+key_diff(Leaf = #leaf{}, Node = #node{children=Children}, TreeA, TreeB=#dmerkle{file=File,block=BlockSize}, KeysA, KeysB) ->
   % error_logger:info_msg("leaf node differences ~n"),
-  lists:foldl(fun({_, Ptr}, Acc) ->
+  lists:foldl(fun({_, Ptr}, {AccA, AccB}) ->
       Child = read(File, Ptr, BlockSize),
-      key_diff(Leaf, Child, TreeA, TreeB, Acc)
-    end, Keys, Children);
+      key_diff(Leaf, Child, TreeA, TreeB, AccA, AccB)
+    end, {KeysA, KeysB}, Children);
   
-key_diff(Node = #node{children=Children}, Leaf = #leaf{}, TreeA=#dmerkle{file=File,block=BlockSize}, TreeB, Keys) ->
+key_diff(Node = #node{children=Children}, Leaf = #leaf{}, TreeA=#dmerkle{file=File,block=BlockSize}, TreeB, KeysA, KeysB) ->
   % error_logger:info_msg("node leaf differences  ~n"),
-  lists:foldl(fun({_, Ptr}, Acc) ->
+  lists:foldl(fun({_, Ptr}, {AccA, AccB}) ->
       Child = read(File, Ptr, BlockSize),
-      key_diff(Child, Leaf, TreeA, TreeB, Acc)
-    end, Keys, Children).
+      key_diff(Child, Leaf, TreeA, TreeB, AccA, AccB)
+    end, {KeysA, KeysB}, Children).
 
-node_diff([], [], TreeA, TreeB, Keys) -> Keys;
+node_diff([], [], TreeA, TreeB, KeysA, KeysB) -> {KeysA, KeysB};
 
-node_diff([], ChildrenB, TreeA, TreeB = #dmerkle{file=File,block=BlockSize}, Keys) ->
+node_diff([], ChildrenB, TreeA, TreeB = #dmerkle{file=File,block=BlockSize}, KeysA, KeysB) ->
   % error_logger:info_msg("node_diff empty children ~n"),
-  lists:foldl(fun({_, Ptr}, Keys) ->
+  {KeysA, lists:foldl(fun({_, Ptr}, Acc) ->
       Child = read(File, Ptr, BlockSize),
-      leaves(Child, TreeB, Keys)
-    end, Keys, ChildrenB);
+      hash_leaves(Child, TreeB, Acc)
+    end, KeysB, ChildrenB)};
     
-node_diff(ChildrenA, [], TreeA = #dmerkle{file=File,block=BlockSize}, TreeB, Keys) ->
+node_diff(ChildrenA, [], TreeA = #dmerkle{file=File,block=BlockSize}, TreeB, KeysA, KeysB) ->
   % error_logger:info_msg("node_diff children empty ~n"),
-  lists:foldl(fun({_, Ptr}, Keys) ->
+  {lists:foldl(fun({_, Ptr}, Acc) ->
       Child = read(File, Ptr, BlockSize),
-      leaves(Child, TreeA, Keys)
-    end, Keys, ChildrenA);
+      hash_leaves(Child, TreeA, Acc)
+    end, KeysA, ChildrenA), KeysB};
     
-node_diff([{Hash,PtrA}|ChildrenA], [{Hash,PtrB}|ChildrenB], TreeA, TreeB, Keys) ->
+node_diff([{Hash,PtrA}|ChildrenA], [{Hash,PtrB}|ChildrenB], TreeA, TreeB, KeysA, KeysB) ->
   % error_logger:info_msg("equal nodes ~n"),
-  node_diff(ChildrenA, ChildrenB, TreeA, TreeB, Keys);
+  node_diff(ChildrenA, ChildrenB, TreeA, TreeB, KeysA, KeysB);
   
 node_diff([{HashA,PtrA}|ChildrenA], [{HashB,PtrB}|ChildrenB], 
     TreeA=#dmerkle{file=FileA, block=BlockSizeA}, 
-    TreeB=#dmerkle{file=FileB,block=BlockSizeB}, Keys) ->
+    TreeB=#dmerkle{file=FileB,block=BlockSizeB}, KeysA, KeysB) ->
   % error_logger:info_msg("nodes are different ~n"),
   ChildA = read(FileA, PtrA, BlockSizeA),
   ChildB = read(FileB, PtrB, BlockSizeB),
-  node_diff(ChildrenA, ChildrenB, TreeA, TreeB, key_diff(ChildA, ChildB, TreeA, TreeB, Keys)).
+  {KeysA1, KeysB1} = key_diff(ChildA, ChildB, TreeA, TreeB, KeysA, KeysB),
+  node_diff(ChildrenA, ChildrenB, TreeA, TreeB, KeysA1, KeysB1).
 
-leaf_diff([], [], _, _, Keys) -> Keys;
+leaf_diff([], [], _, _, KeysA, KeysB) -> {KeysA, KeysB};
 
-leaf_diff([], [{_, Ptr, Val}|ValuesB], FileA, FileB, Keys) ->
+leaf_diff([], [{KeyHash, Ptr, Val}|ValuesB], FileA, FileB, KeysA, KeysB) ->
   % error_logger:info_msg("leaf_diff empty values ~n"),
-  Key = block_server:read_key(FileB, Ptr),
-  NewKeys = case lists:keytake(Key, 1, Keys) of
-    {value, {Key, Val}, Taken} -> Taken;
-    {value, {Key, _}, _} -> Keys;
-    false -> [{Key, Val}|Keys]
-  end,
-  leaf_diff([], ValuesB, FileA, FileB, NewKeys);
+  % NewKeys = case lists:keytake(KeyHash, 1, KeysB) of
+  %   {value, {KeyHash, _, Val}, Taken} -> Taken;
+  %   {value, {KeyHash, _, _}, _} -> KeysB;
+  %   false -> [{KeyHash, Ptr, Val}|KeysB]
+  % end,
+  leaf_diff([], ValuesB, FileA, FileB, KeysA, [{KeyHash, Ptr, Val}|KeysB]);
   
-leaf_diff([{_, Ptr, Val}|ValuesA], [], FileA, FileB, Keys) ->
+leaf_diff([{KeyHash,Ptr,Val}|ValuesA], [], FileA, FileB, KeysA, KeysB) ->
   % error_logger:info_msg("leaf_diff values empty ~n"),
-  Key = block_server:read_key(FileA, Ptr),
-  NewKeys = case lists:keytake(Key, 1, Keys) of
-    {value, {Key, Val}, Taken} -> Taken;
-    {value, {Key, _}, _} -> Keys;
-    false -> [{Key, Val}|Keys]
-  end,
-  leaf_diff(ValuesA, [], FileA, FileB, NewKeys);
+  % NewKeys = case lists:keytake(KeyHash, 1, KeysA) of
+  %   {value, {KeyHash, _, Val}, Taken} -> Taken;
+  %   {value, {KeyHash, _, _}, _} -> KeysA;
+  %   false -> [{KeyHash, Ptr,Val}|KeysA]
+  % end,
+  leaf_diff(ValuesA, [], FileA, FileB, [{KeyHash, Ptr,Val}|KeysA], KeysB);
   
-leaf_diff([{Hash, _, Val}|ValuesA], [{Hash, _, Val}|ValuesB], FileA, FileB, Keys) ->
+leaf_diff([{Hash, _, Val}|ValuesA], [{Hash, _, Val}|ValuesB], FileA, FileB, KeysA, KeysB) ->
   % error_logger:info_msg("leaf_diff equals ~n"),
-  leaf_diff(ValuesA, ValuesB, FileA, FileB, Keys);
+  leaf_diff(ValuesA, ValuesB, FileA, FileB, KeysA, KeysB);
   
-leaf_diff([{Hash, PtrA, ValA}|ValuesA], [{Hash, PtrB, ValB}|ValuesB], FileA, FileB, Keys) ->
+leaf_diff([{Hash, PtrA, ValA}|ValuesA], [{Hash, PtrB, ValB}|ValuesB], FileA, FileB, KeysA, KeysB) ->
   % error_logger:info_msg("leaf_diff equal keys, diff vals ~n"),
-  Key = block_server:read_key(FileA, PtrA),
-  leaf_diff(ValuesA, ValuesB, FileA, FileB, [{Key,ValA}|Keys]);
+  leaf_diff(ValuesA, ValuesB, FileA, FileB, [{Hash,PtrA,ValA}|KeysA], KeysB);
   
-leaf_diff([{HashA, PtrA, ValA}|ValuesA], [{HashB, PtrB, ValB}|ValuesB], FileA, FileB, Keys) when HashA < HashB ->
+leaf_diff([{HashA, PtrA, ValA}|ValuesA], [{HashB, PtrB, ValB}|ValuesB], FileA, FileB, KeysA, KeysB) when HashA < HashB ->
   % error_logger:info_msg("leaf_diff complete diff ~p < ~p ~n", [HashA, HashB]),
-  Key = block_server:read_key(FileA, PtrA),
-  NewKeys = case lists:keytake(Key, 1, Keys) of
-    {value, {Key, ValA}, Taken} -> Taken;
-    {value, {Key, _}, _} -> Keys;
-    false -> [{Key, ValA}|Keys]
-  end,
-  leaf_diff(ValuesA, [{HashB, PtrB, ValB}|ValuesB], FileA, FileB, NewKeys);
+  % NewKeys = case lists:keytake(HashA, 1, KeysA) of
+  %   {value, {HashA, _, ValA}, Taken} -> Taken;
+  %   {value, {HashA, _, _}, _} -> KeysA;
+  %   false -> [{HashA, PtrA, ValA}|KeysA]
+  % end,
+  leaf_diff(ValuesA, [{HashB, PtrB, ValB}|ValuesB], FileA, FileB, [{HashA, PtrA, ValA}|KeysA], KeysB);
   
-leaf_diff([{HashA, PtrA, ValA}|ValuesA], [{HashB, PtrB, ValB}|ValuesB], FileA, FileB, Keys) when HashA > HashB ->
+leaf_diff([{HashA, PtrA, ValA}|ValuesA], [{HashB, PtrB, ValB}|ValuesB], FileA, FileB, KeysA, KeysB) when HashA > HashB ->
   % error_logger:info_msg("leaf_diff complete diff ~p > ~p ~n", [HashA, HashB]),
-  Key = block_server:read_key(FileB, PtrB),
-  NewKeys = case lists:keytake(Key, 1, Keys) of
-    {value, {Key, ValB}, Taken} -> Taken;
-    {value, {Key, _}, _} -> Keys;
-    false -> [{Key, ValB}|Keys]
-  end,
-  leaf_diff([{HashA, PtrA, ValA}|ValuesA], ValuesB, FileA, FileB, NewKeys).
+  % NewKeys = case lists:keytake(HashB, 1, KeysB) of
+  %   {value, {HashB, _, ValB}, Taken} -> Taken;
+  %   {value, {HashB, _, _}, _} -> KeysB;
+  %   false -> [{HashB, PtrB, ValB}|KeysB]
+  % end,
+  leaf_diff([{HashA, PtrA, ValA}|ValuesA], ValuesB, FileA, FileB, KeysA, [{HashB, PtrB, ValB}|KeysB]).
+
+hash_leaves(#node{children=Children}, Tree = #dmerkle{file=File,block=BlockSize}, Keys) ->
+  lists:foldl(fun({_,Ptr}, Acc) ->
+      Node = read(File, Ptr, BlockSize),
+      hash_leaves(Node, Tree, Acc)
+    end, Keys, Children);
+
+hash_leaves(#leaf{values=Values}, Tree = #dmerkle{file=File,block=BlockSize}, Keys) ->
+  lists:foldl(fun({KeyHash, Ptr, ValHash}, Acc) ->
+      % case lists:keytake(KeyHash, 1, Acc) of
+      %   {value, {KeyHash, _, ValHash}, Left} -> Left;
+      %   {value, {KeyHash, _, _}, _} -> Acc;
+      %   false -> [{KeyHash, Ptr, ValHash}|Acc]
+      % end
+      [{KeyHash, Ptr, ValHash}|Acc]
+    end, Keys, Values).
 
 leaves(#node{children=Children}, Tree = #dmerkle{file=File,block=BlockSize}, Keys) ->
   lists:foldl(fun({_,Ptr}, Acc) ->
@@ -230,11 +280,12 @@ leaves(#node{children=Children}, Tree = #dmerkle{file=File,block=BlockSize}, Key
 leaves(#leaf{values=Values}, Tree = #dmerkle{file=File,block=BlockSize}, Keys) ->
   lists:foldl(fun({KeyHash, Ptr, ValHash}, Acc) ->
       Key = block_server:read_key(File, Ptr),
-      case lists:keytake(Key, 1, Acc) of
-        {value, {Key, ValHash}, Left} -> Left;
-        {value, {Key, _}, _} -> Acc;
-        false -> [{Key, ValHash}|Acc]
-      end
+      % case lists:keytake(Key, 1, Acc) of
+      %   {value, {Key, ValHash}, Left} -> Left;
+      %   {value, {Key, _}, _} -> Acc;
+      %   false -> [{Key, ValHash}|Acc]
+      % end
+      [{Key, ValHash}|Acc]
     end, Keys, Values).
 
 visualized_find(KeyHash, Key, Node = #node{keys=Keys,children=Children}, Tree = #dmerkle{file=File,block=BlockSize}, Trail) ->
