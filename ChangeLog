@@ -1,3 +1,7 @@
+Version 0.2.19 (cliff)
+	* (Cliff Moon) fixed sync function
+	* (Cliff Moon) reinstate merkle trees.  thought i did this.
+
 Version 0.2.18 (cliff)
 	* (Cliff Moon) support for sync servers
 	* (Cliff Moon) vast speed improvements to merkle diff operation
