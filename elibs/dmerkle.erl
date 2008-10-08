@@ -305,7 +305,6 @@ visualized_find(KeyHash, Key, Leaf = #leaf{values=Values}, Tree = #dmerkle{file=
       not_found
   end.
 
-
 find(KeyHash, Key, Node = #node{keys=Keys,children=Children}, Tree = #dmerkle{file=File,block=BlockSize}) ->
   {_FoundKey, {_,ChildPointer}} = find_child(KeyHash, Keys, Children),
   % error_logger:info_msg("finding keyhash ~p in ~p got ~p~n", [KeyHash, Keys, _FoundKey]),

@@ -74,10 +74,10 @@ sync(Local, Remote) ->
       RetrieveB = storage_server:get(Remote, Key),
       case {RetrieveA, RetrieveB} of
         {not_found, {ok, {Context, [Value]}}} -> 
-          error_logger:info_msg("put ~p to local~n", [Key]),
+          % error_logger:info_msg("put ~p to local~n", [Key]),
           storage_server:put(Local, Key, Context, Value);
         {{ok, {Context, [Value]}}, not_found} -> 
-          error_logger:info_msg("put ~p to remote~n", [Key]),
+          % error_logger:info_msg("put ~p to remote~n", [Key]),
           storage_server:put(Remote, Key, Context, Value);
         {not_found, not_found} -> error_logger:info_msg("not found~n", []);
         {{ok, ValueA}, {ok, ValueB}} ->

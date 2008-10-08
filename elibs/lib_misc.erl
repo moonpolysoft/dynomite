@@ -4,11 +4,19 @@
 -define(OFFSET_BASIS, 2166136261).
 -define(FNV_PRIME, 16777619).
 
--export([pmap/3, hash/1, position/2]).
+-export([pmap/3, hash/1, position/2, shuffle/1]).
 
 -ifdef(TEST).
 -include("etest/lib_misc_test.erl").
 -endif.
+
+shuffle(List) ->
+  lists:sort(fun(A,B) ->
+      case random:uniform() of
+        R when R > 0.5 -> true;
+        _ -> false
+      end
+    end, List).
 
 pmap(Fun, List, ReturnNum) ->
   N = if
