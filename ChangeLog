@@ -1,3 +1,6 @@
+Version 0.3.0 (cliff)
+  * (Cliff Moon) integrated sync servers
+
 Version 0.2.19 (cliff)
 	* (Cliff Moon) fixed sync function
 	* (Cliff Moon) reinstate merkle trees.  thought i did this.
