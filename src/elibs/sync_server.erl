@@ -12,9 +12,9 @@
 -author('cliff@powerset.com').
 
 %% API
--export([start_link/3]).
+-export([start_link/2, pause/1, play/1, loop/1]).
 
--record(state, {name, partition, nodes}).
+-record(state, {name, partition, paused}).
 
 %%====================================================================
 %% API
@@ -24,14 +24,42 @@
 %% @doc Starts the server
 %% @end 
 %%--------------------------------------------------------------------
-start_link(Name, Partition, Nodes) ->
+start_link(Name, Partition) ->
   Pid = spawn_link(fun() ->
-      sync_server:loop(#state{name=Name,partition=Partition,nodes=Nodes})
+      sync_server:loop(#state{name=Name,partition=Partition,paused=false})
     end),
   register(Name, Pid),
   {ok, Pid}.
 
-loop(State = #state{name=Name,partition=Partition,nodes=Nodes}) ->
+pause(Server) ->
+  Server ! pause.
+  
+play(Server) ->
+  Server ! play.
+
+%% Internal functions
+
+loop(State = #state{name=Name,partition=Partition,paused=Paused}) ->
+  Timeout = round((random:uniform() * 5 + 5) * 1000),
+  Paused1 = receive
+    pause -> true;
+    play -> false
+  after Timeout -> 
+    Paused
+  end,
+  if
+    Paused -> ok;
+    true ->
+      Nodes = membership:nodes_for_partition(Partition),
+      run_sync(Nodes, Partition)
+  end,
+  sync_server:loop(State#state{paused=Paused1}).
+
+run_sync(Nodes, _) when length(Nodes) == 1 ->
+  noop;
+  
+run_sync(Nodes, Partition) ->
   [NodeA,NodeB|_] = lib_misc:shuffle(Nodes),
-  loop(State).
+  StorageName = list_to_atom(lists:concat([storage_, Partition])),
+  storage_server:sync({StorageName, NodeA}, {StorageName, NodeB}).
   

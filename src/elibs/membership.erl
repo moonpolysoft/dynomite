@@ -15,7 +15,7 @@
 -define(VIRTUALNODES, 100).
 
 %% API
--export([start_link/1, join_node/2, nodes_for_key/1, partitions/0, nodes/0, state/0, state/1, old_partitions/0, partitions_for_node/2, fire_gossip/1, partition_for_key/1, stop/0, range/1]).
+-export([start_link/1, join_node/2, nodes_for_partition/1, nodes_for_key/1, partitions/0, nodes/0, state/0, state/1, old_partitions/0, partitions_for_node/2, fire_gossip/1, partition_for_key/1, stop/0, range/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -44,6 +44,9 @@ start_link(Config) ->
 
 join_node(JoinTo, Me) ->
 	gen_server:call({membership, JoinTo}, {join_node, Me}).
+	
+nodes_for_partition(Partition) ->
+  gen_server:call(membership, {nodes_for_partition, Partition}).
 	
 nodes_for_key(Key) ->
   gen_server:call(membership, {nodes_for_key, Key}).
@@ -90,6 +93,7 @@ fire_gossip({A1, A2, A3}) ->
   end,
   membership:state(ModState#membership{config=Config}),
   reload_storage_servers(State, ModState),
+  reload_sync_servers(State, ModState),
   save_state(ModState),
   timer:apply_after(random:uniform(5000) + 5000, membership, fire_gossip, [random:seed()]).
 
@@ -122,6 +126,7 @@ init(ConfigIn) ->
   	end
   end,
 	reload_storage_servers(empty, State),
+	reload_sync_servers(empty, State),
   timer:apply_after(random:uniform(1000) + 1000, membership, fire_gossip, [random:seed()]),
 	{ok, State#membership{config=configuration:get_config()}}.
 
@@ -141,6 +146,7 @@ handle_call({join_node, Node}, {_, _From}, State = #membership{config=Config}) -
   error_logger:info_msg("~p is joining the cluster.~n", [node(_From)]),
   NewState = int_join_node(Node, State),
   reload_storage_servers(State, NewState),
+  reload_sync_servers(State, NewState),
   save_state(NewState),
 	{reply, {ok, NewState}, NewState#membership{config=Config}};
 	
@@ -149,6 +155,7 @@ handle_call({share, NewState}, _From, State = #membership{config=Config}) ->
   case vector_clock:compare(State#membership.version, NewState#membership.version) of
     less -> 
       reload_storage_servers(State, NewState),
+      reload_sync_servers(State, NewState),
       save_state(NewState),
       {reply, NewState, NewState};
     greater -> {reply, State, State};
@@ -156,6 +163,7 @@ handle_call({share, NewState}, _From, State = #membership{config=Config}) ->
     concurrent -> 
       Merged = merge_states(NewState, State),
       reload_storage_servers(State, Merged),
+      reload_sync_servers(State, Merged),
       save_state(Merged),
       {reply, Merged, Merged#membership{config=State#membership.config}}
   end;
@@ -178,6 +186,9 @@ handle_call(partitions, _From, State) -> {reply, State#membership.partitions, St
 	
 handle_call({range, Partition}, _From, State) ->
   {reply, int_range(Partition, State#membership.config), State};
+	
+handle_call({nodes_for_partition, Partition}, _From, State) ->
+  {reply, int_nodes_for_partition(Partition, State), State};
 	
 handle_call({nodes_for_key, Key}, _From, State) ->
 	{reply, int_nodes_for_key(Key, State), State};
@@ -365,7 +376,11 @@ reload_sync_servers(OldParts, NewParts, Config) ->
     end, OldParts),
   lists:foreach(fun(Part) ->
       Name = list_to_atom(lists:concat([sync_, Part])),
-      noop
+      Spec = {Name, {sync_server, start_link, [Name, Part]}, permanent, 1000, worker, [sync_server]},
+      case supervisor:start_child(sync_server_sup, Spec) of
+        already_present -> supervisor:restart_child(sync_server_sup, Name);
+        _ -> ok
+      end
     end, NewParts).
 
 reload_storage_servers(empty, NewState) ->
