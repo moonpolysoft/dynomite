@@ -1,3 +1,7 @@
+Version 0.2.18 (cliff)
+	* (Cliff Moon) support for sync servers
+	* (Cliff Moon) vast speed improvements to merkle diff operation
+
 Version 0.2.17 (cliff)
   * (Cliff Moon) fixed foldl bug
 
