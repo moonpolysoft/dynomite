@@ -51,6 +51,7 @@ init(Config) ->
     {ok,{{one_for_one,10,1}, [
 			{configuration, {configuration,start_link,[Config]}, permanent, 1000, worker, [configuration]},
       {storage_server_sup, {storage_server_sup,start_link,[Config]}, permanent, 10000, supervisor, [storage_server_sup]},
+      {sync_server_sup, {sync_server_sup,start_link,[Config]}, permanent, 10000, supervisor, [sync_server_sup]},
       {membership, {membership,start_link,[Config]}, permanent, 1000, worker, [membership]},
       {mediator, {mediator,start_link,[Config]}, permanent, 1000, worker, [mediator]},
       {dynomite_web, {dynomite_web,start,[[{port,8080},{docroot, "web"}]]}, permanent, 1000, worker, [dynomite_web]},
