@@ -69,7 +69,7 @@ rebuild_tree(Name) ->
 sync(Local, Remote) ->
   TreeA = get_tree(Local),
   TreeB = get_tree(Remote),
-  lists:foreach(fun({Key,_}) ->
+  lists:foreach(fun(Key) ->
       RetrieveA = storage_server:get(Local, Key),
       RetrieveB = storage_server:get(Remote, Key),
       case {RetrieveA, RetrieveB} of
