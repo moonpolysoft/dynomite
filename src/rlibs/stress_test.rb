@@ -13,7 +13,7 @@ dyn = Dynomite.new
 
 time = -Time.now.to_f
 
-ary = (1..500).to_a.map do |i|
+ary = (1..100000).to_a.map do |i|
   ["key#{rand(9000)}", random_bytes(100)]
 end
 

@@ -336,6 +336,38 @@ within(N, Last, nil, [Head|Nodes], First) ->
     _ -> within(N-1, Last, nil, Nodes, First)
   end.
 
+reload_sync_servers(empty, NewState) ->
+  Config = configuration:get_config(),
+  Partitions = int_partitions_for_node(node(), NewState, master),
+  reload_sync_servers([], Partitions, Config);
+  
+reload_sync_servers(OldState, NewState) ->
+  Config = configuration:get_config(),
+  PartForNode = int_partitions_for_node(node(), NewState, master),
+  OldPartForNode = int_partitions_for_node(node(), OldState, master),
+  Old = OldState#membership.partitions,
+  NewPartitions = lists:filter(fun(E) ->
+      not lists:member(E, OldPartForNode)
+    end, PartForNode),
+  OldPartitions = lists:filter(fun(E) ->
+      not lists:member(E, PartForNode)
+    end, OldPartForNode),
+  reload_sync_servers(OldPartitions, NewPartitions, Config).
+  
+reload_sync_servers(_, _, #config{live=Live}) when not Live ->
+  ok;
+  
+reload_sync_servers(OldParts, NewParts, Config) ->
+  lists:foreach(fun(E) ->
+      Name = list_to_atom(lists:concat([sync_, E])),
+      supervisor:terminate_child(sync_server_sup, Name),
+      supervisor:delete_child(sync_server_sup, Name)
+    end, OldParts),
+  lists:foreach(fun(Part) ->
+      Name = list_to_atom(lists:concat([sync_, Part])),
+      noop
+    end, NewParts).
+
 reload_storage_servers(empty, NewState) ->
   Config = configuration:get_config(),
   Partitions = int_partitions_for_node(node(), NewState, all),
