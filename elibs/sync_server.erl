@@ -26,7 +26,7 @@
 %%--------------------------------------------------------------------
 start_link(Name, Partition) ->
   Pid = spawn_link(fun() ->
-      sync_server:loop(#state{name=Name,partition=Partition,paused=false})
+      sync_server:loop(#state{name=Name,partition=Partition,paused=true})
     end),
   register(Name, Pid),
   {ok, Pid}.
@@ -40,7 +40,7 @@ play(Server) ->
 %% Internal functions
 
 loop(State = #state{name=Name,partition=Partition,paused=Paused}) ->
-  Timeout = round((random:uniform() * 5 + 5) * 1000),
+  Timeout = round((random:uniform() * 5 + 5) * 60000),
   Paused1 = receive
     pause -> true;
     play -> false
