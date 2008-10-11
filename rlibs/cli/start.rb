@@ -20,6 +20,10 @@ OptionParser.new do |opts|
     options[:port] = "-dynomite port #{port}"
   end
   
+  opts.on("-u", "--web [PORT]", "Port for the web interface") do |port|
+    options[:web_port] = "-dynomite web_port #{port}"
+  end
+  
   opts.on("-l", "--log [LOGFILE]", "error log path") do |log|
     options[:log] = %Q[-kernel error_logger '{file,"#{File.join(log, 'dynomite.log')}"}' -sasl sasl_error_logger '{file,"#{File.join(log, 'sasl.log')}"}']
   end
@@ -71,6 +75,7 @@ str = "erl \
   #{options[:log]} \
   -noshell \
   #{options[:port]} \
+  #{options[:web_port]} \
   #{options[:jointo]} \
   #{options[:directory]} \
   #{options[:storage]} \
