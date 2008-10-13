@@ -4,11 +4,27 @@
 -define(OFFSET_BASIS, 2166136261).
 -define(FNV_PRIME, 16777619).
 
--export([pmap/3, hash/1, position/2, shuffle/1]).
+-export([pmap/3, hash/1, position/2, shuffle/1, floor/1, ceiling/1]).
 
 -ifdef(TEST).
 -include("etest/lib_misc_test.erl").
 -endif.
+
+floor(X) ->
+  T = erlang:trunc(X),
+  case (X - T) of
+    Neg when Neg < 0 -> T - 1;
+    Pos when Pos > 0 -> T;
+    _ -> T
+  end.
+
+ceiling(X) ->
+  T = erlang:trunc(X),
+  case (X - T) of
+    Neg when Neg < 0 -> T;
+    Pos when Pos > 0 -> T + 1;
+    _ -> T
+  end.
 
 shuffle(List) ->
   lists:sort(fun(A,B) ->
