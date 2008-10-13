@@ -125,9 +125,13 @@ init(ConfigIn) ->
   		true -> {ok, create_initial_state(ConfigIn)}
   	end
   end,
+  error_logger:info_msg("Loading storage servers.~n"),
 	reload_storage_servers(empty, State),
+	error_logger:info_msg("Loading sync servers.~n"),
 	reload_sync_servers(empty, State),
+	error_logger:info_msg("Starting membership gossip.~n"),
   timer:apply_after(random:uniform(1000) + 1000, membership, fire_gossip, [random:seed()]),
+  error_logger:info_msg("Initialized."),
 	{ok, State#membership{config=configuration:get_config()}}.
 
 %%--------------------------------------------------------------------
@@ -302,7 +306,7 @@ merge_states(StateA, StateB) ->
   PartB = StateB#membership.partitions,
   Config = StateB#membership.config,
   Nodes = lists:usort(lists:merge(StateA#membership.nodes, StateB#membership.nodes)),
-  Partitions = merge_partitions(PartA, PartB, [], Config#config.n, Nodes),
+  Partitions = partitions:merge_partitions(PartA, PartB, Config#config.n, Nodes),
   % error_logger:info_msg("Merged nodes ~p and partitions ~p~n", [Nodes, length(Partitions)]),
   #membership{
     version=vector_clock:merge(StateA#membership.version, StateB#membership.version),
@@ -310,42 +314,6 @@ merge_states(StateA, StateB) ->
     partitions=Partitions,
     config=Config
   }.
-  
-merge_partitions([], [], Result, _, _) -> lists:keysort(2, Result);
-merge_partitions(A, [], Result, _, _) -> lists:keysort(2, A ++ Result);
-merge_partitions([], B, Result, _, _) -> lists:keysort(2, B ++ Result);
-
-merge_partitions([{NodeA,Number}|PartA], [{NodeB,Number}|PartB], Result, N, Nodes) ->
-  if
-    NodeA == NodeB -> 
-      merge_partitions(PartA, PartB, [{NodeA,Number}|Result], N, Nodes);
-    true ->
-      case within(N, NodeA, NodeB, Nodes) of
-        {true, First} -> merge_partitions(PartA, PartB, [{First,Number}|Result], N, Nodes);
-        % bah, maybe we should just fucking pick one
-        _ -> merge_partitions(PartA, PartB, [{NodeA,Number}|Result], N, Nodes)
-      end
-  end.
-
-within(N, NodeA, NodeB, Nodes) ->
-  within(N, NodeA, NodeB, Nodes, nil).
-
-within(_, _, _, [], _) -> false;
-  
-within(N, NodeA, NodeB, [Head|Nodes], nil) ->
-  case Head of
-    NodeA -> within(N-1, NodeB, nil, Nodes, NodeA);
-    NodeB -> within(N-1, NodeA, nil, Nodes, NodeB);
-    _ -> within(N-1, NodeA, NodeB, Nodes, nil)
-  end;
-  
-within(0, _, _, _, _) -> false;
-  
-within(N, Last, nil, [Head|Nodes], First) ->
-  case Head of
-    Last -> {true, First};
-    _ -> within(N-1, Last, nil, Nodes, First)
-  end.
 
 reload_sync_servers(empty, NewState) ->
   Config = configuration:get_config(),
@@ -385,7 +353,9 @@ reload_sync_servers(OldParts, NewParts, Config) ->
 
 reload_storage_servers(empty, NewState) ->
   Config = configuration:get_config(),
+  error_logger:info_msg("state: ~p~n", [NewState]),
   Partitions = int_partitions_for_node(node(), NewState, all),
+  error_logger:info_msg("Partitions: ~p~n", [Partitions]),
   Old = NewState#membership.old_partitions,
   reload_storage_servers([], Partitions, Old, Config);
 
@@ -428,55 +398,12 @@ reload_storage_servers(OldParts, NewParts, Old, Config = #config{live=Live}) whe
 
 int_join_node(NewNode, #membership{config=Config,partitions=Partitions,version=Version,nodes=OldNodes}) ->
   Nodes = lists:sort([NewNode|OldNodes]),
-  P = steal_partitions(NewNode, Partitions, Nodes, Config),
+  P = partitions:rebalance_partitions(NewNode, Nodes, Partitions),
   #membership{config=Config,
     partitions=P,
     version = vector_clock:increment(node(), Version),
     nodes=Nodes,
     old_partitions=Partitions}.
-  
-steal_partitions(ForNode, Partitions, Nodes, #config{q=Q}) ->
-  Tokens = ?power_2(Q) div length(Nodes),
-  FromEach = Tokens div (length(Nodes)-1),
-  case lists:keysearch(ForNode, 1, Partitions) of
-    {value, _} -> Partitions;
-    false -> if
-      FromEach == 0 -> steal_partitions(ForNode, Tokens, 1, Partitions, Nodes, []);
-      true -> steal_partitions(ForNode, Tokens, FromEach, Partitions, Nodes, [])
-    end
-  end.
-  
-steal_partitions(_, _, _, Partitions, [], Stolen) ->
-  % error_logger:info_msg("ran out of nodes ~n", []),
-  lists:keysort(2, Partitions ++ Stolen);  
-
-steal_partitions(ForNode, Tokens, FromEach, Partitions, Nodes, Stolen) when length(Stolen) == Tokens ->
-  % error_logger:info_msg("got enough stolen ~p~n", [Stolen]),
-  timer:sleep(100),
-  lists:keysort(2, Partitions ++ Stolen);
-
-% skip fornode
-steal_partitions(ForNode, Tokens, FromEach, Partitions, [ForNode|Nodes], Stolen) ->
-  % error_logger:info_msg("fornode ~p tokens ~p fromeach ~p partitions ~p nodes ~p stolen ~p~n", [ForNode, Tokens, FromEach, length(Partitions), Nodes, length(Stolen)]),
-  steal_partitions(ForNode, Tokens, FromEach, Partitions, Nodes, Stolen);
-
-steal_partitions(ForNode, Tokens, FromEach, Partitions, [FromNode|Nodes], Stolen) ->
-  % error_logger:info_msg("fornode ~p tokens ~p fromeach ~p partitions ~p nodes ~p stolen ~p~n", [ForNode, Tokens, FromEach, length(Partitions), Nodes, length(Stolen)]),
-  {NewPartitions,NewStolen} = steal_n(FromEach, FromNode, ForNode, Partitions, Stolen),
-  steal_partitions(ForNode, Tokens, FromEach, NewPartitions, Nodes, NewStolen).
-  
-steal_n(0, Node, ForNode, Partitions, Stolen) -> {Partitions,Stolen};
-
-% we want to make sure to always leave at least on partition for an existing node
-steal_n(N, Node, ForNode, Partitions, Stolen) ->
-  case lists:keytake(Node, 1, Partitions) of
-    {value, {_,Part}, NewPartitions} -> 
-      case lists:keytake(Node, 1, NewPartitions) of
-        {value, _, _} -> steal_n(N-1, Node, ForNode, NewPartitions, [{ForNode,Part}|Stolen]);
-        false -> {Partitions,Stolen}
-      end;
-    false -> {Partitions,Stolen}
-  end.
   
 int_partitions_for_node(Node, State, master) ->
   Partitions = State#membership.partitions,
