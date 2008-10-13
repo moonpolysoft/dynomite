@@ -11,11 +11,11 @@ end
 
 dyn = Dynomite.new
 
-time = -Time.now.to_f
-
-ary = (1..100000).to_a.map do |i|
+ary = (1..10000).to_a.map do |i|
   ["key#{rand(9000)}", random_bytes(100)]
 end
+
+time = -Time.now.to_f
 
 ary.each do |key, val|
   dyn.put key, nil, val
