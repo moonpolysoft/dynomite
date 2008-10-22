@@ -1,8 +1,12 @@
 <html>
   <head>
+    <link href="/stylesheets/master.css" rel="stylesheet" type="text/css"/>
     <script type="text/javascript" src="/javascripts/jquery-1.2.6.js"></script>
     <script type="text/javascript" src="/javascripts/domec.js"></script>
     <script type="text/javascript" src="/javascripts/jquery.timer.js"></script>
+    <script type="text/javascript" src="/javascripts/canvastext.js"></script>
+    <script type="text/javascript" src="/javascripts/drawarrows.js"></script>
+    <script type="text/javascript" src="/javascripts/viz.js"></script>
     <script type="text/javascript">
       function decimals(number, value) {
         with(Math) {
@@ -14,22 +18,26 @@
       $(document).ready(function(data) {
         $.getJSON("/rpc/info/stats", function(stats) {
           $("#node").text(stats.node);
-          $.each(stats.running_nodes, function(n, node) {
-            $.create("li", {}, node).appendTo("#running_nodes");
-          });
-          $.each(stats.member_nodes, function(n, node_struct) {
-            var node = node_struct[0];
-            var partitions = node_struct[1];
-						$.create("a", {'href' : '#'}, "+").click(function() {
-							$("#" + node.split("@").join("at") + "_partitions").toggle("slow");
-							return false;
-						}).appendTo($.create("li", {}, node + " ").appendTo("#member_nodes"));
-            var children = $.map(partitions, function(part) {
-              return $.create("li", {}, "" + part);
-            });
-            $.create("ul", {'id' : node.split("@").join("at") + "_partitions", 'style' : 'display: none;'}, children).appendTo('#member_nodes');
-          });
+            //           $.each(stats.running_nodes, function(n, node) {
+            //             $.create("li", {}, node).appendTo("#running_nodes");
+            //           });
+            //           $.each(stats.member_nodes, function(n, node) {
+            // $.create("a", {'href' : '#'}, "+").click(function() {
+            //  $("#" + node.name.split("@").join("at") + "_partitions").toggle("slow");
+            //  return false;
+            // }).appendTo($.create("li", {}, node.name + " ").appendTo("#member_nodes"));
+            //             var children = $.map(node.partitions, function(part) {
+            //               return $.create("li", {}, "" + part);
+            //             });
+            //             $.create("ul", {'id' : node.name.split("@").join("at") + "_partitions", 'style' : 'display: none;'}, children).appendTo('#member_nodes');
+            //           });
+          var canvas = document.getElementById("canvas");
+          draw_nodes(stats.member_nodes, stats.running_nodes, canvas);
           $.timer(1000, function(timer) {
+            $.getJSON("/rpc/info/stats", function(stats) {
+              var canvas = document.getElementById("canvas");
+              draw_nodes(stats.member_nodes, stats.running_nodes, canvas);
+            });
             $.getJSON("/rpc/rates/" + escape(stats.node), function(rates) {
               $("#get_rate").text(decimals(2, rates.get_rate));
               $("#put_rate").text(decimals(2, rates.put_rate));
@@ -37,9 +45,6 @@
               $("#out_rate").text(decimals(2, rates.out_rate / Math.pow(2, 10)));
               $("#connections").text(rates.connections);
             });
-            timer.reset(1000);
-          });
-          $.timer(1000, function(timer) {
             $.getJSON("/rpc/rates/cluster", function(rates) {
               $("#c_get_rate").text(decimals(2, rates.get_rate));
               $("#c_put_rate").text(decimals(2, rates.put_rate));
@@ -47,16 +52,23 @@
               $("#c_out_rate").text(decimals(2, rates.out_rate / Math.pow(2, 10)));
               $("#c_connections").text(rates.connections);
             });
-            timer.reset(1000);
           });
         });
       });
     </script>
   </head>
   <body>
-    <h1>Dynomite</h1>
-    <div style="float: right;"><img src="/images/dynomite_logo.png"/></div>
-    <h2>Dashboard for <span id="node"></span></h2>
+    <div class="header"><!-- <img src="/images/dynomite_logo.png" style="float: right;"/> -->
+      <h1>Dynomite</h1>
+      <h2>Dashboard for <span id="node"></span></h2>
+    </div>
+    <ul id="menu">
+      <li>Health</li>
+      <li><a href="">Stats</a></li>
+      <li><a href="">Sync</a></li>
+      <li><a href="">Partitioning</a></li>
+    </ul>
+    <canvas id="canvas" width="600" height="600" style="float: right; padding-right: 10px;"></canvas>
     <h3>Node Stats</h3>
     <ul>
       <li><span id="get_rate">0.0</span> gets/sec</li>
@@ -72,8 +84,9 @@
       <li><span id="c_out_rate">0.0</span> KB/sec out</li>
       <li><span id="c_in_rate">0.0</span> KB/sec in</li>
       <li><span id="c_connections">0.0</span> connections</li>
-      <li>Running Nodes:</li><ul id="running_nodes"></ul>
-      <li>Member Nodes:</li><ul id="member_nodes"></ul>
+      <!-- <li>Running Nodes:</li><ul id="running_nodes"></ul>
+      <li>Member Nodes:</li><ul id="member_nodes"></ul> -->
     </ul>
+    
   </body>
 </html>

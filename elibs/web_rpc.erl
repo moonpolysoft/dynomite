@@ -12,7 +12,7 @@
 -author('cliff@powerset.com').
 
 %% API
--export([info/1, rates/1]).
+-export([info/1, rates/1, syncs_running/1]).
 
 %%====================================================================
 %% API
@@ -27,7 +27,7 @@ info(stats) ->
   {obj, [
     {node,node()}, 
     {running_nodes,lists:sort(nodes([this,visible]))},
-    {member_nodes,transform_partitions([], lists:keysort(1, membership:partitions()))}
+    {member_nodes,transform_partitions(lists:keysort(1, membership:partitions()))}
   ]}.
 
 rates(cluster) ->
@@ -47,10 +47,26 @@ rates(Node) ->
     {out_rate, socket_server:rate(Node, out_rate, 1)},
     {connections, socket_server:connections(Node)}
   ]}.
+  
+syncs_running(Node) ->
+  {obj, [
+    {running, lists:map(fun({Part, NodeA, NodeB}) -> 
+        {obj, [{partition, Part}, {nodes, [NodeA, NodeB]}]}
+      end, sync_manager:running(Node))}
+  ]}.
 
 %%====================================================================
 %% Internal functions
 %%====================================================================
+
+transform_partitions(Partitions) ->
+  lists:map(fun([Node,Parts]) -> 
+      {obj, [
+        {name, Node},
+        {partitions, Parts},
+        {replicas, membership:replica_nodes(Node)}
+      ]}
+    end, transform_partitions([], Partitions)).
 
 transform_partitions([], [{Node,Part}|Parts]) ->
   transform_partitions([[Node,[Part]]], Parts);
