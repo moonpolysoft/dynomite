@@ -18,7 +18,7 @@
 
 
 %% API
--export([open/1, open/2, equals/2, update/3, delete/2, leaves/1, find/2, leaf_size/1, visualized_find/2, key_diff/2, close/1, scan_for_empty/1, swap_tree/2]).
+-export([open/1, open/2, equals/2, count/2, count_trace/2, update/3, delete/2, leaves/1, find/2, leaf_size/1, visualized_find/2, key_diff/2, close/1, scan_for_empty/1, swap_tree/2]).
 
 -ifdef(TEST).
 -include("etest/dmerkle_test.erl").
@@ -51,6 +51,12 @@ open(FileName, BlockSize) ->
   Root = create_or_read_root(File, FinalBlockSize),
   #dmerkle{file=File,block=FinalBlockSize,root=Root,d=D,filename=FileName}.
 
+count_trace(Tree = #dmerkle{root=Root}, Key) ->
+  count_trace(Tree, Root, hash(Key)).
+
+count(Tree = #dmerkle{root=Root}, Level) ->
+  count(Tree, Root, Level).
+
 leaves(Tree = #dmerkle{root=Root}) ->
   leaves(Root, Tree, []).
 
@@ -82,7 +88,7 @@ leaf_size(Merkle) -> noop.
 
 key_diff(TreeA = #dmerkle{root=RootA}, TreeB = #dmerkle{root=RootB}) ->
   {KeysA, KeysB} = key_diff(RootA, RootB, TreeA, TreeB, [], []),
-  diff_merge(TreeA, TreeB, lists:keysort(1, KeysA), lists:keysort(1, KeysB), []).
+  lists:usort(diff_merge(TreeA, TreeB, lists:keysort(1, KeysA), lists:keysort(1, KeysB), [])).
 
 close(#dmerkle{file=File}) ->
   block_server:stop(File).
@@ -102,6 +108,29 @@ swap_tree(OldTree = #dmerkle{filename=OldFilename}, NewTree = #dmerkle{filename=
 %%====================================================================
 %% Internal functions
 %%====================================================================
+
+count_trace(#dmerkle{file=File,block=BlockSize}, #leaf{values=Values}, Hash) ->
+  length(lists:filter(fun({H, _, _}) -> 
+      H == Hash
+    end, Values));
+    
+count_trace(Tree = #dmerkle{file=File,block=BlockSize}, #node{children=Children}, Hash) ->
+  Counts = lists:reverse(lists:foldl(fun({_, Ptr}, Acc) ->
+      Child = read(File, Ptr, BlockSize),
+      [count_trace(Tree, Child, Hash) | Acc]
+    end, [], Children)).
+
+count(#dmerkle{}, _, 0) ->
+  1;
+  
+count(Tree = #dmerkle{file=File,block=BlockSize}, Node = #node{children=Children}, Level) ->
+  lists:foldl(fun({_,Ptr}, Acc) ->
+      Child = read(File, Ptr, BlockSize),
+      Acc + count(Tree, Child, Level-1)
+    end, 0, Children);
+    
+count(#dmerkle{}, #leaf{values=Values}, _) ->
+  length(Values).
 
 diff_merge(TreeA, TreeB, [], [], Ret) ->
   lists:sort(Ret);
