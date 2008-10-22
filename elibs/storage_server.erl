@@ -65,6 +65,11 @@ delete(Name, Key) ->
   
 rebuild_tree(Name) ->
   gen_server:call(Name, rebuild_tree).
+  
+diff(Server1, Server2) ->
+  Tree1 = get_tree(Server1),
+  Tree2 = get_tree(Server2),
+  dmerkle:key_diff(Tree1, Tree2).
 	
 sync(Local, Remote) ->
   TreeA = get_tree(Local),
