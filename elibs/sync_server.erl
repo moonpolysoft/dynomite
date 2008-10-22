@@ -61,5 +61,7 @@ run_sync(Nodes, _) when length(Nodes) == 1 ->
 run_sync(Nodes, Partition) ->
   [NodeA,NodeB|_] = lib_misc:shuffle(Nodes),
   StorageName = list_to_atom(lists:concat([storage_, Partition])),
-  storage_server:sync({StorageName, NodeA}, {StorageName, NodeB}).
+  sync_manager:start(Partition, NodeA, NodeB),
+  storage_server:sync({StorageName, NodeA}, {StorageName, NodeB}),
+  sync_manager:done(Partition).
   

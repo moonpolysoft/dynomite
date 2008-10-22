@@ -51,6 +51,7 @@ init([Config, Options]) ->
     {ok,{{one_for_one,10,1}, [
 			{configuration, {configuration,start_link,[Config]}, permanent, 1000, worker, [configuration]},
       {storage_server_sup, {storage_server_sup,start_link,[Config]}, permanent, 10000, supervisor, [storage_server_sup]},
+      {sync_manager, {sync_manager,start_link,[]}, permanent, 1000, worker, [sync_manager]},
       {sync_server_sup, {sync_server_sup,start_link,[Config]}, permanent, 10000, supervisor, [sync_server_sup]},
       {membership, {membership,start_link,[Config]}, permanent, 1000, worker, [membership]},
       {mediator, {mediator,start_link,[Config]}, permanent, 1000, worker, [mediator]},
