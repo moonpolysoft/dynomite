@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/6, start_link/7, get/2, get/3, put/4, put/5, fold/3, sync/2, get_tree/1, rebuild_tree/1, has_key/2, has_key/3, delete/2, delete/3, close/1, close/2]).
+-export([start_link/6, start_link/7, get/2, diff/2, get/3, put/4, put/5, fold/3, sync/2, get_tree/1, rebuild_tree/1, has_key/2, has_key/3, delete/2, delete/3, close/1, close/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -143,12 +143,20 @@ init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_call({get, Key}, _From, State = #storage{module=Module,table=Table}) ->
-	{reply, catch Module:get(sanitize_key(Key), Table), State};
+  Result = (catch Module:get(sanitize_key(Key), Table)),
+  case Result of
+    {ok, {Context, Values}} -> 
+      stats_server:request(get, lists:foldl(fun(Bin, Acc) -> Acc + byte_size(Bin) end, 0, Values));
+    _ -> ok
+  end,
+	{reply, Result, State};
 	
 handle_call({put, Key, Context, Value}, _From, State = #storage{module=Module,table=Table,tree=Tree}) ->
   UpdatedTree = dmerkle:update(Key, Value, Tree),
   case catch Module:put(sanitize_key(Key), Context, Value, Table) of
-    {ok, ModifiedTable} -> {reply, ok, State#storage{table=ModifiedTable,tree=UpdatedTree}};
+    {ok, ModifiedTable} ->
+      stats_server:request(put, byte_size(Value)),
+      {reply, ok, State#storage{table=ModifiedTable,tree=UpdatedTree}};
     Failure -> {reply, Failure, State}
   end;
 	
