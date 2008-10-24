@@ -110,7 +110,6 @@ open_and_insert_1000_test() ->
         Result -> Result;
         true -> 
           error_logger:info_msg("could not get ~p was ~p~n", [N, find(lists:concat(["key", N]), Tree)]),
-          timer:sleep(1000),
           Result
       end
     end, lists:seq(1, 1000)),
@@ -199,15 +198,15 @@ insert_overwrite2_test() ->
   test_cleanup(),
   TreeA = lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, open("/Users/cliff/data/dmerkle", 256), lists:seq(1,500)),
+    end, open("/Users/cliff/data/dmerkle", 256), lists:seq(1,3000)),
   TreeB = lists:foldl(fun(N, Tree) ->
-      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+      update(lists:concat(["key"]), lists:concat(["value", N]), Tree)
     end, lists:foldl(fun(N, Tree) ->
-        update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-      end, open("/Users/cliff/data/dmerkle1", 256), lists:seq(1,500)), lists:seq(1, 500)),
-  Diff = key_diff(TreeA, TreeB),
-  [] = Diff,
-  500 = length(leaves(TreeB)).
+        update(lists:concat(["key"]), lists:concat(["value", N]), Tree)
+      end, open("/Users/cliff/data/dmerkle1", 256), lists:seq(1,3000)), lists:seq(1, 3000)),
+  % Diff = key_diff(TreeA, TreeB),
+  % [] = Diff,
+  1 = length(leaves(TreeB)).
 
 swap_tree_test() ->
   test_cleanup(),
@@ -220,7 +219,6 @@ swap_tree_test() ->
   NewTree = swap_tree(TreeA, TreeB),
   SameTree = open("/Users/cliff/data/dmerkle", 256),
   error_logger:info_msg("trees: ~p ~p~n", [NewTree, SameTree]),
-  timer:sleep(100),
   [] = key_diff(NewTree, SameTree).
   
 leaves_test() ->
@@ -238,6 +236,20 @@ empty_diff_test() ->
   TreeB = open("/Users/cliff/data/dmerkle1", 256),
   500 = length(key_diff(TreeA, TreeB)).
   
+live_test_() ->
+  {timeout, 120, [{?LINE, fun() ->
+    TreeA = open("/Users/cliff/data/dmerkle410", 4096),
+    TreeB = open("/Users/cliff/data/dmerkle42", 4096),
+    KeyDiff = key_diff(TreeA, TreeB),
+    error_logger:info_msg("key_diff: ~p~n", [KeyDiff]),
+    LeavesA = leaves(TreeA),
+    LeavesB = leaves(TreeB),
+    LeafDiff = LeavesA -- LeavesB,
+    error_logger:info_msg("leaf_diff: ~p~n", [LeafDiff]),
+    timer:sleep(100),
+    KeyDiff = LeafDiff
+  end}]}.
+  
 open_and_insert_n(N) ->
   test_cleanup(),
   Tree = lists:foldl(fun(N, Tree) ->
@@ -250,11 +262,9 @@ open_and_insert_n(N) ->
         Result -> Result;
         true -> 
           error_logger:info_msg("could not get ~p was ~p~n", [N, find(lists:concat(["key", N]), Tree)]),
-          timer:sleep(1000),
           Result
       end
     end, lists:seq(1, N)),
-  timer:sleep(100),
   close(Tree).
 
 stress() ->

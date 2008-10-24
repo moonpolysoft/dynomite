@@ -1,0 +1,46 @@
+<html>
+  <head>
+    <link href="/stylesheets/master.css" rel="stylesheet" type="text/css"/>
+    <script type="text/javascript" src="/javascripts/jquery-1.2.6.js"></script>
+    <script type="text/javascript" src="/javascripts/domec.js"></script>
+    <script type="text/javascript" src="/javascripts/jquery.timer.js"></script>
+    <script type="text/javascript" src="/javascripts/canvastext.js"></script>
+    <script type="text/javascript" src="/javascripts/drawarrows.js"></script>
+    <script type="text/javascript" src="/javascripts/color.js"></script>
+    <script type="text/javascript" src="/javascripts/viz.js"></script>
+    <script type="text/javascript">
+      $(document).ready(function(data) {
+        $.getJSON("/rpc/info/stats", function(stats) {
+          $("#node").text(stats.node);
+        });
+        
+          $.getJSON("/rpc/rates/nodes", function(node_rates) {
+            var canvas = document.getElementById("canvas");
+            drawRates(node_rates, canvas);
+          });
+        
+        $.timer(1000, function(timer) {
+            $.getJSON("/rpc/rates/nodes", function(node_rates) {
+              var canvas = document.getElementById("canvas");
+              drawRates(node_rates, canvas);
+            });
+        });
+      });
+    </script>
+  </head>
+  <body>
+    <div class="header"><!-- <img src="/images/dynomite_logo.png" style="float: right;"/> -->
+      <h1>Dynomite</h1>
+      <h2>Load for <span id="node"></span></h2>
+    </div>
+    <ul id="menu">
+      <li><a href="/index.html">Health</a></li>
+      <li>Load</li>
+      <li><a href="/sync.html">Replication</a></li>
+      <li><a href="/partitions.html">Partitioning</a></li>
+    </ul>
+    <canvas id="canvas" width="800" height="600"></canvas>
+    </ul>
+    
+  </body>
+</html>

@@ -24,11 +24,21 @@
 %%--------------------------------------------------------------------
 
 start(Options) ->
-    {DocRoot, Options1} = get_option(docroot, Options),
-    Loop = fun (Req) ->
-		   ?MODULE:loop(Req, DocRoot)
-	   end,
-    mochiweb_http:start([{name, ?MODULE}, {loop, Loop} | Options1]).
+  io:format("options ~p~n", [Options]),
+  {WebPort, Options1} = get_option(web_port, proplists:delete(port, Options)),
+  WebPort1 = if
+    WebPort == undefined -> 8080;
+    true -> WebPort
+  end,
+  {DocRoot, Options2} = get_option(docroot, Options1),
+  DocRoot1 = if
+    DocRoot == undefined -> "web";
+    true -> DocRoot
+  end,
+  Loop = fun (Req) ->
+	   ?MODULE:loop(Req, DocRoot1)
+   end,
+  mochiweb_http:start([{name, ?MODULE}, {loop, Loop}, {port, WebPort1} | Options1]).
 
 stop() ->
     mochiweb_http:stop(?MODULE).

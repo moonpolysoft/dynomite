@@ -42,7 +42,8 @@ start(_Type, []) ->
   		end;
 		undefined -> process_arguments([r, w, n, q, directory, blocksize, port, storage_mod])
 	end,
-  dynomite_sup:start_link(Config).
+	Options = process_options([web_port]),
+  dynomite_sup:start_link(Config, Options).
 
 %%--------------------------------------------------------------------
 %% @spec stop(State) -> void()
@@ -59,6 +60,18 @@ stop({_, Sup}) ->
 %% Internal functions
 %%====================================================================
 
+process_options(OptionNames) ->
+  process_options(OptionNames, []).
+
+process_options([], Taken) ->
+  lists:reverse(Taken);
+
+process_options([Name|OptionNames], Taken) ->
+  case application:get_env(Name) of
+    undefined -> process_options(OptionNames, Taken);
+    {ok, Val} -> process_options(OptionNames, [{Name, Val}|Taken])
+  end.
+  
 process_arguments(Args) ->
 	process_arguments(Args, #config{n=3,r=2,w=2,q=6,port=11222,blocksize=4096,directory="/tmp/dynomite",storage_mod=fs_storage,live=true}).
 	

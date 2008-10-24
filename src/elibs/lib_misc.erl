@@ -4,11 +4,27 @@
 -define(OFFSET_BASIS, 2166136261).
 -define(FNV_PRIME, 16777619).
 
--export([pmap/3, hash/1, position/2, shuffle/1]).
+-export([pmap/3, hash/1, position/2, shuffle/1, floor/1, ceiling/1]).
 
 -ifdef(TEST).
 -include("etest/lib_misc_test.erl").
 -endif.
+
+floor(X) ->
+  T = erlang:trunc(X),
+  case (X - T) of
+    Neg when Neg < 0 -> T - 1;
+    Pos when Pos > 0 -> T;
+    _ -> T
+  end.
+
+ceiling(X) ->
+  T = erlang:trunc(X),
+  case (X - T) of
+    Neg when Neg < 0 -> T;
+    Pos when Pos > 0 -> T + 1;
+    _ -> T
+  end.
 
 shuffle(List) ->
   lists:sort(fun(A,B) ->
@@ -29,19 +45,22 @@ pmap(Fun, List, ReturnNum) ->
   %% we spawn an intermediary to collect the results
   %% this is so that there will be no leaked messages sitting in our mailbox
   Parent = spawn(fun() ->
-      L = gather(N, Ref, []),
+      L = gather(N, length(List), Ref, []),
       SuperParent ! {SuperRef, L}
     end),
-  _Pids = [spawn(fun() -> Parent ! {Ref, {Elem, (catch Fun(Elem))}} end)
-    || Elem <- List],
+  _Pids = [spawn(fun() -> 
+      Parent ! {Ref, {Elem, (catch Fun(Elem))}} 
+    end) || Elem <- List],
   receive
     {SuperRef, Ret} -> Ret
   end.
   
-gather(0, _, L) -> L;
-gather(N, Ref, L) ->
+gather(_, Max, _, L) when length(L) == Max -> L;
+gather(0, _, _, L) -> L;
+gather(N, Max, Ref, L) ->
   receive
-	  {Ref, Ret} -> gather(N-1, Ref, [Ret|L])
+    {Ref, {Elem, {'EXIT', Ret}}} -> gather(N, Max, Ref, [{Elem, {'EXIT', Ret}}|L]);
+	  {Ref, Ret} -> gather(N-1, Max, Ref, [Ret|L])
   end.
 
   
