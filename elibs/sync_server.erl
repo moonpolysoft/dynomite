@@ -26,7 +26,7 @@
 %%--------------------------------------------------------------------
 start_link(Name, Partition) ->
   Pid = spawn_link(fun() ->
-      sync_server:loop(#state{name=Name,partition=Partition,paused=true})
+      sync_server:loop(#state{name=Name,partition=Partition,paused=false})
     end),
   register(Name, Pid),
   {ok, Pid}.
@@ -40,7 +40,7 @@ play(Server) ->
 %% Internal functions
 
 loop(State = #state{name=Name,partition=Partition,paused=Paused}) ->
-  Timeout = round((random:uniform() * 5 + 5) * 60000),
+  Timeout = round((random:uniform() * 2 + 3) * 60000),
   Paused1 = receive
     pause -> true;
     play -> false
@@ -51,7 +51,7 @@ loop(State = #state{name=Name,partition=Partition,paused=Paused}) ->
     Paused -> ok;
     true ->
       Nodes = membership:nodes_for_partition(Partition),
-      run_sync(Nodes, Partition)
+      (catch run_sync(Nodes, Partition))
   end,
   sync_server:loop(State#state{paused=Paused1}).
 
@@ -59,9 +59,11 @@ run_sync(Nodes, _) when length(Nodes) == 1 ->
   noop;
   
 run_sync(Nodes, Partition) ->
+  [Master|_] = Nodes,
   [NodeA,NodeB|_] = lib_misc:shuffle(Nodes),
   StorageName = list_to_atom(lists:concat([storage_, Partition])),
-  sync_manager:start(Partition, NodeA, NodeB),
+  KeyDiff = storage_server:diff({StorageName, NodeA}, {StorageName, NodeB}),
+  sync_manager:sync(Partition, Master, NodeA, NodeB, length(KeyDiff)),
   storage_server:sync({StorageName, NodeA}, {StorageName, NodeB}),
   sync_manager:done(Partition).
   
