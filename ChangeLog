@@ -1,3 +1,25 @@
+Version 0.4.0 (cliff)
+	* (Cliff Moon) lots of new viz stuff for the interface
+	* (Cliff Moon) added robustification to the sync server
+	* (Cliff Moon) configurable port number
+	* (Cliff Moon) cleaned up newlines from the console script
+	* (Cliff Moon) cleaned up data services for viz
+	* (Cliff Moon) added diffing and robustification to the sync_server
+	* (Cliff Moon) the storage server should report stats for LB
+	* (Cliff Moon) add stat server to the startup sequence
+	* (Cliff Moon) refactoring stats from socket server to a standalone server
+	* (Cliff Moon) fixed pmap to ignore errors as bad results
+	* (Cliff Moon) dynomite interface is one hell of steeze
+	* (Cliff Moon) a diff method
+	* (Cliff Moon) a remsh console
+	* (Cliff Moon) sync_manager
+	* (Cliff Moon) added replica nodes function for interface
+	* (Cliff Moon) added some debug methods to dmerkle
+	* (Cliff Moon) refactoring partitions into a library
+	* (Cliff Moon) fixes to the stress test
+	* (Cliff Moon) floor and ceiling for shitzngiggles
+	* (Cliff Moon) support for changing the web port
+
 Version 0.3.1 (cliff)
   * (Cliff Moon) bigger timeout and start paused
 
