@@ -443,7 +443,7 @@ int_nodes_for_partition(Partition, State) ->
   N = Config#config.n,
   {Node,Partition} = lists:nth(index_for_partition(Partition, Q), Partitions),
   % error_logger:info_msg("Node ~w Partition ~w N ~w~n", [Node, Partition, N]),
-  n_nodes(Node, N, State#membership.nodes).
+  int_replica_nodes(Node, State).
   
 int_partition_for_key(Key, State) ->
   KeyHash = lib_misc:hash(Key),
