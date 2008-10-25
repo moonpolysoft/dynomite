@@ -425,7 +425,7 @@ int_partitions_for_node(Node, State, all) ->
   
 int_replica_nodes(Node, State) ->
   Config = State#membership.config,
-  n_nodes(Node, Config#config.n, lists:reverse(State#membership.nodes)).
+  n_nodes(Node, Config#config.n, State#membership.nodes).
   
 int_nodes_for_key(Key, State) ->
   % error_logger:info_msg("inside int_nodes_for_key~n", []),
