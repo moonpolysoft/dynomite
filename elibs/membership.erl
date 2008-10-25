@@ -418,10 +418,14 @@ int_partitions_for_node(Node, State, master) ->
   
 int_partitions_for_node(Node, State, all) ->
   Partitions = State#membership.partitions,
-  Nodes = int_replica_nodes(Node, State),
+  Nodes = reverse_replica_nodes(Node, State),
   lists:foldl(fun(E, Acc) -> 
       lists:merge(Acc, int_partitions_for_node(E, State, master)) 
     end, [], Nodes).
+  
+reverse_replica_nodes(Node, State) ->
+  Config = State#membership.config,
+  n_nodes(Node, Config#config.n, lists:reverse(State#membership.nodes)).
   
 int_replica_nodes(Node, State) ->
   Config = State#membership.config,
