@@ -1,3 +1,7 @@
+Version 0.4.2 (cliff)
+	* (Cliff Moon) tokyo cabinet storage engine.
+	* (Cliff Moon) tweaking storage server contract
+
 Version 0.4.1 (cliff)
   * (Cliff Moon) fixed replica nodes issue
 
