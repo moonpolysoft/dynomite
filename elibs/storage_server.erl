@@ -127,7 +127,7 @@ close(Name, Timeout) ->
 %%--------------------------------------------------------------------
 init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
   process_flag(trap_exit, true),
-  Table = StorageModule:open(DbKey,Name),
+  {ok, Table} = StorageModule:open(DbKey,Name),
   Tree = dmerkle:open(lists:concat([DbKey, "/dmerkle"]), BlockSize),
   {ok, #storage{module=StorageModule,dbkey=DbKey,blocksize=BlockSize,table=Table,name=Name,tree=Tree}}.
 
