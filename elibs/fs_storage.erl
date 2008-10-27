@@ -1,5 +1,5 @@
 -module (fs_storage).
--export ([open/2, close/1, get/2, put/4, has_key/2, delete/2, fold/3, create_filename/2]).
+-export ([open/2, close/1, get/2, put/4, has_key/2, delete/2, fold/3]).
 
 -record(file, {
   name,
@@ -12,7 +12,7 @@ open(Directory, Name) ->
   ok = filelib:ensure_dir(Directory ++ "/"),
   TableName = list_to_atom(lists:concat([Name, '/', node()])),
   {ok, TableName} = dets:open_file(TableName, [{file, lists:concat([Directory, "/files.dets"])}, {keypos, 2}]),
-  {Directory, TableName}.
+  {ok, {Directory, TableName}}.
 
 % noop
 close({_Directory, Table}) -> dets:close(Table).

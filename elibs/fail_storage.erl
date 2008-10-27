@@ -2,7 +2,7 @@
 -export ([open/2, close/1, get/2, fold/3, put/4, has_key/2, delete/2]).
 
 % we ignore the name, since it can't really help us.
-open(_, _) -> dict:new().
+open(_, _) -> {ok, dict:new()}.
 
 % noop
 close(_Table) -> ok.
