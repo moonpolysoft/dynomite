@@ -403,6 +403,10 @@ reload_storage_servers(OldParts, NewParts, Old, Config = #config{live=Live}) whe
   end, NewParts).
 
 int_join_node(NewNode, #membership{config=Config,partitions=Partitions,version=Version,nodes=OldNodes}) ->
+  % Make sure the new node isn't already in the partition table
+  % since this screws things up royally at the moment.
+  false = lists:keysearch(NewNode, 1, Partitions),
+
   Nodes = lists:sort([NewNode|OldNodes]),
   P = partitions:rebalance_partitions(NewNode, Nodes, Partitions),
   #membership{config=Config,
