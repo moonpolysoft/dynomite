@@ -19,6 +19,10 @@ OptionParser.new do |opts|
   opts.on("-p", "--port [PORT]", "The port to listen on") do |port|
     options[:port] = "-dynomite port #{port}"
   end
+
+  opts.on("-t", "--thrift-port [PORT]", "The port for the thrift service to listen on") do |port|
+    options[:thrift_port] = "-dynomite thrift_port #{port}"
+  end
   
   opts.on("-u", "--web [PORT]", "Port for the web interface") do |port|
     options[:web_port] = "-dynomite web_port #{port}"
@@ -71,11 +75,13 @@ str = "erl \
   -pz #{ROOT}/ebin/ \
   -pz #{ROOT}/deps/mochiweb/ebin \
   -pz #{ROOT}/deps/rfc4627/ebin \
+  -pz #{ROOT}/deps/thrift/ebin \
   -sname #{options[:name]} \
   #{options[:log]} \
   -noshell \
   #{options[:port]} \
   #{options[:web_port]} \
+  #{options[:thrift_port]} \
   #{options[:jointo]} \
   #{options[:directory]} \
   #{options[:storage]} \

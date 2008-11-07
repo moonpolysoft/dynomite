@@ -37,12 +37,13 @@ start(_Type, []) ->
 		{ok, NodeName} -> 
 		  error_logger:info_msg("attempting to contact ~w~n", [NodeName]),
 		  case net_adm:ping(NodeName) of
-  			pong -> process_arguments([directory, port], configuration:get_config(NodeName));
+  			pong -> process_arguments([directory, port, thrift_port], configuration:get_config(NodeName));
   			pang -> {error, io_lib:format("Could not connect to ~p.  Exiting.~n", [NodeName])}
   		end;
-		undefined -> process_arguments([r, w, n, q, directory, blocksize, port, storage_mod])
+		undefined -> process_arguments([r, w, n, q, directory, blocksize, port, storage_mod, thrift_port])
 	end,
 	Options = process_options([web_port]),
+    io:format("Options: ~p~n", [Options]),
   dynomite_sup:start_link(Config, Options).
 
 %%--------------------------------------------------------------------

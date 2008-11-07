@@ -48,6 +48,7 @@ sizes(Nodes, Partitions) ->
     end, Nodes))).
 
 int_rebalance(Node, TargetSize, Sizes, Partitions, Taken) when TargetSize =< length(Sizes) ->
+  io:format("int_rebalance: ~p~n", [{Node, TargetSize, Sizes, Partitions, Taken}]),
   {Partitions1, Taken1} = take_n(Node, TargetSize, Sizes, Partitions, Taken),
   % error_logger:info_msg("end partitions, taken = {~w, ~w}~n", [Partitions1, Taken1]),
   lists:keysort(2, Partitions1 ++ Taken1);
