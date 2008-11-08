@@ -30,8 +30,9 @@
 rebalance_partitions(NewNode, Nodes, Partitions) ->
   Nodes1 = lists:filter(fun(E) -> E /= NewNode end, Nodes),
   Sizes = sizes(Nodes1, Partitions),
-  TargetSize = length(Partitions) div (length(Nodes1) + 1),
-  int_rebalance(NewNode, TargetSize, Sizes, Partitions, []).
+  {Taken, Parts1} = lists:partition(fun({Node, Part}) -> Node == NewNode end, Partitions),
+  TargetSize = length(Partitions) div (length(Nodes1) + 1) - length(Taken),
+  int_rebalance(NewNode, TargetSize, Sizes, Parts1, Taken).
 
 %%====================================================================
 %% Internal functions
@@ -48,7 +49,7 @@ sizes(Nodes, Partitions) ->
     end, Nodes))).
 
 int_rebalance(Node, TargetSize, Sizes, Partitions, Taken) when TargetSize =< length(Sizes) ->
-  io:format("int_rebalance: ~p~n", [{Node, TargetSize, Sizes, Partitions, Taken}]),
+  % io:format("int_rebalance: ~p~n", [{Node, TargetSize, Sizes, Partitions, Taken}]),
   {Partitions1, Taken1} = take_n(Node, TargetSize, Sizes, Partitions, Taken),
   % error_logger:info_msg("end partitions, taken = {~w, ~w}~n", [Partitions1, Taken1]),
   lists:keysort(2, Partitions1 ++ Taken1);
