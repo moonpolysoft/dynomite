@@ -57,7 +57,8 @@ init([Config, Options]) ->
       {membership, {membership,start_link,[Config]}, permanent, 1000, worker, [membership]},
       {mediator, {mediator,start_link,[Config]}, permanent, 1000, worker, [mediator]},
       {dynomite_web, {dynomite_web,start,[Options]}, permanent, 1000, worker, [dynomite_web]},
-      {socket_server, {socket_server,start_link,[Config]}, permanent, 1000, worker, [socket_server]}
+      {socket_server, {socket_server,start_link,[Config]}, permanent, 1000, worker, [socket_server]},
+      {thrift_service, {thrift_service,start_link,[Config]}, permanent, 1000, worker, [thrift_service]}
     ]}}.
 
 %%====================================================================

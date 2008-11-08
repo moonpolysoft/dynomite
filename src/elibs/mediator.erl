@@ -84,17 +84,29 @@ init(Config) ->
 %% @doc Handling call messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_call({get, Key}, _From, State) ->
-  {reply, internal_get(Key, State), State};
-  
-handle_call({put, Key, Context, Value}, _From, State) ->
-  {reply, internal_put(Key, Context, Value, State), State};
-  
-handle_call({has_key, Key}, _From, State) ->
-  {reply, internal_has_key(Key, State), State};
-  
-handle_call({delete, Key}, _From, State) ->
-  {reply, internal_delete(Key, State), State};
+handle_call({get, Key}, From, State) ->
+    spawn_link(fun() ->
+                       gen_server:reply(From, internal_get(Key, State))
+               end),
+    {noreply, State};
+
+handle_call({put, Key, Context, Value}, From, State) ->
+    spawn_link(fun() ->
+                       gen_server:reply(From, internal_put(Key, Context, Value, State))
+               end),
+    {noreply, State};
+
+handle_call({has_key, Key}, From, State) ->
+    spawn_link(fun() ->
+                       gen_server:reply(From, internal_has_key(Key, State))
+               end),
+    {noreply, State};
+
+handle_call({delete, Key}, From, State) ->
+    spawn_link(fun() ->
+                       gen_server:reply(From, internal_delete(Key, State))
+               end),
+    {noreply, State};
   
 handle_call(stop, _From, State) ->
   {stop, shutdown, ok, State}.

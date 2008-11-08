@@ -51,8 +51,6 @@ merge_same_partitions_test() ->
   Partitions = create_partitions([{a, 64}]),
   Parts1 = rebalance_partitions(b, [a], Partitions),
   Merged = merge_partitions(Parts1, Parts1, 2, [a, b]),
-  error_logger:info_msg("merged: ~p~n", [Merged]),
-  timer:sleep(100),
   Parts1 = Merged.
   
 create_partitions(Sizes) ->
@@ -63,3 +61,10 @@ create_partitions(Sizes) ->
       {PartLists ++ NewPart, Count+Size+1}
     end, {[], 1}, Sizes),
   lists:keysort(1, PartLists).
+  
+rejoin_node_test() ->
+  Partitions = create_partitions([{a, 32}, {b, 32}]),
+  Parts1 = rebalance_partitions(b, [a,b], Partitions),
+  error_logger:info_msg("~p ~p ~n", [Partitions, Parts1]),
+    timer:sleep(100),
+  Partitions = Parts1.

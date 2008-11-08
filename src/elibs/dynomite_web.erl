@@ -35,6 +35,7 @@ start(Options) ->
     DocRoot == undefined -> "web";
     true -> DocRoot
   end,
+  {true, DocRoot1} = {is_list(DocRoot1), DocRoot1},
   Loop = fun (Req) ->
 	   ?MODULE:loop(Req, DocRoot1)
    end,
