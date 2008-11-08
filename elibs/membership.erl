@@ -15,7 +15,7 @@
 -define(VIRTUALNODES, 100).
 
 %% API
--export([start_link/1, join_node/2, nodes_for_partition/1, replica_nodes/1, nodes_for_key/1, partitions/0, nodes/0, state/0, state/1, old_partitions/0, partitions_for_node/2, fire_gossip/1, partition_for_key/1, stop/0, range/1]).
+-export([start_link/1, join_node/2, nodes_for_partition/1, replica_nodes/1, nodes_for_key/1, partitions/0, nodes/0, state/0, old_partitions/0, partitions_for_node/2, fire_gossip/1, partition_for_key/1, stop/0, range/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -57,9 +57,6 @@ nodes() ->
 state() ->
   gen_server:call(membership, state).
   
-state(State) ->
-  gen_server:call(membership, {state, State}).
-  
 replica_nodes(Node) ->
   gen_server:call(membership, {replica_nodes, Node}).
   
@@ -80,24 +77,24 @@ old_partitions() ->
 
 stop() ->
   gen_server:call(membership, stop).
-	
+
+fire_gossip(Node) when is_atom(Node) ->
+	case net_adm:ping(Node) of
+    pang ->
+      {error, node_pang};
+    pong ->
+      gen_server:call(membership, {gossip_with, Node})
+  end;
+
 fire_gossip({A1, A2, A3}) ->
   random:seed(A1, A2, A3),
   State = state(),
-  Config = State#membership.config,
-  Nodes = lists:filter(fun(E) -> E /= node() end, membership:nodes()),
-  ModState = if
-    length(Nodes) > 0 ->
-      Node = random_node(Nodes),
-        % error_logger:info_msg("firing gossip at ~p~n", [Node]),
-      RemoteState = gen_server:call({membership, Node}, {share, State}),
-      merge_states(RemoteState, State);
-    true -> State
+  % Get all the nodes except for ourself
+  case lists:delete(node(), membership:nodes()) of
+    [] -> ok; % no other nodes
+    Nodes when is_list(Nodes) ->
+      fire_gossip(random_node(Nodes))
   end,
-  membership:state(ModState#membership{config=Config}),
-  reload_storage_servers(State, ModState),
-  reload_sync_servers(State, ModState),
-  save_state(ModState),
   timer:apply_after(random:uniform(5000) + 5000, membership, fire_gossip, [random:seed()]).
 
 %%====================================================================
@@ -156,33 +153,38 @@ handle_call({join_node, Node}, {_, _From}, State = #membership{config=Config}) -
   reload_sync_servers(State, NewState),
   save_state(NewState),
 	{reply, {ok, NewState}, NewState#membership{config=Config}};
-	
-handle_call({share, NewState}, _From, State = #membership{config=Config}) ->
-  % error_logger:info_msg("sharing state ~p ~p~n", [State#membership.config, NewState#membership.config]),
-  case vector_clock:compare(State#membership.version, NewState#membership.version) of
-    less -> 
-      reload_storage_servers(State, NewState),
-      reload_sync_servers(State, NewState),
-      save_state(NewState),
-      {reply, NewState, NewState};
-    greater -> {reply, State, State};
-    equal -> {reply, State, State};
-    concurrent -> 
-      Merged = merge_states(NewState, State),
-      reload_storage_servers(State, Merged),
-      reload_sync_servers(State, Merged),
-      save_state(Merged),
-      {reply, Merged, Merged#membership{config=State#membership.config}}
-  end;
+
+handle_call({gossip_with, Node}, From, State = #membership{nodes = Nodes}) ->
+  error_logger:info_msg("firing gossip at ~p~n", [Node]),
+
+  % share our state with target node - expects a response back, but we don't
+  % want to wait for it
+  Self = self(),
+  GosFun =
+    fun() ->
+        {ok, RemoteState} = gen_server:call({membership, Node}, {share, State}),
+        {ok, ModState} = gen_server:call(Self, {merge_state, RemoteState}),
+        gen_server:reply(From, {ok, ModState})
+    end,
+  spawn_link(GosFun),
+  {noreply, State};
+
+handle_call({merge_state, RemoteState}, _From, State) ->
+  {ok, NewState} = merge_and_save_state(RemoteState, State),
+  {reply, {ok, NewState}, NewState};
+
+%%
+% Another node is sharing their state with us. Need to merge them in
+% and reply with the merged state
+%%
+handle_call({share, RemoteState}, _From, State = #membership{config=Config}) ->
+  {ok, Merged} = merge_and_save_state(RemoteState, State),
+  {reply, {ok, Merged}, Merged};
 	
 handle_call(nodes, _From, State = #membership{nodes=Nodes}) ->
   {reply, Nodes, State};
   
 handle_call(state, _From, State) -> {reply, State, State};
-
-handle_call({state, NewState}, _From, State = #membership{config=Config}) -> 
-  save_state(NewState#membership{config=Config}),
-  {reply, ok, NewState#membership{config=Config}};
 	
 handle_call(old_partitions, _From, State = #membership{old_partitions=P}) when is_list(P) ->
   {reply, P, State};
@@ -320,6 +322,30 @@ merge_states(StateA, StateB) ->
     partitions=Partitions,
     config=Config
   }.
+
+% Merges in another state, reloads any storage
+% and sync servers that changed, saves state
+% to disk.
+%
+% merge_and_save_state(state(), state()) -> {ok, NewState :: state()}
+merge_and_save_state(RemoteState, State) ->
+  Merged =
+    case vector_clock:compare(State#membership.version, RemoteState#membership.version) of
+      less -> % remote state is strictly newer than ours
+        RemoteState;
+      greater -> % remote state is strictly older
+        State;
+      equal -> % same vector clock
+        State;
+      concurrent -> % must merge
+        merge_states(RemoteState, State)
+  end,
+  NewState = Merged#membership{config = State#membership.config},
+  reload_storage_servers(State, NewState),
+  reload_sync_servers(State, NewState),
+  save_state(NewState),
+  {ok, NewState}.
+
 
 reload_sync_servers(empty, NewState) ->
   Config = configuration:get_config(),
