@@ -1,0 +1,6 @@
+*~
+.\#*
+\#*\#
+erl_crash.dump
+*.beam
+deps/thrift/ebin
