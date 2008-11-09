@@ -15,7 +15,11 @@ fold(Fun, Table, AccIn) when is_function(Fun) ->
     end, AccIn, Table).
 
 put(Key, Context, Value, Table) ->
-	{ok, dict:store(Key, {Context,[Value]}, Table)}.
+  ToPut = if
+    is_list(Value) -> Value;
+    true -> [Value]
+  end,
+	{ok, dict:store(Key, {Context,ToPut}, Table)}.
 	
 get(Key, Table) ->
   case dict:find(Key, Table) of
