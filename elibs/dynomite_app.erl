@@ -43,7 +43,6 @@ start(_Type, []) ->
 		undefined -> process_arguments([r, w, n, q, directory, blocksize, port, storage_mod, thrift_port])
 	end,
 	Options = process_options([web_port]),
-    io:format("Options: ~p~n", [Options]),
   dynomite_sup:start_link(Config, Options).
 
 %%--------------------------------------------------------------------
