@@ -1,3 +1,17 @@
+Version 0.5.0 (cliff)
+	* (Cliff Moon) removing format
+	* (Cliff Moon) fixing bug in tc store
+	* (Cliff Moon) added a thrift test script
+	* (Cliff Moon) storage modules handle lists
+	* (Todd Lipcon) Remove beams from repo and add to .gitignore
+	* (Cliff Moon) changed vector clocks to use clock time
+	* (Cliff Moon) if a node calls join and it already appears in the partition table, use its existing entries
+	* (Todd Lipcon) Add gitignore for emacs/vim backups
+	* (Todd Lipcon) Make gossiping more asynchronous - don't block gen_server on responses from other nodes. Also disallow use of join_to when the node
+	* (Todd Lipcon) Add assertion to prevent re-joining a node when it already has partitions
+	* (Todd Lipcon) Make mediator spawn processes to actually handle activity and async reply for better concurrency
+	* (Todd Lipcon) Add thrift and a thrift service
+
 Version 0.4.2 (cliff)
 	* (Cliff Moon) tokyo cabinet storage engine.
 	* (Cliff Moon) tweaking storage server contract
