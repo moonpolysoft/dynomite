@@ -37,7 +37,7 @@ close(DBHandle) ->
   
 get(Key, DBHandle) ->
   case tcbdbets:lookup(DBHandle, Key) of
-    [#row{context=Context,value=Value}] -> {ok, {Context, Values}};
+    [#row{context=Context,value=Value}] -> {ok, {Context, Value}};
     [] -> not_found
   end.
   
