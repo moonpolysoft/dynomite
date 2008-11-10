@@ -84,7 +84,7 @@ handle_call(datapoints, _From, State = #rate{datapoints=DataPoints}) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_cast({datapoint, {Value, Time}}, State = #rate{datapoints=DataPoints,period=Period}) ->
-  ModifiedDP = lists:keysort(2, [{Value, time_to_epoch(Time)} | trim_datapoints(Period,DataPoints)]),
+  ModifiedDP = lists:keysort(2, [{Value, lib_misc:time_to_epoch_int(Time)} | trim_datapoints(Period,DataPoints)]),
   {noreply, State#rate{datapoints=ModifiedDP}};
   
 handle_cast(close, State) ->
@@ -132,10 +132,5 @@ trim_datapoints(Period, DataPoints) ->
   lists:dropwhile(fun({_,Time}) -> Time < Limit end, DataPoints).
 
 epoch() ->
-  time_to_epoch(now()).
+  lib_misc:time_to_epoch_int(now()).
   
-time_to_epoch(Time) when is_integer(Time) ->
-  Time;
-
-time_to_epoch({Mega,Sec,_}) ->
-  Mega * 1000000 + Sec.

@@ -5,16 +5,16 @@
 -include("etest/vector_clock_test.erl").
 -endif.
 
-create(NodeName) -> [{NodeName, 1}].
+create(NodeName) -> [{NodeName, lib_misc:now_float()}].
 
 increment(NodeName, [{NodeName, Version}|Clocks]) ->
-	[{NodeName, Version+1}|Clocks];
+	[{NodeName, lib_misc:now_float()}|Clocks];
 
 increment(NodeName, [NodeClock|Clocks]) ->
 	[NodeClock|increment(NodeName, Clocks)];
 	
 increment(NodeName, []) ->
-	[{NodeName, 1}].
+	[{NodeName, lib_misc:now_float()}].
 	
 resolve({ClockA, ValuesA}, {ClockB, ValuesB}) ->
   case compare(ClockA, ClockB) of

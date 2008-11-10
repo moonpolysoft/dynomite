@@ -37,12 +37,16 @@ close(DBHandle) ->
   
 get(Key, DBHandle) ->
   case tcbdbets:lookup(DBHandle, Key) of
-    [#row{context=Context,value=Value}] -> {ok, {Context, [Value]}};
+    [#row{context=Context,value=Value}] -> {ok, {Context, Value}};
     [] -> not_found
   end.
   
 put(Key, Context, Value, DBHandle) ->
-  case tcbdbets:insert(DBHandle, [#row{key=Key,context=Context,value=Value}]) of
+  ToPut = if
+    is_list(Value) -> Value;
+    true -> [Value]
+  end,
+  case tcbdbets:insert(DBHandle, [#row{key=Key,context=Context,value=ToPut}]) of
     ok ->
       tcbdbets:sync(DBHandle),
       {ok, DBHandle};

@@ -18,7 +18,7 @@ class Dynomite
   end
   
   def get(key)
-    timeout_retry(10, 3) {
+    timeout_retry(30, 3) {
       write("get #{key.length} #{key}\n")
       command = read_section
       case command

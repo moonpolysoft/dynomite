@@ -23,25 +23,32 @@ fold(Fun, {_Directory, Table}, AccIn) when is_function(Fun) ->
       Fun({Key, Context, Value}, Acc)
     end, AccIn, Table).
 
-put(Key, Context, Value, {Directory, Table}) ->
+put(Key, Context, Values, {Directory, Table}) ->
   case dets:lookup(Table, Key) of
     [Record] -> #file{path=HashedFilename} = Record;
     [] -> HashedFilename = create_filename(Directory, Key),
       _Record = not_found
   end,
   {ok, Io} = file:open(HashedFilename, [write]),
-  ok = file:write(Io, Value),
+  ToWrite = if
+    is_list(Values) -> term_to_binary(Values);
+    true -> term_to_binary([Values])
+  end,
+  ok = file:write(Io, ToWrite),
   ok = file:close(Io),
   dets:insert(Table, [#file{name=Key, path=HashedFilename, context=Context}]),
   {ok, {Directory, Table}}.
-	
 	
 get(Key, {_Directory, Table}) ->
   case dets:lookup(Table, Key) of
 	  [] -> not_found;
 	  [#file{path=Path,context=Context}] -> 
 	    {ok, Binary} = file:read_file(Path),
-	    {ok, {Context, [Binary]}}
+	    Values = case (catch binary_to_term(Binary)) of
+	      {'EXIT', _} -> [Binary];
+	      Terms -> Terms
+      end,
+	    {ok, {Context, Values}}
   end.
 	
 has_key(Key, {_Directory, Table}) ->
