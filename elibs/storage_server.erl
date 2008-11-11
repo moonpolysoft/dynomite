@@ -84,17 +84,11 @@ sync(Local, Remote) ->
         {{ok, {Context, [Value]}}, not_found} -> 
           % error_logger:info_msg("put ~p to remote~n", [Key]),
           storage_server:put(Remote, Key, Context, Value);
-        {not_found, not_found} -> error_logger:info_msg("not found~n", []);
+        {not_found, not_found} -> error_logger:info_msg("not found~n");
         {{ok, ValueA}, {ok, ValueB}} ->
           {Context, Values} = vector_clock:resolve(ValueA, ValueB),
-          [Value|_] = Values,
-          if
-            length(Values) == 1 -> 
-              storage_server:put(Remote, Key, Context, Value),
-              storage_server:put(Local, Key, Context, Value);
-            true ->
-              error_logger:info_msg("Cannot resolve key ~p with ~p~n", [Key, Remote])
-          end
+          storage_server:put(Remote, Key, Context, Values),
+          storage_server:put(Local, Key, Context, Values);
       end
     end, dmerkle:key_diff(TreeA, TreeB)).
 	
