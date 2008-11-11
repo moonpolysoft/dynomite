@@ -4,7 +4,7 @@
 -define(OFFSET_BASIS, 2166136261).
 -define(FNV_PRIME, 16777619).
 
--export([pmap/3, hash/1, position/2, shuffle/1, floor/1, ceiling/1, time_to_epoch_int/1, time_to_epoch_float/1, now_int/0, now_float/0]).
+-export([pmap/3, hash/1, position/2, shuffle/1, floor/1, ceiling/1, time_to_epoch_int/1, time_to_epoch_float/1, now_int/0, now_float/0, byte_size/1, listify/1]).
 
 -ifdef(TEST).
 -include("etest/lib_misc_test.erl").
@@ -116,3 +116,14 @@ time_to_epoch_float(Time) when is_integer(Time) or is_float(Time) ->
   
 time_to_epoch_float({Mega,Sec,Micro}) ->
   Mega * 1000000 + Sec + Micro / 1000000.
+  
+byte_size(List) when is_list(List) ->
+  lists:foldl(fun(El, Acc) -> Acc + byte_size(El) end, 0, List);
+  
+byte_size(Term) ->
+  erlang:byte_size(Term).
+  
+listify(List) when is_list(List) ->
+  List;
+  
+listify(El) -> [El].
