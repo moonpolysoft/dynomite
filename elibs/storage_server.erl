@@ -88,7 +88,7 @@ sync(Local, Remote) ->
         {{ok, ValueA}, {ok, ValueB}} ->
           {Context, Values} = vector_clock:resolve(ValueA, ValueB),
           storage_server:put(Remote, Key, Context, Values),
-          storage_server:put(Local, Key, Context, Values);
+          storage_server:put(Local, Key, Context, Values)
       end
     end, dmerkle:key_diff(TreeA, TreeB)).
 	
@@ -151,7 +151,7 @@ handle_call({put, Key, Context, ValIn}, _From, State = #storage{module=Module,ta
     {ok, {ReadContext, ReadValues}} ->
       {ResolvedContext, ResolvedValues} = vector_clock:resolve({ReadContext, ReadValues}, {Context, Values}),
       internal_put(Key, ResolvedContext, ResolvedValues, Tree, Table, Module, State);
-    not_found -> internal_put(Key, Context, Values, Tree, Table, Module, State);
+    {ok, not_found} -> internal_put(Key, Context, Values, Tree, Table, Module, State);
     Failure -> {reply, Failure, State}
   end;
 	
