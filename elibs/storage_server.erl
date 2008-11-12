@@ -150,7 +150,6 @@ handle_call({put, Key, Context, ValIn}, _From, State = #storage{module=Module,ta
   case (catch Module:get(sanitize_key(Key), Table)) of
     {ok, {ReadContext, ReadValues}} ->
       {ResolvedContext, ResolvedValues} = vector_clock:resolve({ReadContext, ReadValues}, {Context, Values}),
-      error_logger:info_msg("resolved ~p ~p ~n", [ResolvedContext, ResolvedValues]),
       internal_put(Key, ResolvedContext, ResolvedValues, Tree, Table, Module, State);
     not_found -> internal_put(Key, Context, Values, Tree, Table, Module, State);
     Failure -> {reply, Failure, State}
