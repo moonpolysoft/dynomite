@@ -41,7 +41,7 @@ put(Key, Context, Values, {Directory, Table}) ->
 	
 get(Key, {_Directory, Table}) ->
   case dets:lookup(Table, Key) of
-	  [] -> not_found;
+	  [] -> {ok, not_found};
 	  [#file{path=Path,context=Context}] -> 
 	    {ok, Binary} = file:read_file(Path),
 	    Values = case (catch binary_to_term(Binary)) of
