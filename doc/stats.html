@@ -1,0 +1,83 @@
+<html>
+  <head>
+    <script src="javascripts/jquery.js"></script>
+    <script src="javascripts/excanvas.pack.js"></script>
+    <script src="javascripts/jquery.flot.js"></script>
+    <script>
+    tc_storage_get =        [[100, 0.649658203125], [1000, 0.655304908752441], [10000, 0.665846824645996], [100000, 0.915304899215698], [1000000, 5167.93089389801]]
+    fs_storage_get =        [[100, 0.72404408454895], [1000, 0.956293106079102], [10000, 0.65451192855835], [100000, 0.921919822692871], [1000000, 4.87972903251648]]
+    dets_storage_get =      [[100, 0.693506002426147], [1000, 0.672044992446899], [10000, 0.724655866622925], [100000, 1.15265083312988], [1000000, 22.3541588783264]]
+    couch_storage_get =     [[100, 1.11794686317444], [1000, 1.11809802055359], [10000, 1.01258111000061], [100000, 1.57802104949951], [1000000, 23.5716300010681]]
+    tc_storage_put =        [[100, 5.95177102088928], [1000, 16.7424070835114], [10000, 117.257786989212], [100000, 1075.4315290451], [1000000, 5099.29242992401]]
+    fs_storage_put =        [[100, 6.38490986824036], [1000, 5.32544422149658], [10000, 6.53902006149292], [100000, 32.3970291614532], [1000000, 286.084089994431]]
+    dets_storage_put =      [[100, 2.76265406608582], [1000, 3.2797999382019], [10000, 5.96155595779419], [100000, 35.1370289325714], [1000000, 319.250869989395]]
+    couch_storage_put =     [[100, 5.03815007209778], [1000, 5.71353197097778], [10000, 10.0242331027985], [100000, 53.2012569904327], [1000000, 538.190510988235]]
+    
+      function showTooltip(x, y, contents) {
+              console.log("tooltip")
+              $('<div id="tooltip">' + contents + '</div>').css( {
+                  position: 'absolute',
+                  display: 'none',
+                  top: y + 5,
+                  left: x + 5,
+                  border: '1px solid #fdd',
+                  padding: '2px',
+                  'background-color': '#fee',
+                  opacity: 0.80
+              }).appendTo("body").fadeIn(200);
+          }
+    
+      $(document).ready(function () {
+        var plot = $.plot($("#gets"),
+        [
+          {data: tc_storage_get, label: "tc_storage"},
+          {data: fs_storage_get, label: "fs_storage"},
+          {data: couch_storage_get, label: "couch_storage"},
+          {data: dets_storage_get, label: "dets_storage"}
+        ],
+        { lines: {show:true},
+          points:{show:true},
+          selection: {mode: "xy"},
+          grid: { hoverable: true, clickable: true },
+          xaxis: { logarithmicScale: true },
+          yaxis: { logarithmicScale: true }
+        });
+        var plot2 = $.plot($("#puts"),
+        [
+          {data: tc_storage_put, label: "tc_storage"},
+          {data: fs_storage_put, label: "fs_storage"},
+          {data: couch_storage_put, label: "couch_storage"},
+          {data: dets_storage_put, label: "dets_storage"}
+        ],
+        { lines: {show:true},
+          points:{show:true},
+          selection: {mode: "xy"},
+          grid: { hoverable: true, clickable: true },
+          xaxis: { logarithmicScale: true },
+          yaxis: { logarithmicScale: true }
+        });
+        var previousPoint = null;
+        // $('#placeholder').bind("plothover", function(event, pos, item) {
+        //   if (item) {
+        //     if (previousPoint != item.datapoint) {
+        //       previousPoint = item.datapoint;
+        //       
+        //       $("#tooltip").remove();
+        //       var x = item.datapoint[0].toFixed(2);
+        //       var y = item.datapoint[1].toFixed(2);
+        //       
+        //       showTooltip(item.pageX, item.pageY, item.series.label + " at " + x + " bytes was " + y + " bytes/seconds");
+        //     }
+        //   } else {
+        //     $("#tooltip").remove();
+        //     previousPoint = null;
+        //   }
+        // });
+      });
+    </script>
+  </head>
+  <body>
+    <div id="gets" style="width:600px;height:300px;"></div><p>Get performance.  Lower is better.</p><br/>
+    <div id="puts" style="width:600px;height:300px;"></div><p>Put performance.  Lower is better.</p>
+  </body>
+</html>
