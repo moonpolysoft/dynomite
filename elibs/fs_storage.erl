@@ -11,7 +11,7 @@
 open(Directory, Name) ->
   ok = filelib:ensure_dir(Directory ++ "/"),
   TableName = list_to_atom(lists:concat([Name, '/', node()])),
-  {ok, TableName} = dets:open_file(TableName, [{file, lists:concat([Directory, "/files.dets"])}, {keypos, 2}]),
+  {ok, Table} = dets:open_file(TableName, [{file, lists:concat([Directory, "/files.dets"])}, {keypos, 2}]),
   {ok, {Directory, TableName}}.
 
 % noop
