@@ -57,7 +57,7 @@ results = {}
       STDIN.reopen "/dev/null"
       STDOUT.reopen "/tmp/dyn.std.log"
       STDERR.reopen STDOUT
-      exec "#{ROOT}/bin/dynomite start -m #{options[:data]} -n 1 -w 1 -r 1 -q 6 -s #{engine} -l /tmp"
+      exec "#{ROOT}/bin/dynomite start -m #{options[:data]} -o dynomite#{$$} -n 1 -w 1 -r 1 -q 0 -s #{engine} -l /tmp"
     end
     sleep(7)
     socket = Thrift::Socket.new('127.0.0.1', 9200)
@@ -67,17 +67,28 @@ results = {}
     buff = new_bytes(size)
     time = -Time.now.to_f
     ary = (1..1000).to_a.map do |i|
-      key = "key#{rand(9000)}"
-      # puts key
-      dyn.put key, nil, random_bytes(size, buff)
+      begin
+        key = "key#{rand(9000)}"
+        # puts key
+        dyn.put key, nil, random_bytes(size, buff)
+      rescue => boom
+        puts boom.message
+        socket.open unless socket.open?
+      end
     end
     time += Time.now.to_f
-    results[engine] << time
-    Process.kill("INT", pid)
-    sleep(1)
+    results[engine] << [size, time]
+    Process.kill("KILL", pid)
+    Process.waitpid(pid)
   end
 end
 
+results.each do |k, ary|
+  mapped = ary.map do |bytes, time|
+    [bytes, time]
+  end
+  puts "#{k} =\t#{mapped.inspect}"
+end
 # at_exit {
 #   Process.kill("INT", File.read("/tmp/dynomite.pid").to_i)
 # }
