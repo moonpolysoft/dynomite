@@ -12,3 +12,7 @@ pmap_1_test() ->
   [{0,0}] = pmap(fun(N) ->
       N
     end, L, 1).
+    
+reverse_bits_test() ->
+  3869426816 = reverse_bits(19088743),
+  1458223569 = reverse_bits(2342344554).
