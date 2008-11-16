@@ -47,7 +47,7 @@ end.parse!
 
 results = {}
 
-%w(tc_storage fs_storage couch_storage).each do |engine|
+%w(tc_storage fs_storage couch_storage dets_storage).each do |engine|
   results[engine] = []
   5.times do |i|
     FileUtils.rm_r(options[:data]) if File.exists?(options[:data])
