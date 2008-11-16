@@ -48,7 +48,8 @@ end.parse!
 results = {:put => {}, :get => {}}
 
 %w(tc_storage fs_storage couch_storage dets_storage).each do |engine|
-  results[engine] = []
+  results[:put][engine] = []
+  results[:get][engine] = []
   5.times do |i|
     FileUtils.rm_r(options[:data]) if File.exists?(options[:data])
     size = 100*10**i
