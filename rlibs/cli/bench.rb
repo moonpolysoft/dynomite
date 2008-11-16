@@ -45,7 +45,7 @@ OptionParser.new do |opts|
 end.parse!
 
 
-results = {}
+results = {:put => {}, :get => {}}
 
 %w(tc_storage fs_storage couch_storage dets_storage).each do |engine|
   results[engine] = []
@@ -77,17 +77,32 @@ results = {}
       end
     end
     time += Time.now.to_f
-    results[engine] << [size, time]
+    results[:put][engine] << [size, time]
+    time = -Time.now.to_f
+    ary = (1..1000).to_a.map do |i|
+      begin
+        key = "key#{rand(9000)}"
+        # puts key
+        dyn.get key
+      rescue => boom
+        puts boom.message
+        socket.open unless socket.open?
+      end
+    end
+    time += Time.now.to_f
+    results[:get][engine] << [size, time]
     Process.kill("KILL", pid)
     Process.waitpid(pid)
   end
 end
 
-results.each do |k, ary|
-  mapped = ary.map do |bytes, time|
-    [bytes, time]
+[:get, :put].each do |type|
+  results[type].each do |k, ary|
+    mapped = ary.map do |bytes, time|
+      [bytes, time]
+    end
+    puts "#{k}_#{type} =\t#{mapped.inspect}"
   end
-  puts "#{k} =\t#{mapped.inspect}"
 end
 # at_exit {
 #   Process.kill("INT", File.read("/tmp/dynomite.pid").to_i)
