@@ -139,7 +139,7 @@ insert_500_both_ways_test() ->
     end, open(data_file(), 256), lists:seq(1,500)),
   TreeB = lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, open("/Users/cliff/data/dmerkle1", 256), lists:reverse(lists:seq(1,500))),
+    end, open(data_file(1), 256), lists:reverse(lists:seq(1,500))),
   % error_logger:info_msg("rootA ~p~nrootB ~p~n", [TreeA#dmerkle.root, TreeB#dmerkle.root]),
   true = equals(TreeA, TreeB).
   
@@ -150,7 +150,7 @@ insert_realistic_scenario_equality_test() ->
     end, open(data_file(), 256), lists:seq(1,500)),
   TreeB = lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, open("/Users/cliff/data/dmerkle1", 256), lists:seq(1,505)),
+    end, open(data_file(1), 256), lists:seq(1,505)),
   error_logger:info_msg("rootA ~p~nrootB ~p~n", [TreeA#dmerkle.root, TreeB#dmerkle.root]),
   false = equals(TreeA, TreeB).
 
@@ -161,7 +161,7 @@ TreeA = lists:foldl(fun(N, Tree) ->
   end, open(data_file(), 256), lists:seq(1,495)),
 TreeB = lists:foldl(fun(N, Tree) ->
     update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-  end, open("/Users/cliff/data/dmerkle1", 256), lists:seq(1,500)),
+  end, open(data_file(1), 256), lists:seq(1,500)),
 error_logger:info_msg("rootA ~p~nrootB ~p~n", [TreeA#dmerkle.root, TreeB#dmerkle.root]),
 Diff = key_diff(TreeA, TreeB),
 Keys = lists:map(fun(N) -> lists:concat(["key", N]) end, lists:seq(496, 500)),
@@ -175,7 +175,7 @@ insert_500_both_ways_diff_test() ->
     end, open(data_file(), 256), lists:seq(1,500)),
   TreeB = lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, open("/Users/cliff/data/dmerkle1", 256), lists:reverse(lists:seq(1,500))),
+    end, open(data_file(1), 256), lists:reverse(lists:seq(1,500))),
   Diff = key_diff(TreeA, TreeB),
   error_logger:info_msg("both ways diff: ~p~n", [Diff]),
   [] = Diff.
@@ -189,7 +189,7 @@ insert_overwrite_test() ->
       update(lists:concat(["key", N]), lists:concat(["different", N]), Tree)
     end, lists:foldl(fun(N, Tree) ->
         update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-      end, open("/Users/cliff/data/dmerkle1", 256), lists:seq(1,500)), lists:seq(1, 500)),
+      end, open(data_file(1), 256), lists:seq(1,500)), lists:seq(1, 500)),
   Diff = key_diff(TreeA, TreeB),
   500 = length(Diff),
   500 = length(leaves(TreeB)).
@@ -203,7 +203,7 @@ insert_overwrite2_test() ->
       update(lists:concat(["key"]), lists:concat(["value", N]), Tree)
     end, lists:foldl(fun(N, Tree) ->
         update(lists:concat(["key"]), lists:concat(["value", N]), Tree)
-      end, open("/Users/cliff/data/dmerkle1", 256), lists:seq(1,3000)), lists:seq(1, 3000)),
+      end, open(data_file(1), 256), lists:seq(1,3000)), lists:seq(1, 3000)),
   % Diff = key_diff(TreeA, TreeB),
   % [] = Diff,
   1 = length(leaves(TreeB)).
@@ -215,7 +215,7 @@ swap_tree_test() ->
     end, open(data_file(), 256), lists:seq(1,500)),
   TreeB = lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, open("/Users/cliff/data/dmerkle1", 256), lists:reverse(lists:seq(1,250))),
+    end, open(data_file(1), 256), lists:reverse(lists:seq(1,250))),
   NewTree = swap_tree(TreeA, TreeB),
   SameTree = open(data_file(), 256),
   error_logger:info_msg("trees: ~p ~p~n", [NewTree, SameTree]),
@@ -233,13 +233,13 @@ empty_diff_test() ->
   TreeA = lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
     end, open(data_file(), 256), lists:seq(1,500)),
-  TreeB = open("/Users/cliff/data/dmerkle1", 256),
+  TreeB = open(data_file(1), 256),
   500 = length(key_diff(TreeA, TreeB)).
   
 live_test_() ->
   {timeout, 120, [{?LINE, fun() ->
-    TreeA = open("/Users/cliff/data/dmerkle410", 4096),
-    TreeB = open("/Users/cliff/data/dmerkle42", 4096),
+    TreeA = open(data_file(410), 4096),
+    TreeB = open(data_file(42), 4096),
     KeyDiff = key_diff(TreeA, TreeB),
     error_logger:info_msg("key_diff: ~p~n", [KeyDiff]),
     LeavesA = leaves(TreeA),
@@ -285,3 +285,5 @@ priv_dir() ->
 data_file() ->
     filename:join(priv_dir(), "dmerkle").
    
+data_file(N) ->
+    filename:join(priv_dir(), "dmerkle" ++ integer_to_list(N)).
