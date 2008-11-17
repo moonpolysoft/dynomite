@@ -17,31 +17,50 @@ from Queue import Queue
 from time import time
 from random import choice
 
-ports = [9200] #, 9201, 9202, 9203]
+ports = [9200, 9201, 9202, 9203]
 
 
 def main():
     rq = Queue()
-    results = {}
+    results = {'requests': 0, 'get': [], 'put': []}
     options, junk = opts()
     workers = []
     for i in range(0, int(options.clients)):
-        t = Thread(target=run, args=(int(options.number), rq))
+        t = Thread(target=run, args=(int(options.number), rq,
+                                     int(options.keysize),
+                                     int(options.valuesize)))
         workers.append(t)
     for w in workers:
         w.start()
     for w in workers:
-        if w.isAlive():
-            w.join()
-            consolidate(rq.get(), results)
-            print ".",
-        else:
-            print "x",
+        w.join()
+        consolidate(rq.get(), results)
+        print ".",
+
+    total_time = 0.0
+    for i in results['get']:
+        total_time += i
+    for i in results['put']:
+        total_time += i
+
     print
-    print results
+    print "%s client(s) %s request(s) %f0.3s" % (options.clients,
+                                                 options.number,
+                                                 total_time)
+    g = results['get']
+    g.sort()
+    p = results['put']
+    p.sort()
+    print "get avg: %f0.3ms mean: %f0.3ms 99.9: %f0.3ms" % (
+        (sum(g) / float(len(g))) * 1000,
+        (g[len(g)/2]) * 1000,
+        (g[int(len(g) * .999) -1]) * 1000)
+    print "put avg: %f0.3ms mean: %f0.3ms 99.9: %f0.3ms" % (
+        (sum(p) / float(len(p))) * 1000,
+        (p[len(p)/2]) * 1000,
+        (p[int(len(p) * .999) -1]) * 1000)
 
-
-def run(num, rq):
+def run(num, rq, ks, vs):
     res = {'requests': 0,
            'get': [],
            'put': []}
@@ -62,15 +81,13 @@ def run(num, rq):
 
     for i in range(0, num):
         tk = 0.0
-        key = choice(keys)
+        key = ''.join([choice(keys) for i in range(0, ks)])
         st = time()
-        print "get", key
         cur = client.get(key)
         tk += time() - st
         res['get'].append(tk)
-        newval = rval()
+        newval = rval(vs)
         st = time()
-        print "put", key
         client.put(key, cur.context, newval)
         tk += time() - st
         res['requests'] += 1
@@ -91,6 +108,12 @@ def opts():
     parser.add_option('-c', '--concurrency', '--clients', default='1',
                       dest='clients', action='store',
                       help='Number of concurrent clients')
+    parser.add_option('-k', '--keysize', default='1',
+                      dest='keysize', action='store',
+                      help='Length of each key')
+    parser.add_option('-v', '--valuesize', default='1024',
+                      dest='valuesize', action='store',
+                      help='Length of each value')
 
     return parser.parse_args()
 
