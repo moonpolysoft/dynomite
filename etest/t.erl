@@ -1,5 +1,6 @@
 -module(t).
 
+-include_lib("eunit.hrl").
 -export([start/0, config/1]).
 
 start() ->
@@ -12,6 +13,13 @@ config(src_dir) ->
 config(test_dir) ->
     filename:dirname(?FILE);
 config(priv_dir) ->
-    Root = config(test_dir),
-    filename:absname(filename:join([Root, "log", atom_to_list(node())])).
+    case init:get_argument(priv_dir) of
+        {ok, [[Dir]]} ->
+            Dir;
+        Other ->
+            ?debugFmt("priv_dir argument result: ~p", [Other]),
+            Root = config(test_dir),
+            filename:absname(
+              filename:join([Root, "log", atom_to_list(node())]))
+    end.
     

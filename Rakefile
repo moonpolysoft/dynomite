@@ -1,4 +1,5 @@
 # Common build system
+require 'fileutils'
 require 'rubygems'
 require 'rake'
 
@@ -13,13 +14,13 @@ task :default => [:build_deps] do
   # end
 end
 
-task :test_env => [:build_test_deps] do
+task :test_env => [:build_test_deps, :test_config] do
   puts "test env"
   ENV['TEST'] = 'test'
 end
 
 task :native do
-  puts "not implemented"
+  ERLC_FLAGS = "+native #{ERLC_FLAGS}"
 end
 
 task :run do
@@ -55,8 +56,10 @@ task :test => [:test_env, :default] do
     mods = Dir["etest/*_test.erl"].map { |x| x.match(/etest\/(.*)_test.erl/)[1] }
   end
   mod_directives = mods.join(" ")
+  priv = priv_dir()
   # -run #{ENV['MOD']} test
-  sh %Q{erl -boot start_sasl +K true -smp enable -pz ./etest -pz ./ebin/yaws -pz ./ebin/ -pa ./deps/eunit/ebin -pa deps/mochiweb/ebin -pa deps/rfc4627/ebin -sname local_console_#{$$}  -noshell -s eunit test #{mod_directives} -run init stop}
+  sh %Q{erl -boot start_sasl +K true -smp enable -pz ./etest ./ebin -pa ./deps/*/ebin -sname local_console_#{$$} -noshell -priv_dir "#{priv}" -config test -s eunit test #{mod_directives} -run init stop}
+  puts "-> Test logs in #{priv}"
 end
 
 task :docs do
@@ -73,5 +76,31 @@ task :build_deps do
 end
 
 task :build_test_deps do
-  sh "erlc  #{ERLC_FLAGS} #{ERLC_TEST_FLAGS} etest/t.erl"
+  sh "erlc +debug_info -I include #{ERLC_TEST_FLAGS} -o etest etest/t.erl"
+end
+
+task :test_config do
+  # ensure the test log dir exists
+  priv = priv_dir()
+  FileUtils.mkpath(priv)
+
+  # write config file to configure sasl, etc to
+  cfg = File.new("test.config", "w+")
+  # write their error logs to the log files in log dir
+  cfg.write(<<EOC)
+[{kernel, 
+  [{error_logger, {file, "#{priv}/kernel.log"}}
+  ]},
+ {sasl,
+  [{sasl_error_logger, {file, "#{priv}/sasl.log"}}
+  ]}
+].
+EOC
+  cfg.close()
+end
+
+def priv_dir
+  base = File.dirname(__FILE__)
+  priv = File.join(base, "etest", "log", "#{$$}")
+  return priv
 end
