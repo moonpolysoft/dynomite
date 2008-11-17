@@ -13,9 +13,13 @@ task :default => [:build_deps] do
   # end
 end
 
-task :test_env do
+task :test_env => [:build_test_deps] do
   puts "test env"
   ENV['TEST'] = 'test'
+end
+
+task :native do
+  puts "not implemented"
 end
 
 task :run do
@@ -66,4 +70,8 @@ task :build_deps do
   Dir["deps/*"].each do |dir|
     sh "cd #{dir} && make"
   end
+end
+
+task :build_test_deps do
+  sh "erlc  #{ERLC_FLAGS} #{ERLC_TEST_FLAGS} etest/t.erl"
 end

@@ -12,3 +12,4 @@ pmap_1_test() ->
   [{0,0}] = pmap(fun(N) ->
       N
     end, L, 1).
+

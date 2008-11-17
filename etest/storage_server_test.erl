@@ -1,21 +1,21 @@
 -include_lib("eunit.hrl").
 
 couch_storage_test() ->
-  
-  {ok, State} = couch_storage:open("/Users/cliff/data/couch", storage_test),
-  {ok, St2} = couch_storage:put("key_one", context, <<"value one">>, State),
-  {ok, St3} = couch_storage:put("key_one", context, <<"value one">>, St2),
-  {ok, St4} = couch_storage:put("key_two", context, <<"value two">>, St3),
-  Result = couch_storage:fold(fun({Key, Context, Value}, Acc) -> [Key|Acc] end, St4, []),
-  timer:sleep(100),
+    CouchFile = filename:join(priv_dir(), "couch"),
+    {ok, State} = couch_storage:open(CouchFile, storage_test),
+    {ok, St2} = couch_storage:put("key_one", context, <<"value one">>, State),
+    {ok, St3} = couch_storage:put("key_one", context, <<"value one">>, St2),
+    {ok, St4} = couch_storage:put("key_two", context, <<"value two">>, St3),
+    Result = couch_storage:fold(fun({Key, Context, Value}, Acc) -> [Key|Acc] end, St4, []),
+    timer:sleep(100),
     ["key_two", "key_one"] = Result,
-  {ok, {context, <<"value one">>}} = couch_storage:get("key_one", St4),
-  {ok, true} = couch_storage:has_key("key_one", St4),
-  {ok, St5} = couch_storage:delete("key_one", St4),
-  {ok, false} = couch_storage:has_key("key_one", St5),
-  {ok, true} = couch_storage:has_key("key_two", St5),
-  {ok, St6} = couch_storage:delete("key_two", St5),
-  couch_storage:close(St6).
+    {ok, {context, <<"value one">>}} = couch_storage:get("key_one", St4),
+    {ok, true} = couch_storage:has_key("key_one", St4),
+    {ok, St5} = couch_storage:delete("key_one", St4),
+    {ok, false} = couch_storage:has_key("key_one", St5),
+    {ok, true} = couch_storage:has_key("key_two", St5),
+    {ok, St6} = couch_storage:delete("key_two", St5),
+    couch_storage:close(St6).
 
 % dict_storage_test() ->
 %   storage_server:start_link(dict_storage, ok, store, 0, (2 bsl 31)),
@@ -70,3 +70,9 @@ couch_storage_test() ->
 %   receive _ -> true end,
 %   exit(Pid2, shutdown),
 %   receive _ -> true end.
+
+
+priv_dir() ->
+    Dir = filename:join(t:config(priv_dir), "data"),
+    filelib:ensure_dir(filename:join(Dir, "couch")),
+    Dir.
