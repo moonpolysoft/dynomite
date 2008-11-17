@@ -54,9 +54,9 @@ task :test => [:test_env, :default] do
   else 
     mods = Dir["etest/*_test.erl"].map { |x| x.match(/etest\/(.*)_test.erl/)[1] }
   end
-  mod_directives = mods.map {|m| "-run #{m} test"}.join(" ")
+  mod_directives = mods.join(" ")
   # -run #{ENV['MOD']} test
-  sh %Q{erl -boot start_sasl +K true -smp enable -pz ./etest -pz ./ebin/yaws -pz ./ebin/ -pa ./deps/eunit/ebin -pa deps/mochiweb/ebin -pa deps/rfc4627/ebin -sname local_console_#{$$} -mnesia dir '"/tmp/mdb"' -noshell #{mod_directives} -run erlang halt}
+  sh %Q{erl -boot start_sasl +K true -smp enable -pz ./etest -pz ./ebin/yaws -pz ./ebin/ -pa ./deps/eunit/ebin -pa deps/mochiweb/ebin -pa deps/rfc4627/ebin -sname local_console_#{$$}  -noshell -s eunit test #{mod_directives} -run init stop}
 end
 
 task :docs do
