@@ -58,7 +58,7 @@ task :test => [:test_env, :default] do
   mod_directives = mods.join(" ")
   priv = priv_dir()
   # -run #{ENV['MOD']} test
-  sh %Q{erl -boot start_sasl +K true -smp enable -pz ./etest ./ebin -pa ./deps/*/ebin -sname local_console_#{$$} -noshell -priv_dir "#{priv}" -config test -s eunit test #{mod_directives} -run init stop}
+  sh %Q{erl -boot start_sasl +K true -smp enable -pz ./etest ./ebin -pa ./deps/eunit/ebin ./deps/mochiweb/ebin ./deps/rfc4627/ebin ./deps/thrift/ebin -sname local_console_#{$$} -noshell -priv_dir "#{priv}" -config test -s eunit test #{mod_directives} -run init stop}
   puts "-> Test logs in #{priv}"
 end
 
