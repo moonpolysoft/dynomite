@@ -5,7 +5,7 @@ init_integrated(Good, Bad) ->
     BadNodes = start_nodes(fail_storage, Bad),
     wait(500),
     Nodes = jointo(GoodNodes ++ BadNodes),
-    % wait(100),
+    wait(100),
     Nodes.
   
 stop_integrated(Nodes) ->
