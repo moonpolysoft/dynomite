@@ -1,0 +1,25 @@
+This is the file system layout for the xhash storage system.  The implementation is based on the data structure described by Split Ordered Lists (Shalev, Shavit.)  The basic data structure is a linked list in the data file.  A hashed index into the linked list is maintained in a separate file.  The main data file format looks like so:
+
+header 48 bytes:
+	identifier: 2bytes = XD
+	version:2bytes
+	size:4bytes
+	head-pointer: 8bytes
+	reserved: 32bytes
+node header=18bytes:
+	keyhash: 4bytes
+	nextptr: 8bytes
+	keysize: 2bytes
+	datasize: 4bytes
+	key: variable
+	data: variable bytes
+	
+and the index file:
+
+header 40 bytes:
+	identifier: 2bytes = XI
+	version:2bytes
+	capacity:4bytes
+	reserved: 32bytes
+table array:
+	pointer: 8bytes
