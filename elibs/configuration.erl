@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1, get_config/1, get_config/0, set_config/1]).
+-export([start_link/1, get_config/1, get_config/0, set_config/1, stop/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -43,6 +43,10 @@ get_config() ->
   
 set_config(Config) ->
   gen_server:call(configuration, {set_config, Config}).
+
+stop() ->
+    gen_server:call(configuration, stop).
+
 
 %%====================================================================
 %% gen_server callbacks
@@ -76,6 +80,9 @@ handle_call(get_config, _From, State) ->
 	
 handle_call({set_config, Config}, _From, State) ->
   {reply, ok, State#configuration{config=Config}};
+
+handle_call(stop, _From, State) ->
+    {stop, shutdown, ok, State};
 
 handle_call(_Request, _From, State) ->
     Reply = ok,

@@ -63,7 +63,7 @@ init([Config, Options]) ->
                 {storage_server_sup, 
                  {storage_server_sup, start_link, [Config]}, 
                  permanent, 10000, supervisor, 
-               [storage_server_sup]},
+                 [storage_server_sup]},
                 {sync_manager, 
                  {sync_manager, start_link, []}, 
                  permanent, 1000, worker, [sync_manager]},

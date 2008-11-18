@@ -110,21 +110,24 @@ fire_gossip({A1, A2, A3}) ->
 %% @end 
 %%--------------------------------------------------------------------
 init(ConfigIn) ->
-  process_flag(trap_exit, true),
-  Nodes = erlang:nodes(),
-  {ok, State} = case load_state(ConfigIn) of
-    {ok, Value} -> 
-      error_logger:info_msg("loading membership from disk~n", []),
-      configuration:set_config(Value#membership.config),
-      {ok, Value};
-    _ -> if
-		  length(Nodes) > 0 -> 
-  		  Node = random_node(Nodes),
-  		  error_logger:info_msg("joining node ~p~n", [Node]),
-  		  join_node(Node, node());
-  		true -> {ok, create_initial_state(ConfigIn)}
-  	end
-  end,
+    process_flag(trap_exit, true),
+    Nodes = erlang:nodes(),
+    {ok, State} = 
+        case load_state(ConfigIn) of
+            {ok, Value} -> 
+                error_logger:info_msg("loading membership from disk~n", []),
+                configuration:set_config(Value#membership.config),
+                {ok, Value};
+            _ ->
+                %% join_node deadlocks?
+                %% if
+                %%  length(Nodes) > 0 -> 
+                %%  Node = random_node(Nodes),
+                %%  error_logger:info_msg("joining node ~p~n", [Node]),
+                %%  join_node(Node, node());
+                %%true -> {ok, create_initial_state(ConfigIn)}
+                {ok, create_initial_state(ConfigIn)}
+        end,
   error_logger:info_msg("Loading storage servers.~n"),
 	reload_storage_servers(empty, State),
 	error_logger:info_msg("Loading sync servers.~n"),

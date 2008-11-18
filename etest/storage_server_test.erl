@@ -17,17 +17,20 @@ couch_storage_test() ->
     {ok, St6} = couch_storage:delete("key_two", St5),
     couch_storage:close(St6).
 
-% dict_storage_test() ->
-%   storage_server:start_link(dict_storage, ok, store, 0, (2 bsl 31)),
-%   storage_server:put(store, key, context, value),
-%   storage_server:put(store, two, context, value2),
-%   ["two", "key"] = storage_server:fold(store, fun({Key, Context, Value}, Acc) -> [Key|Acc] end, []),
-%   {ok, {context, [value]}} = storage_server:get(store, key),
-%   {ok, true} = storage_server:has_key(store, key),
-%   storage_server:delete(store, key),
-%   {ok, false} = storage_server:has_key(store, key),
-%   storage_server:close(store),
-%   receive _ -> true end.
+dict_storage_test() ->
+    {ok, Pid} = storage_server:start_link(
+                  dict_storage, db_key(dict), store, 0, (2 bsl 31), 4096),
+    ?debugFmt("storage server at ~p", [Pid]),
+    R = storage_server:put(store, "key", context, <<"value">>),
+    ?debugFmt("put result ~p", [R]),
+    storage_server:put(store, "two", context, <<"value2">>),
+    ["two", "key"] = storage_server:fold(store, fun({Key, Context, Value}, Acc) -> [Key|Acc] end, []),
+    {ok, {context, [<<"value">>]}} = storage_server:get(store, "key"),
+    {ok, true} = storage_server:has_key(store, "key"),
+    storage_server:delete(store, "key"),
+    {ok, false} = storage_server:has_key(store, "key"),
+    storage_server:close(store),
+    receive _ -> true end.
 %   
 % local_fs_storage_test() ->
 %   {ok, State} = fs_storage:open("/Users/cliff/data/storage_test", storage_test),
@@ -72,7 +75,14 @@ couch_storage_test() ->
 %   receive _ -> true end.
 
 
+%% Internal
 priv_dir() ->
     Dir = filename:join(t:config(priv_dir), "data"),
     filelib:ensure_dir(filename:join(Dir, "couch")),
     Dir.
+
+db_key(Name) ->
+    Fpath =  filename:join(
+               [t:config(priv_dir), "storage_server", atom_to_list(Name)]),
+    filelib:ensure_dir(filename:join(Fpath, "dmerkle")),
+    Fpath.
