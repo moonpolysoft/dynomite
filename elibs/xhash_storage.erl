@@ -2,7 +2,7 @@
 %%% File:      xhash_storage.erl
 %%% @author    Cliff Moon <cliff@powerset.com> []
 %%% @copyright 2008 Cliff Moon
-%%% @doc  
+%%% @doc  based on: http://www.cs.tau.ac.il/~shanir/nir-pubs-web/Papers/Split-Ordered_Lists.pdf
 %%%
 %%% @end  
 %%%
@@ -19,9 +19,15 @@
 -define(LOAD_LIMIT, 2.0).
 -define(INDEX_HEADER_SIZE, 40).
 -define(DATA_HEADER_SIZE, 48).
+-define(PARENT(Bucket), if Bucket > 0 -> Bucket bxor (1 bsl round(math:log(Bucket)/math:log(2))); true -> 0 end).
 -record(xhash, {data,index,head,capacity,size}).
 -record(node, {key=nil, data=nil, node_header}).
--record(node_header, {keyhash,keysize,datasize,pointer}).
+-record(node_header, {keyhash=0,keysize=0,datasize=0,pointer=0}).
+
+
+-ifdef(TEST).
+-include("etest/xhash_storage_test.erl").
+-endif.
 
 %%====================================================================
 %% API
@@ -68,14 +74,10 @@ get(Key, XHash = #xhash{capacity=Capacity,data=Data,index=Index,size=Size,head=H
 put(Key, Context, Values, XHash = #xhash{capacity=Capacity,size=Size,data=Data,index=Index,head=Head}) ->
   KeyHash = lib_misc:reverse_bits(lib_misc:hash(Key)),
   Bucket = KeyHash rem Capacity,
-  Pointer = read_bucket(Bucket, Index),
   KeyBin = list_to_binary(Key),
   DataBin = terms_to_binary({Context, Values}),
   Header = #node_header{keyhash=KeyHash,keysize=byte_size(KeyBin),datasize=byte_size(DataBin)},
-  if
-    Pointer == 0 ->
-    true -> 
-  end
+  NewHash = write_node(Bucket, Header, KeyBin, DataBin, XHash).
   
 has_key(Key, #xhash{}) ->
   ok.
@@ -83,12 +85,62 @@ has_key(Key, #xhash{}) ->
 delete(Key, #xhash{}) ->
   ok.
   
-fold(Fun, #xhash{}, AccIn) when is_function(Fun) ->
-  ok.
+fold(Fun, XHash = #xhash{head=Head}, AccIn) when is_function(Fun) ->
+  int_fold(Fun, Head, XHash, AccIn).
   
 %%====================================================================
 %% Internal functions
 %%====================================================================
+int_fold(Fun, Pointer, XHash = #xhash{data=Data}, AccIn) ->
+  NodeHeader = read_node_header(Pointer, Data),
+  if 
+    NodeHeader#node_header.keysize == 0 -> 
+      int_fold(Fun, NodeHeader#node_header.pointer, XHash, AccIn);
+    true ->
+      {Key, Context, Values} = read_node_data(NodeHeader, Data),
+      AccOut = Fun({Key, Context, Values}, AccIn),
+      int_fold(Fun, NodeHeader#node_header.pointer, XHash, AccOut)
+  end.
+
+write_node(Bucket, Header, KeyBin, DataBin, XHash = #xhash{index=Index,data=Data}) ->
+  {Pointer, XHash1} = case read_pointer(Bucket, Index) of
+    0 -> initialize_bucket(Bucket, XHash);
+    Pointer -> {Pointer, XHash}
+  end,
+  XHash2 = insert_node(Pointer, Header, KeyBin, DataBin, XHash1).
+
+initialize_bucket(0, XHash = #xhash{index=Index,data=Data}) ->
+  Pointer = write_node(eof, #node_header{}, <<"">>, <<"">>, Data),
+  write_pointer(0, Pointer, Index),
+  Xhash1 = XHash#xhash{head=Pointer},
+  write_headers(XHash1),
+  {Pointer, XHash1};
+
+initialize_bucket(Bucket, XHash = #xhash{index=Index,data=Data}) ->
+  {ParentPointer, XHash1} = case read_pointer(?PARENT(Bucket), Index) of
+    0 -> initialize_bucket(?PARENT(Bucket), Index);
+    Ptr -> {Ptr, XHash}
+  end,
+  {NodePointer, XHash2} = insert_node(ParentPointer, #node_header{keyhash=lib_misc:reversebits(Bucket)}, <<"">>, <<"">>, XHash1),
+  write_pointer(Bucket, NodePointer, Index),
+  {NodePointer, XHash2}.
+
+insert_node(Pointer, Header, KeyBin, DataBin, XHash = #xhash{index=Index,data=Data}) ->
+  ReadHeader = read_node_header(Pointer, Data),
+  insert_node(Pointer, ReadHeader, Header, KeyBin, DataBin, XHash).
+  
+insert_node(Pointer, LastHeader, Header = #node_header{keyhash=KeyHash}, KeyBin, DataBin, XHash = #xhash{index=Index,data=Data,size=Size}) ->
+  NextHeader = read_node_header(LastHeader#node_header.pointer, Data),
+  if
+    KeyHash =< NextHeader#node_header.keyhash ->
+      {ok, NewPointer} = write_node_header(Header#node_header{pointer=LastHeader#node_header.pointer}, eof, Data),
+      ok = write_node_data(KeyBin, DataBin, eof, Data),
+      {ok, _} = write_node_header(LastHeader#node_header{pointer=NewPointer}, Pointer, Data),
+      write_size(Size+1, Data),
+      XHash#xhash{size=Size+1};
+    true -> insert_node(LastHeader#node_header.pointer, NextHeader, Header, KeyBin, DataBin, XHash)
+  end.
+
 read_node_data(#node_header{pointer=Pointer,keysize=KeySize,datasize=DataSize}, Data) ->
   {ok, <<KeyBin:KeySize/binary, DataBin:DataSize/binary>>} = file:pread(Data, Pointer+18, KeySize+DataSize),
   Key = binary_to_list(KeyBin),
@@ -106,6 +158,22 @@ find_node(Pointer, Key, KeyHash, Data, _) ->
     true -> not_found
   end.
 
+write_node_header(Header, eof, Data) ->
+  {ok, Pointer} = file:position(Data, eof),
+  write_node_header(Header, Pointer, Data);
+
+write_node_header(Header = #node_header{keyhash=KeyHash,pointer=NextPointer,keysize=KeySize,datasize=DataSize}, Pointer, Data) ->
+  ok = file:pwrite(Data, Pointer, <<KeyHash:32, NextPointer:64, KeySize:16, DataSize:32>>),
+  {ok, Pointer}.
+  
+write_node_data(KeyBin, DataBin, Pointer, Data) ->
+  file:position(Data, Pointer),
+  ok = file:write(Data, [KeyBin, DataBin]).
+
+read_node_header(Pointer, Data) ->
+  {ok, <<KeyHash:32/integer, NextPointer:64/integer, KeySize:16/integer, DataSize:32/integer>>} = file:pread(Data, Pointer, 18),
+  #node_header{keyhash=KeyHash,pointer=NextPointer,keysize=KeySize,datasize=DataSize}.
+
 read_bucket(0, Index) ->
   read_pointer(0, Index);
 
@@ -119,6 +187,9 @@ read_bucket(Bucket, Index) ->
   
 write_bucket(Bucket, Pointer, Index) ->
   file:pwrite(Index, 8*Bucket + ?INDEX_HEADER_SIZE, <<Pointer:64>>).
+  
+write_pointer(Bucket, Index) ->
+  file:pwrite(Index, 8 * BucketIndex + ?INDEX_HEADER_SIZE).
   
 read_pointer(Bucket, Index) ->
   {ok, <<Pointer:64/integer>>} = file:pread(Index, 8 * BucketIndex + ?INDEX_HEADER_SIZE),
@@ -145,9 +216,12 @@ read_index_header(File) ->
     eof -> eof 
   end.
   
+write_size(Size, Data) ->
+  file:pwrite(Data, 4, <<Size:32>>).
+  
 initialize(Hash = #xhash{data=Data,index=Index}) ->
   Size = 0,
-  Head = 0,
+  Head = 48,
   Capacity = 1024,
   TableSize = Capacity * 64,
   case file:pwrite(Data, 0, <<"XD", ?VERSION:16, Size:32, Head:64, 0:256>>) of
@@ -158,5 +232,3 @@ initialize(Hash = #xhash{data=Data,index=Index}) ->
       end;
     Failure -> Failure
   end.
-
-
