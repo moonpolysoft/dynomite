@@ -57,6 +57,19 @@ count_20_with_fold_test() ->
   210 = fold(fun({Key, Ctx, [Value]}, Acc) ->
       Acc + Value
     end, XHash1, 0).
+    
+insert_1024_test() ->
+  setup(),
+  {ok, XHash} = open("/Users/cliff/data/xhash", "xhash"),
+  XHash1 = lists:foldl(fun(E, X) ->
+      {ok, XH} = put(lists:concat(["key", E]), context, [lists:concat(["value", E])], X),
+      XH
+    end, XHash, lists:seq(1,1024)),
+  lists:foreach(fun(E) ->
+      ExpKey = lists:concat(["key", E]),
+      ExpVal = [lists:concat(["value", E])],
+      {ok, {ExpKey, context, ExpVal}} = get(lists:concat(["key", E]), XHash1)
+    end, lists:seq(1, 1024)).
   
 setup() ->
   filelib:ensure_dir("/Users/cliff/data/xhash"),

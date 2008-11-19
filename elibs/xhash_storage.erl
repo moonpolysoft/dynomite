@@ -20,8 +20,10 @@
 -define(INDEX_HEADER_SIZE, 40).
 -define(DATA_HEADER_SIZE, 48).
 -define(PARENT(Bucket), if Bucket > 0 -> Bucket bxor (1 bsl trunc(math:log(Bucket)/math:log(2))); true -> 0 end).
--define(debugmsg(Message), error_logger:info_msg(Message)).
--define(debug(Message, Stuff), error_logger:info_msg(Message, Stuff)).
+% -define(debugmsg(Message), error_logger:info_msg(Message)).
+% -define(debug(Message, Stuff), error_logger:info_msg(Message, Stuff)).
+-define(debugmsg(Message), noop).
+-define(debug(Message, Stuff), noop).
 -record(xhash, {data,index,head,capacity,size}).
 -record(node, {key=nil, data=nil, node_header}).
 -record(node_header, {keyhash=0,keysize=0,datasize=0,pointer=0}).

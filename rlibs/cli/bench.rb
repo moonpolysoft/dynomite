@@ -47,7 +47,7 @@ end.parse!
 
 results = {:put => {}, :get => {}}
 
-%w(tc_storage fs_storage couch_storage dets_storage).each do |engine|
+%w(tc_storage fs_storage couch_storage dets_storage xhash_storage).each do |engine|
   results[:put][engine] = []
   results[:get][engine] = []
   5.times do |i|
