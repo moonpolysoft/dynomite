@@ -41,7 +41,7 @@ OptionParser.new do |opts|
   end
   
   opts.on('-m', "--data [DATADIR]", "data directory") do |dir|
-    options[:directory] = %Q(-dynomite directory '"#{dir}"')
+    options[:directory] = %Q(-dynomite directory '"#{dir}"' -mnesia dir '"#{dir}"')
   end
   
   opts.on('-n', "--replication [N]", "replication factor") do |n|

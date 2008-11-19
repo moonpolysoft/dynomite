@@ -2,11 +2,4 @@
   - nodes after the 2nd do not join correctly on startup
   - seeming instability in get/put as nodes join/leave?
 
-- membership init makes a gen_server call, which even if not related,
-  is not legal
-
-- lots of tests still broken
-
-- missing tests for node joining
-
-- data dir is not ensured before use (--data arg to start)
+- missing tests for node joining?

@@ -31,6 +31,40 @@ dict_storage_test() ->
     {ok, false} = storage_server:has_key(store, "key"),
     storage_server:close(store),
     receive _ -> true end.
+
+mnesia_storage_test() ->
+    mnesia:stop(),
+    application:set_env(mnesia, dir, priv_dir()),
+    {ok, Pid} = storage_server:start_link(mnesia_storage, db_key(mnesia), store2, 0, (2 bsl 31), 4096),
+    storage_server:put(store2, "key_one", [], <<"value one">>),
+    storage_server:put(store2, "key_two", [], <<"value two">>),
+    
+    {ok, {_Context, [<<"value one">>]}} = storage_server:get(store2, "key_one"),
+    
+    ?assertEqual(["key_one", "key_two"],
+                 storage_server:fold(store2, 
+                                     fun({Key, Context, Value}, Acc) -> 
+                                             [Key|Acc] 
+                                     end, 
+                                     [])),
+    
+    {ok,true} = storage_server:has_key(store2, "key_one"),
+    storage_server:delete(store2, "key_one"),
+    {ok,false} = storage_server:has_key(store2, "key_one"),
+    {ok,true} = storage_server:has_key(store2, "key_two"),
+    storage_server:delete(store2, "key_two"),
+    exit(Pid, shutdown),
+    receive _ -> true end.
+
+mnesia_large_value_test() ->
+    crypto:start(), %% filename generation uses crypto:sha
+    mnesia:stop(),
+    application:set_env(mnesia, dir, priv_dir()),
+    {ok, Pid} = storage_server:start_link(mnesia_storage, db_key(mnesia), store3, 0, (2 bsl 31), 4096),
+    Val = big_val(2048),
+    ok = storage_server:put(store3, "key_one", [], Val),
+    {ok, {_Context, [Val]}} = storage_server:get(store3, "key_one").
+
 %   
 % local_fs_storage_test() ->
 %   {ok, State} = fs_storage:open("/Users/cliff/data/storage_test", storage_test),
@@ -86,3 +120,7 @@ db_key(Name) ->
                [t:config(priv_dir), "storage_server", atom_to_list(Name)]),
     filelib:ensure_dir(filename:join(Fpath, "dmerkle")),
     Fpath.
+
+big_val(Size) when is_integer(Size) ->
+    list_to_binary([ random:uniform(128) || _ <- lists:seq(0, Size) ]).
+    
