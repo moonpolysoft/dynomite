@@ -37,6 +37,7 @@ open(FileName) ->
   open(FileName, undefined).
 
 open(FileName, BlockSize) -> 
+  filelib:ensure_dir(FileName),
   {ok, File} = block_server:start_link(FileName, BlockSize),
   FinalBlockSize = case block_server:read_block(File, 0, 4) of
     {ok, <<ReadBlockSize:32>>} -> 

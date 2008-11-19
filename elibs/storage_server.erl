@@ -43,13 +43,13 @@ start_link(StorageModule, DbKey, Name, Min, Max, BlockSize, OldNode) ->
   {ok, Pid}.
 
 get(Name, Key) ->
-	get(Name, Key, infinity).
+    ?MODULE:get(Name, Key, infinity).
 	
 get(Name, Key, Timeout) ->
-  gen_server:call(Name, {get, Key}, Timeout).
+    gen_server:call(Name, {get, Key}, Timeout).
 	
 put(Name, Key, Context, Value) ->
-	put(Name, Key, Context, Value, infinity).
+    ?MODULE:put(Name, Key, Context, Value, infinity).
 	
 put(Name, Key, Context, Value, Timeout) ->
 	gen_server:call(Name, {put, Key, Context, Value}, Timeout).
@@ -120,10 +120,13 @@ close(Name, Timeout) ->
 %% @end 
 %%--------------------------------------------------------------------
 init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
-  process_flag(trap_exit, true),
-  {ok, Table} = StorageModule:open(DbKey,Name),
-  Tree = dmerkle:open(lists:concat([DbKey, "/dmerkle"]), BlockSize),
-  {ok, #storage{module=StorageModule,dbkey=DbKey,blocksize=BlockSize,table=Table,name=Name,tree=Tree}}.
+    %% ?debugMsg("storage_server init"),
+    process_flag(trap_exit, true),
+    {ok, Table} = StorageModule:open(DbKey,Name),
+    %% ?debugFmt("storage table ~p", [Table]),
+    Tree = dmerkle:open(lists:concat([DbKey, "/dmerkle"]), BlockSize),
+    %% ?debugFmt("dmerkle tree ~p", [Tree]),
+    {ok, #storage{module=StorageModule,dbkey=DbKey,blocksize=BlockSize,table=Table,name=Name,tree=Tree}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -146,6 +149,7 @@ handle_call({get, Key}, _From, State = #storage{module=Module,table=Table}) ->
 	{reply, Result, State};
 	
 handle_call({put, Key, Context, ValIn}, _From, State = #storage{module=Module,table=Table,tree=Tree}) ->
+    %% ?debugFmt("handle_call put ~p", [Key]),
   Values = lib_misc:listify(ValIn),
   case (catch Module:get(sanitize_key(Key), Table)) of
     {ok, {ReadContext, ReadValues}} ->
@@ -243,13 +247,19 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 
 internal_put(Key, Context, Values, Tree, Table, Module, State) ->
-  UpdatedTree = dmerkle:update(Key, Values, Tree),
-  case catch Module:put(sanitize_key(Key), Context, Values, Table) of
-    {ok, ModifiedTable} ->
-      stats_server:request(put, lib_misc:byte_size(Values)),
-      {reply, ok, State#storage{table=ModifiedTable,tree=UpdatedTree}};
-    Failure -> {reply, Failure, State}
-  end.
+    SKey = sanitize_key(Key),
+    %% ?debugFmt("Internal put key ~p module ~p", [SKey, Module]),
+    UpdatedTree = dmerkle:update(SKey, Values, Tree),
+    %% ?debugMsg("Tree updated"),
+    case catch Module:put(SKey, Context, Values, Table) of
+        {ok, ModifiedTable} ->
+            %% ?debugMsg("Table modified"),
+            stats_server:request(put, lib_misc:byte_size(Values)),
+            {reply, ok, State#storage{table=ModifiedTable,tree=UpdatedTree}};
+        Failure -> 
+            %% ?debugFmt("failure ~p", [Failure]),
+            {reply, Failure, State}
+    end.
 
 sanitize_key(Key) when is_atom(Key) -> atom_to_list(Key);
 sanitize_key(Key) when is_binary(Key) -> binary_to_list(Key);
