@@ -20,10 +20,10 @@
 -define(INDEX_HEADER_SIZE, 40).
 -define(DATA_HEADER_SIZE, 48).
 -define(PARENT(Bucket), if Bucket > 0 -> Bucket bxor (1 bsl trunc(math:log(Bucket)/math:log(2))); true -> 0 end).
-% -define(debugmsg(Message), error_logger:info_msg(Message)).
-% -define(debug(Message, Stuff), error_logger:info_msg(Message, Stuff)).
--define(debugmsg(Message), noop).
--define(debug(Message, Stuff), noop).
+-define(debugmsg(Message), error_logger:info_msg(Message)).
+-define(debug(Message, Stuff), error_logger:info_msg(Message, Stuff)).
+% -define(debugmsg(Message), noop).
+% -define(debug(Message, Stuff), noop).
 -record(xhash, {data,index,head,capacity,size}).
 -record(node, {key=nil, data=nil, node_header}).
 -record(node_header, {keyhash=0,keysize=0,datasize=0,nextptr=0,lastptr=0}).
@@ -70,7 +70,7 @@ get(Key, XHash = #xhash{capacity=Capacity,data=Data,index=Index,size=Size,head=H
       KeyHash = lib_misc:reverse_bits(UnrevHash),
       BucketIndex = UnrevHash rem Capacity,
       ?debug("get from bucket ~p", [BucketIndex]),
-      Pointer = read_bucket(BucketIndex, Index),
+      {ReadBucket, Pointer} = read_bucket(BucketIndex, Index),
       if
         Pointer == 0 -> {ok, not_found};
         true ->
@@ -86,7 +86,7 @@ get(Key, XHash = #xhash{capacity=Capacity,data=Data,index=Index,size=Size,head=H
 put(Key, Context, Values, XHash = #xhash{capacity=Capacity,size=Size,data=Data,index=Index,head=Head}) ->
   ?debug("put(~w, Context, Values, XHash)", [Key]),
   UnrevHash = lib_misc:hash(Key),
-  KeyHash = lib_misc:reverse_bits(UnrevHash),
+  KeyHash = lib_misc:reverse_bits(UnrevHash bor 16#80000000),
   Bucket = UnrevHash rem Capacity,
   KeyBin = list_to_binary(Key),
   DataBin = term_to_binary({Context, Values}),
@@ -106,6 +106,71 @@ fold(Fun, XHash = #xhash{head=Head}, AccIn) when is_function(Fun) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
+dump(XHash = #xhash{head=Head}) ->
+  IndexList = dump_index(XHash),
+  DataList = dump_data(XHash),
+  % {Head, IndexList, DataList}.
+  {Head, interleave_dump(IndexList, DataList)}.
+  
+dump_index(XHash = #xhash{index=Index}) ->
+  Pointer = read_pointer(0, Index),
+  dump_index(Pointer, 0, [], XHash).
+  
+dump_index(Pointer, Bucket, List, XHash = #xhash{capacity=Capacity}) when Bucket == Capacity - 1 ->
+  lists:reverse([{Bucket,Pointer,lib_misc:reverse_bits(Bucket)}|List]);  
+
+dump_index(Pointer, Bucket, List, XHash = #xhash{index=Index,capacity=Capacity}) ->
+  case next_bucket(Bucket, Capacity, Index) of
+    {NextPointer, NextBucket} -> dump_index(NextPointer, NextBucket, [{Bucket, Pointer,lib_misc:reverse_bits(Bucket)}|List], XHash);
+    eof -> lists:reverse([{Bucket,Pointer,lib_misc:reverse_bits(Bucket)}|List])
+  end.
+  
+dump_data(XHash = #xhash{head=0}) -> [];
+  
+dump_data(XHash = #xhash{data=Data,head=Head}) ->
+  Header = read_node_header(Head, Data),
+  dump_data(Head, Header, [], XHash).
+  
+dump_data(LastPointer, LastHeader = #node_header{nextptr=0}, List, XHash) ->
+  lists:reverse([{LastHeader#node_header.keyhash,LastPointer}|List]);
+  
+dump_data(LastPtr, LastHeader = #node_header{nextptr=NextPointer}, List, XHash = #xhash{data=Data}) ->
+  Header = read_node_header(NextPointer, Data),
+  dump_data(NextPointer, Header, [{LastHeader#node_header.keyhash,LastPtr}|List], XHash).
+
+interleave_dump(IndexList, DataList) ->
+  interleave_dump([], IndexList, DataList).
+  
+interleave_dump(Results, [], DataList) ->
+  lists:reverse(DataList ++ Results);
+  
+interleave_dump(Results, IndexList, []) ->
+  lists:reverse([IndexList|Results]);
+  
+interleave_dump(Results, IndexList, [{KH,Ptr}|DataList]) ->
+  {LTE, GT} = lists:partition(fun({Bucket,Ptr,Hash}) -> Hash =< KH end, IndexList),
+  interleave_dump([{KH,Ptr},LTE|Results], GT, DataList).
+
+count_nodes_between(Start, End, Data) ->
+  count_nodes_between(0, Start, End, Data).
+  
+count_nodes_between(Count, 0, _, _) -> Count;
+  
+count_nodes_between(Count, End, End, Data) -> Count;
+  
+count_nodes_between(Count, Start, End, Data) ->
+  Header = read_node_header(Start, Data),
+  count_nodes_between(Count+1, Header#node_header.nextptr, End, Data).
+
+next_bucket(Bucket, Capacity, Index) when Bucket == Capacity - 1 ->
+  eof;
+
+next_bucket(Bucket, Capacity, Index) ->
+  case read_pointer(Bucket+1, Index) of
+    0 -> next_bucket(Bucket+1, Capacity, Index);
+    Pointer -> {Pointer, Bucket+1}
+  end.
+
 int_fold(Fun, 0, XHash, AccIn) -> AccIn;
 
 int_fold(Fun, Pointer, XHash = #xhash{data=Data}, AccIn) ->
@@ -121,10 +186,14 @@ int_fold(Fun, Pointer, XHash = #xhash{data=Data}, AccIn) ->
 
 write_node(Bucket, Header, KeyBin, DataBin, XHash = #xhash{index=Index,data=Data}) ->
   ?debug("write_node(~p, ~p, KeyBin, DataBin, XHash)", [Bucket, Header]),
-  Pointer = read_bucket(Bucket, Index),
-  {NewPointer, XHash1} = insert_node(Pointer, Header, KeyBin, DataBin, XHash),
-  write_bucket(Bucket, NewPointer, Index),
-  {NewPointer, XHash1}.
+  {Pointer, XHash1} = initialize_bucket(Bucket, XHash),
+  % {ReadBucket, Ptr} = read_bucket(Bucket, Index),
+  % {Pointer, XHash1} = if
+  %   ReadBucket /= Bucket -> initialize_bucket(Bucket, XHash);
+  %   true -> {Ptr, XHash}
+  % end,
+  {NewPointer, XHash2, Depth} = insert_node(Pointer, Header, KeyBin, DataBin, XHash1),
+  {NewPointer, XHash2}.
 
 initialize_bucket(0, XHash = #xhash{index=Index,data=Data}) ->
   {ok, Pointer} = write_node_header(#node_header{}, eof, Data),
@@ -141,7 +210,7 @@ initialize_bucket(Bucket, XHash = #xhash{index=Index,data=Data}) ->
     Ptr -> {Ptr, XHash}
   end,
   ?debug("inserting dummy node keyhash = ~p", [lib_misc:reverse_bits(Bucket)]),
-  {NodePointer, XHash2} = insert_node(ParentPointer, #node_header{keyhash=lib_misc:reverse_bits(Bucket)}, <<"">>, <<"">>, XHash1),
+  {NodePointer, XHash2, _} = insert_node(ParentPointer, #node_header{keyhash=lib_misc:reverse_bits(Bucket)}, <<"">>, <<"">>, XHash1),
   ?debug("nodepointer ~p", [NodePointer]),
   write_bucket(Bucket, NodePointer, Index),
   {NodePointer, XHash2}.
@@ -149,36 +218,48 @@ initialize_bucket(Bucket, XHash = #xhash{index=Index,data=Data}) ->
 % the list is empty
 insert_node(Pointer, Header, KeyBin, DataBin, XHash = #xhash{data=Data,head=0}) ->
   ?debug("insert_node(~w, ~w, KeyBin, DataBin, ~w) -> empty list", [Pointer, Header, XHash]),
-  {ok, NewPointer} = write_node_header(Header#node_header{}, eof, Data),
+  {ok, NewPointer} = write_node_header(Header, eof, Data),
   ok = write_node_data(KeyBin, DataBin, eof, Data),
   XHash1 = increment_size(Header, XHash),
   write_head_pointer(NewPointer,Data),
-  {NewPointer, XHash1#xhash{head=NewPointer}};
+  {NewPointer, XHash1#xhash{head=NewPointer}, 0};
 
 insert_node(0, Header, KeyBin, DataBin, XHash) ->
-  insert_node(0, nil, Header, KeyBin, DataBin, XHash);
+  insert_node(0, nil, Header, KeyBin, DataBin, XHash, 0);
 
 insert_node(Pointer, Header, KeyBin, DataBin, XHash = #xhash{index=Index,data=Data}) ->
   ReadHeader = read_node_header(Pointer, Data),
-  insert_node(Pointer, ReadHeader, Header, KeyBin, DataBin, XHash).
+  insert_node(Pointer, ReadHeader, Header, KeyBin, DataBin, XHash, 0).
   
-insert_node(Pointer, LastHeader = #node_header{nextptr=0}, Header = #node_header{}, KeyBin, DataBin, XHash = #xhash{index=Index,data=Data,size=Size}) ->
+insert_node(Pointer, LastHeader = #node_header{keyhash=LastKH}, Header = #node_header{keyhash=KeyHash}, KeyBin, DataBin, XHash = #xhash{index=Index,data=Data,size=Size,head=Pointer}, Depth) when KeyHash =< LastKH ->
+  ?debug("insert_node(~w, ~w, ~w, KeyBin, DataBin, XHash) -> start of the list", [Pointer, LastHeader, Header]),
+  {ok, NewPointer} = write_node_header(Header#node_header{nextptr=Pointer}, eof, Data),
+  ok = write_node_data(KeyBin, DataBin, eof, Data),
+  write_head_pointer(NewPointer, Data),
+  {NewPointer, increment_size(Header, XHash#xhash{head=NewPointer}), Depth};
+  
+insert_node(0, nil, Header = #node_header{keyhash=KeyHash}, KeyBin, DataBin, XHash = #xhash{index=Index,data=Data,size=Size,head=Pointer}, Depth) ->
+  ?debug("insert_node(~w, ~w, ~w, KeyBin, DataBin, XHash) -> start of the list", [0, nil, Header]),
+  {ok, NewPointer} = write_node_header(Header#node_header{nextptr=Pointer}, eof, Data),
+  ok = write_node_data(KeyBin, DataBin, eof, Data),
+  write_head_pointer(NewPointer, Data),
+  {NewPointer, increment_size(Header, XHash#xhash{head=NewPointer}), Depth};
+  
+insert_node(Pointer, LastHeader = #node_header{keyhash=LastKH}, Header = #node_header{keyhash=KeyHash}, KeyBin, DataBin, XHash = #xhash{index=Index,data=Data}, Depth) when KeyHash =< LastKH ->
+  ?debug("insert_node(~w, ~w, ~w, KeyBin, DataBin, XHash) -> before bucket", [Pointer, LastHeader, Header]),
+  {ok, NewPointer} = write_node_header(Header#node_header{nextptr=Pointer}, eof, Data),
+  ok = write_node_data(KeyBin, DataBin, eof, Data),
+  {NewPointer, increment_size(Header, XHash), Depth};
+  
+insert_node(Pointer, LastHeader = #node_header{nextptr=0}, Header = #node_header{}, KeyBin, DataBin, XHash = #xhash{index=Index,data=Data,size=Size}, Depth) ->
   ?debug("insert_node(~w, ~w, ~w, KeyBin, DataBin, XHash) -> end of the list", [Pointer, LastHeader, Header]),
   {ok, NewPointer} = write_node_header(Header#node_header{}, eof, Data),
   ok = write_node_data(KeyBin, DataBin, eof, Data),
   {ok, _} = write_node_header(LastHeader#node_header{nextptr=NewPointer}, Pointer, Data),
   XHash1 = increment_size(Header, XHash),
-  {NewPointer, XHash1};
+  {NewPointer, XHash1, Depth};
   
-insert_node(0, nil, Header = #node_header{keyhash=KeyHash}, KeyBin, DataBin, XHash = #xhash{index=Index,data=Data,size=Size,head=Pointer}) ->
-  ?debug("insert_node(~w, ~w, ~w, KeyBin, DataBin, XHash) -> start of the list", [0, nil, Header]),
-  {ok, NewPointer} = write_node_header(Header#node_header{nextptr=Pointer}, eof, Data),
-  ok = write_node_data(KeyBin, DataBin, eof, Data),
-  % {ok, Pointer} = write_node_header(LastHeader#node_header{lastptr=NewPointer}, Pointer, Data),
-  write_head_pointer(NewPointer, Data),
-  {NewPointer, increment_size(Header, XHash#xhash{head=NewPointer})};
-  
-insert_node(Pointer, LastHeader, Header = #node_header{keyhash=KeyHash}, KeyBin, DataBin, XHash = #xhash{index=Index,data=Data,size=Size}) ->
+insert_node(Pointer, LastHeader, Header = #node_header{keyhash=KeyHash}, KeyBin, DataBin, XHash = #xhash{index=Index,data=Data,size=Size}, Depth) ->
   ?debug("insert_node(~w, ~w, ~w, KeyBin, DataBin, ~w)", [Pointer, LastHeader, Header, XHash]),
   NextHeader = read_node_header(LastHeader#node_header.nextptr, Data),
   if
@@ -188,8 +269,8 @@ insert_node(Pointer, LastHeader, Header = #node_header{keyhash=KeyHash}, KeyBin,
       {ok, _} = write_node_header(LastHeader#node_header{nextptr=NewPointer}, Pointer, Data),
       % {ok, _} = write_node_header(NextHeader#node_header{lastptr=NewPointer}, Pointer, Data),
       XHash1 = increment_size(Header, XHash),
-      {NewPointer, XHash1};
-    true -> insert_node(LastHeader#node_header.nextptr, NextHeader, Header, KeyBin, DataBin, XHash)
+      {NewPointer, XHash1, Depth};
+    true -> insert_node(LastHeader#node_header.nextptr, NextHeader, Header, KeyBin, DataBin, XHash, Depth+1)
   end.
 
 read_node_data(Pointer, #node_header{keysize=KeySize,datasize=DataSize}, Data) ->
@@ -232,7 +313,7 @@ read_node_header(Pointer, Data) ->
 
 read_bucket(0, Index) ->
   ?debugmsg("read_bucket 0"),
-  read_pointer(0, Index);
+  {0, read_pointer(0, Index)};
 
 read_bucket(Bucket, Index) ->
   Parent = ?PARENT(Bucket),
@@ -240,7 +321,20 @@ read_bucket(Bucket, Index) ->
   Pointer = read_pointer(Bucket, Index),
   if
     Pointer == 0 -> read_bucket(Parent, Index);
-    true -> Pointer
+    true -> {Bucket, Pointer}
+  end.
+  
+write_bucket_and_parents(Bucket, Pointer, Index) ->
+  write_bucket(Bucket, Pointer, Index),
+  write_unset_parents(Bucket, Pointer, Index).
+  
+write_unset_parents(Bucket, Pointer, Index) ->
+  Parent = ?PARENT(Bucket),
+  case read_pointer(Parent, Index) of
+    0 -> 
+      write_bucket(Parent, Pointer, Index),
+      write_unset_parents(Parent, Pointer, Index);
+    _ -> ok
   end.
   
 write_bucket(Bucket, Pointer, Index) ->
@@ -249,8 +343,10 @@ write_bucket(Bucket, Pointer, Index) ->
   
 read_pointer(Bucket, Index) ->
   Loc = 8 * Bucket + ?INDEX_HEADER_SIZE,
+  % ?debug("read_pointer(~p, ~p)", [Bucket, Index]),
+  timer:sleep(10),
   {ok, <<Pointer:64/integer>>} = file:pread(Index, Loc, 8),
-  ?debug("read_pointer(~p, ~p) -> ~p", [Bucket, Index, Pointer]),
+  % ?debug("                      -> ~p", [Pointer]),
   Pointer.
 
 initialize_or_verify(Hash = #xhash{data=Data,index=Index}) ->
