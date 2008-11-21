@@ -4,7 +4,7 @@ initialize_data_test() ->
   setup(),
   {ok, XHash} = open("/Users/cliff/data/xhash", "xhash"),
   close(XHash),
-  {ok, <<"XD", 0:16, 0:32, 48:64, 0:256>>} = file:read_file("/Users/cliff/data/xhash/xhash.xd").
+  {ok, <<"XD", 0:16, 0:32, 0:64, 0:256>>} = file:read_file("/Users/cliff/data/xhash/xhash.xd").
   
 initialize_index_test() ->
   setup(),
@@ -19,7 +19,7 @@ initialize_read_test() ->
   {ok, XHash1} = open("/Users/cliff/data/xhash", "xhash"),
   1024 = XHash1#xhash.capacity,
   0 = XHash1#xhash.size,
-  48 = XHash1#xhash.head.
+  0 = XHash1#xhash.head.
   
 parent_test() ->
   0 = ?PARENT(1),
@@ -31,7 +31,7 @@ insert_one_test() ->
   {ok, XHash} = open("/Users/cliff/data/xhash", "xhash"),
   {ok, XHash1} = put("mahkey", "mahcontext", ["mahbvalues"], XHash),
   1 = XHash1#xhash.size,
-  {ok, {"mahkey", "mahcontext", ["mahbvalues"]}} = get("mahkey", XHash1),
+  {ok, {"mahcontext", ["mahbvalues"]}} = get("mahkey", XHash1),
   close(XHash1).
   
 insert_20_test() ->
@@ -44,7 +44,7 @@ insert_20_test() ->
   lists:foreach(fun(E) ->
       ExpKey = lists:concat(["key", E]),
       ExpVal = [lists:concat(["value", E])],
-      {ok, {ExpKey, context, ExpVal}} = get(lists:concat(["key", E]), XHash1)
+      {ok, {context, ExpVal}} = get(lists:concat(["key", E]), XHash1)
     end, lists:seq(1, 20)).
     
 count_20_with_fold_test() ->
@@ -68,7 +68,7 @@ insert_1024_test() ->
   lists:foreach(fun(E) ->
       ExpKey = lists:concat(["key", E]),
       ExpVal = [lists:concat(["value", E])],
-      {ok, {ExpKey, context, ExpVal}} = get(lists:concat(["key", E]), XHash1)
+      {ok, {context, ExpVal}} = get(lists:concat(["key", E]), XHash1)
     end, lists:seq(1, 1024)).
   
 setup() ->
