@@ -192,32 +192,13 @@ hash_to_directory(Directory, _Left, Original, 0) ->
 hash_to_directory(Directory, [Char|Left], Original, Depth) ->
   hash_to_directory(lists:concat([Directory, '/', [Char]]), Left, Original, Depth-1).
 
-value_size(V) when is_list(V) ->
-    %% large if any is large
-    Len = combined_size(V),
-    if Len >= ?MEM_VALUE_LIMIT ->
-            large;
-       true ->
-            small
-    end;
-value_size(V) when is_binary(V) ->
-    Len = size(V),
+value_size(V) ->
+    Len = lib_misc:byte_size(V),
     if Len >= ?MEM_VALUE_LIMIT ->
             large;
        true ->
             small
     end.
-    
-combined_size(V) when is_list(V) ->
-    combined_size(V, 0).
-
-combined_size([], S) ->
-    S;
-combined_size([I|Rest], S) when is_binary(I) ->
-    combined_size(Rest, S + size(I));
-combined_size([I|Rest], S) when is_list(I) ->
-    combined_size(Rest, S + length(I)).
-
 
 ensure_table(Table) ->
     %% ensure that schema is on disc
