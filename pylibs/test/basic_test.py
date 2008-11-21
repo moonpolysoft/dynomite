@@ -38,6 +38,20 @@ class TestWithMockServer(object):
         assert context
         assert values == ['a value']
 
+    def test_api_calls_work(self):
+        c = self.client
+        has, count = c.has_key('the_key')
+        assert not has
+        assert c.put('the_key', 'a value\ncontaining newlines')
+        has, count = c.has_key('the_key')
+        assert has
+        context, values = c.get('the_key')
+        assert values == ['a value\ncontaining newlines']
+        assert c.delete('the_key')
+        has, count = c.has_key('the_key')
+        assert not has
+        assert c.get('the_key') is None
+        
     def _mock(self, client):
         c = client('localhost', 11222)
         c._socket = MockSocket()
@@ -72,6 +86,19 @@ class MockSocket(object):
             ctx = 'blah'
         val[0] = ctx
         val[1].append(value)
+        self.response = 'succ 1\n'
+
+    def do_has(self, keylen, key):
+        if key in self._db:
+            self.response = 'yes 1\n'
+        else:
+            self.response = 'no 1\n'
+
+    def do_del(self, keylen, key):
+        try:
+            self._db.pop(key)
+        except KeyError:
+            pass
         self.response = 'succ 1\n'
 
     def recv(self, bytes):

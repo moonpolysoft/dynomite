@@ -1,7 +1,11 @@
 import socket
+from threading import local
+
+class DynomiteError(IOError):
+    pass
 
 
-class Client(object):
+class Client(local):
 
     def __init__(self, host, port):
         self._host = host
@@ -12,7 +16,7 @@ class Client(object):
         if self._socket:
             return
         self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._socket.connect(self._host, self._port)
+        self._socket.connect((self._host, self._port))
 
     def close(self):
         if not self._socket:
@@ -57,21 +61,38 @@ class Client(object):
                           (len(key), key,
                            len(context), context,
                            len(value), value))
-        return self._put_result()
+        return self._update_result()
 
     def has_key(self, key):
-        pass
-
+        """
+        Check that the given key exists in the key store.
+        """
+        # has_key command line:
+        # has $keylen $key
+        # result:
+        # fail $reason
+        # yes $num_servers_responding
+        # no $num_servers_responding
+        self.connect()
+        self._socket.send('has %d %s\n' % (len(key), key))
+        return self._has_key_result()
+        
     def delete(self, key):
-        pass
+        """
+        Delete the given key from the key store.
+        """
+        # delete command line:
+        # del $keylength $key
+        # result:
+        # fail $reason
+        # succ $num_servers_responding
+        self.connect()
+        self._socket.send('del %d %s\n' % (len(key), key))
+        return self._update_result()
 
     def _get_result(self):
-        self._buf = ''
-        cmd = self._read_section()
-        if cmd == 'fail':
-            reason = self._read_line()
-            raise DynomiteError(reason)
-        elif cmd == 'not_found':
+        cmd = self._read_command()
+        if cmd == 'not_found':
             return None
         elif cmd == 'succ':
             item_len = int(self._read_section())
@@ -86,17 +107,29 @@ class Client(object):
         else:
             raise IOError("Unexpected response: %s" % cmd)
 
-    def _put_result(self):
+    def _update_result(self):
+        cmd = self._read_command()
+        if cmd == 'succ':
+            return int(self._read_section())
+        else:
+            raise IOError("Unexpected response: %s" % cmd)
+
+    def _has_key_result(self):
+        cmd = self._read_command()
+        try:
+            count = int(self._read_section())
+        except ValueError:
+            raise IOError("Unexpected response to has_key")
+        return (cmd == 'yes', count)
+
+    def _read_command(self):
         self._buf = ''
         cmd = self._read_section()
         if cmd == 'fail':
             reason = self._read_line()
             raise DynomiteError(reason)
-        elif cmd == 'succ':
-            return int(self._read_section())
-        else:
-            raise IOError("Unexpected response: %s" % cmd)
-
+        return cmd
+    
     def _read_section(self, eol=False):
         buf = self._buf
         recv = self._socket.recv
