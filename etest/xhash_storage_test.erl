@@ -40,6 +40,8 @@ insert_20_test_() ->
     {ok, XHash} = open("/Users/cliff/data/xhash", "xhash"),
     XHash1 = lists:foldl(fun(E, X) ->
         {ok, XH} = put(lists:concat(["key", E]), context, [lists:concat(["value", E])], X),
+        % error_logger:info_msg("dump ~p", [dump(XH)]),
+        % timer:sleep(100),
         XH
       end, XHash, lists:seq(1,20)),
     lists:foreach(fun(E) ->
@@ -49,6 +51,8 @@ insert_20_test_() ->
         % timer:sleep(100),
         {ok, {context, ExpVal}} = get(ExpKey, XHash1)
       end, lists:seq(1, 20))
+      % error_logger:info_msg("dump ~p", [dump(XHash1)]),
+      % timer:sleep(1000)
     % timer:sleep(100)
   end}]}.
   
@@ -71,13 +75,10 @@ insert_1024_test_() ->
        {ok, XH} = put(lists:concat(["key", E]), context, [lists:concat(["value", E])], X),
        XH
      end, XHash, lists:seq(1,1024)),
-   % error_logger:info_msg("dump ~p", [dump(XHash1)]),
-   % timer:sleep(100000)
    lists:foreach(fun(E) ->
        ExpKey = lists:concat(["key", E]),
        ExpVal = [lists:concat(["value", E])],
        % error_logger:info_msg("key ~p", [ExpKey]),
-   
        Val = get(ExpKey, XHash1),
               % timer:sleep(150),
        {ok, {context, ExpVal}} = Val

@@ -84,7 +84,7 @@ get(Key, XHash = #xhash{capacity=Capacity,data=Data,index=Index,size=Size,head=H
   end.
   
 put(Key, Context, Values, XHash = #xhash{capacity=Capacity,size=Size,data=Data,index=Index,head=Head}) ->
-  ?debug("put(~w, Context, Values, XHash)", [Key]),
+  ?debug("put(~p, Context, Values, XHash)", [Key]),
   UnrevHash = lib_misc:hash(Key),
   KeyHash = lib_misc:reverse_bits(UnrevHash  bor 16#80000000),
   Bucket = UnrevHash rem Capacity,
@@ -187,12 +187,13 @@ int_fold(Fun, Pointer, XHash = #xhash{data=Data}, AccIn) ->
 write_node(Bucket, Header, KeyBin, DataBin, XHash = #xhash{index=Index,data=Data}) ->
   ?debug("write_node(~p, ~p, KeyBin, DataBin, XHash)", [Bucket, Header]),
   {Pointer, XHash1} = initialize_bucket(Bucket, XHash),
-  % {ReadBucket, Ptr} = read_bucket(Bucket, Index),
-  % {Pointer, XHash1} = if
-  %   ReadBucket /= Bucket -> initialize_bucket(Bucket, XHash);
-  %   true -> {Ptr, XHash}
-  % end,
+  % {ReadBucket, Pointer} = read_bucket(Bucket, Index),
   {NewPointer, XHash2, Depth} = insert_node(Pointer, Header, KeyBin, DataBin, XHash1),
+  % if
+  %   ReadBucket /= Bucket -> write_bucket(Bucket, NewPointer, Index);
+  %   Depth == 0 -> write_bucket(Bucket, NewPointer, Index);
+  %   true -> noop
+  % end,
   {NewPointer, XHash2}.
 
 initialize_bucket(0, XHash = #xhash{index=Index,data=Data,head=0}) ->
