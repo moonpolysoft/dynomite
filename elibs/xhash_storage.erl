@@ -345,9 +345,8 @@ write_bucket(Bucket, Pointer, Index) ->
   
 read_pointer(Bucket, Index) ->
   Loc = 8 * Bucket + ?INDEX_HEADER_SIZE,
-  % ?debug("read_pointer(~p, ~p)", [Bucket, Index]),
   {ok, <<Pointer:64/integer>>} = file:pread(Index, Loc, 8),
-  % ?debug("                      -> ~p", [Pointer]),
+  ?debug("read_pointer(~p, ~p) -> ~p", [Bucket, Index, Pointer]),
   Pointer.
 
 initialize_or_verify(Hash = #xhash{data=Data,index=Index}) ->
