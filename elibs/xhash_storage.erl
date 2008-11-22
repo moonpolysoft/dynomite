@@ -85,13 +85,18 @@ get(Key, XHash = #xhash{capacity=Capacity,data=Data,index=Index,size=Size,head=H
   
 put(Key, Context, Values, XHash = #xhash{capacity=Capacity,size=Size,data=Data,index=Index,head=Head}) ->
   ?debug("put(~p, Context, Values, XHash)", [Key]),
+  LoadFactor = Size / Capacity,
+  XHash1 = if
+    LoadFactor> 0.8 -> double_index(XHash);
+    true -> XHash
+  end,
   UnrevHash = lib_misc:hash(Key),
   KeyHash = lib_misc:reverse_bits(UnrevHash  bor 16#80000000),
   Bucket = UnrevHash rem Capacity,
   KeyBin = list_to_binary(Key),
   DataBin = term_to_binary({Context, Values}),
   Header = #node_header{keyhash=KeyHash,keysize=byte_size(KeyBin),datasize=byte_size(DataBin)},
-  {_, NewHash} = write_node(Bucket, Header, KeyBin, DataBin, XHash),
+  {_, NewHash} = write_node(Bucket, Header, KeyBin, DataBin, XHash1),
   {ok, NewHash}.
   
 has_key(Key, #xhash{}) ->
@@ -106,6 +111,12 @@ fold(Fun, XHash = #xhash{head=Head}, AccIn) when is_function(Fun) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
+double_index(XHash = #xhash{index=Index,data=Data,capacity=Capacity}) ->
+  GrowSize = Capacity * 64,
+  {ok, Position} = file:position(Index, eof),
+  file:write(Index, <<0:GrowSize>>),
+  XHash#xhash{capacity=Capacity * 2}.
+
 dump(XHash = #xhash{head=Head}) ->
   IndexList = dump_index(XHash),
   DataList = dump_data(XHash),
@@ -377,6 +388,9 @@ increment_size(#node_header{keysize=0}, XHash) ->
 increment_size(_, XHash = #xhash{size=Size, data=Data}) ->
   write_size(Size+1, Data),
   XHash#xhash{size=Size+1}.
+  
+write_capacity(Capacity, Index) ->
+  file:pwrite(Index, 4, <<Capacity:32>>).
   
 write_size(Size, Data) ->
   file:pwrite(Data, 4, <<Size:32>>).

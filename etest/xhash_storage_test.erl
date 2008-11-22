@@ -84,6 +84,22 @@ insert_1024_test_() ->
        {ok, {context, ExpVal}} = Val
      end, lists:seq(1, 1024))
  end}]}.
+ 
+ insert_10000_test() ->
+   setup(),
+    {ok, XHash} = open("/Users/cliff/data/xhash", "xhash"),
+    XHash1 = lists:foldl(fun(E, X) ->
+        {ok, XH} = put(lists:concat(["key", E]), context, [lists:concat(["value", E])], X),
+        XH
+      end, XHash, lists:seq(1,10000)),
+    lists:foreach(fun(E) ->
+        ExpKey = lists:concat(["key", E]),
+        ExpVal = [lists:concat(["value", E])],
+        % error_logger:info_msg("key ~p", [ExpKey]),
+        Val = get(ExpKey, XHash1),
+               % timer:sleep(150),
+        {ok, {context, ExpVal}} = Val
+      end, lists:seq(1, 10000)).
   
 setup() ->
   filelib:ensure_dir("/Users/cliff/data/xhash"),
