@@ -6,8 +6,7 @@ from thrift.transport import TSocket
 from thrift.transport import TTransport
 from thrift.protocol import TBinaryProtocol
 
-from threading import local
-
+from threading import local, RLock
 
 class Client(object):
     """
@@ -19,6 +18,7 @@ class Client(object):
     def __init__(self, host, port):
         self._host = host
         self._port = port
+        self._lock = RLock()
         self._con = local()
 
     def get(self, key):
@@ -40,15 +40,18 @@ class Client(object):
     def connect(self):
         if hasattr(self._con, 'client'):
             return
-        transport = TSocket.TSocket(self._host, self._port)
-        transport = TTransport.TBufferedTransport(transport)
-        protocol = TBinaryProtocol.TBinaryProtocol(transport)
-        self._con.client = Dynomite.Client(protocol)
-        self._con.transport = transport
-        transport.open()
+        self._lock.acquire()
+        try:
+            transport = TSocket.TSocket(self._host, self._port)
+            transport = TTransport.TBufferedTransport(transport)
+            protocol = TBinaryProtocol.TBinaryProtocol(transport)
+            self._con.client = Dynomite.Client(protocol)
+            self._con.transport = transport
+            transport.open()
+        finally:
+            self._lock.release()
 
     def disconnect(self):
+        if not hasattr(self._con, 'transport'):
+            return
         self._con.transport.close()
-
-    def __del__(self):
-        self.disconnect()
