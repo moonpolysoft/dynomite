@@ -71,7 +71,7 @@ def run(num, rq, ks, vs):
         res['get'].append(tk)
         newval = rval(vs)
         st = time()
-        client.put(key, cur.context, newval)
+        client.put(key, newval, cur.context)
         tk += time() - st
         res['requests'] += 1
         res['put'].append(tk)
