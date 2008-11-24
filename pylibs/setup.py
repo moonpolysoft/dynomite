@@ -6,6 +6,6 @@ except ImportError:
 setup(
     name="Dynomite",
     version="0.1",
-    py_modules=['dynomite'],
+    packages=['dynomite'],
     tests_require=['nose>=0.11.0.dev', 'boto']
     )

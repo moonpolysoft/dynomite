@@ -1,5 +1,6 @@
 import socket
 from threading import local
+import pdb
 
 class DynomiteError(IOError):
     pass
@@ -39,6 +40,7 @@ class Client(local):
         # fail $reason\n
         # not_found\n
         # succ $items $ctx_length $ctx ($data_length $data)+\n
+        # print "get", key
         self.connect()
         self._socket.send("get %d %s\n" % (len(key), key))
         return self._get_result()
@@ -63,7 +65,7 @@ class Client(local):
                            len(value), value))
         return self._update_result()
 
-    def has_key(self, key):
+    def has(self, key):
         """
         Check that the given key exists in the key store.
         """
@@ -77,7 +79,7 @@ class Client(local):
         self._socket.send('has %d %s\n' % (len(key), key))
         return self._has_key_result()
         
-    def delete(self, key):
+    def remove(self, key):
         """
         Delete the given key from the key store.
         """
@@ -91,6 +93,7 @@ class Client(local):
         return self._update_result()
 
     def _get_result(self):
+        # pdb.set_trace()
         cmd = self._read_command()
         if cmd == 'not_found':
             return None
@@ -124,6 +127,7 @@ class Client(local):
 
     def _read_command(self):
         self._buf = ''
+        self._last_cmd = ''
         cmd = self._read_section()
         if cmd == 'fail':
             reason = self._read_line()
@@ -131,28 +135,32 @@ class Client(local):
         return cmd
     
     def _read_section(self, eol=False):
+        # print "read section", eol
         buf = self._buf
         recv = self._socket.recv
         while True:
             if not eol:
                 index = buf.find(' ')
                 if index > 0:
+                    # print "space at", index
                     break
             index = buf.find('\n')
             if index > 0:
+                # print "eol at", index
                 break
             data = recv(4096)
-            # print 'data received', data
+            # print 'data received "%s" (%d)' % (data, len(data))
             if not data:
                 break
             buf += data
+            self._last_cmd += data
         if index > 0:
             self._buf = buf[index+1:]
             buf = buf[:index]
         else:
             self._buf = ''
         # print 'read section result "%s"' % buf
-        # print 'remaining buffer "%s"' % self._buf
+        # print 'remaining buffer "%s"' % self._buf        
         return buf
 
     def _read_line(self):
@@ -166,5 +174,6 @@ class Client(local):
             if len(chunk) == 0:
                 raise IOError("Read only %d bytes of %d" % (len(buf), butes))
             buf += chunk
+            self._last_cmd += chunk
         self._buf = buf[bytes+1:] # skip terminator
         return buf[:bytes]

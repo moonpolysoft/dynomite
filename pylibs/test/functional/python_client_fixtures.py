@@ -4,7 +4,7 @@ import sys
 import time
 import tempfile
 
-__test__ = False
+__test__ = {}
 
 
 ROOT = os.path.dirname(
@@ -16,7 +16,8 @@ TMP_DIR = None
 
 
 def setup_module():
-    cmd = "%s start -o dpct1 -p 11222 --data '%s' --storage dict_storage " \
+    cmd = "%s start -o dpct1 -p 11222 -t 9200 --data '%s' " \
+          "--storage dict_storage " \
           "-n 1 -r 1 -w 1 --detached" % (DYNOMITE, tmp_dir())
     os.system(cmd)
     time.sleep(2)

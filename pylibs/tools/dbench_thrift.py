@@ -1,20 +1,7 @@
 #!/usr/bin/env python
-import os
-import sys
 
-ROOT = os.path.dirname(
-    os.path.dirname(
-    os.path.dirname(
-    os.path.abspath(__file__))))
-sys.path.append(os.path.join(ROOT, "gen-py"))
-
-from dynomite import Dynomite
+from dynomite.thrift_client import Client
 from dynomite.ttypes import *
-
-from thrift import Thrift
-from thrift.transport import TSocket
-from thrift.transport import TTransport
-from thrift.protocol import TBinaryProtocol
 
 from optparse import OptionParser
 from threading import Thread
@@ -73,17 +60,7 @@ def run(num, rq, ks, vs):
 
     keys = "abcdefghijklmnop"
 
-    # Make socket
-    transport = TSocket.TSocket('localhost', choice(ports))
-
-    # Buffering is critical. Raw sockets are very slow
-    transport = TTransport.TBufferedTransport(transport)
-
-    # Wrap in a protocol
-    protocol = TBinaryProtocol.TBinaryProtocol(transport)
-    
-    client = Dynomite.Client(protocol)
-    transport.open()
+    client = Client('localhost', choice(ports))
 
     for i in range(0, num):
         tk = 0.0

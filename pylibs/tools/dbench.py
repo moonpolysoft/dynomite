@@ -1,14 +1,15 @@
 #!/usr/bin/env python
 
+import os
 import sys
-sys.path.append("gen-py")
-from dynomite import Dynomite
-from dynomite.ttypes import *
+import pdb
 
-from thrift import Thrift
-from thrift.transport import TSocket
-from thrift.transport import TTransport
-from thrift.protocol import TBinaryProtocol
+ROOT = os.path.dirname(
+    os.path.dirname(
+    os.path.abspath(__file__)))
+sys.path.append(ROOT)
+
+from dynomite import Client
 
 from optparse import OptionParser
 from threading import Thread
@@ -17,7 +18,7 @@ from Queue import Queue
 from time import time
 from random import choice
 
-ports = [9200, 9201, 9202, 9203]
+ports = [11222]
 
 
 def main():
@@ -25,18 +26,27 @@ def main():
     results = {'requests': 0, 'get': [], 'put': []}
     options, junk = opts()
     workers = []
-    for i in range(0, int(options.clients)):
-        t = Thread(target=run, args=(int(options.number), rq,
-                                     int(options.keysize),
-                                     int(options.valuesize)))
-        workers.append(t)
-    for w in workers:
-        w.start()
-    for w in workers:
-        w.join()
-        consolidate(rq.get(), results)
-        print ".",
-
+    clients = int(options.clients)
+    if clients > 1:
+        for i in range(0, clients):
+            t = Thread(target=run, args=(int(options.number), rq,
+                                         int(options.keysize),
+                                         int(options.valuesize)))
+            workers.append(t)
+        for w in workers:
+            w.start()
+        for w in workers:
+            w.join()
+            consolidate(rq.get(), results)
+            print ".",
+    else:
+        try:
+            consolidate(run(int(options.number), None, int(options.keysize),
+                            int(options.valuesize)),
+                        results)
+        except:
+            pdb.post_mortem(sys.exc_info()[2])
+        # return
     total_time = 0.0
     for i in results['get']:
         total_time += i
@@ -66,33 +76,31 @@ def run(num, rq, ks, vs):
            'put': []}
 
     keys = "abcdefghijklmnop"
-
-    # Make socket
-    transport = TSocket.TSocket('localhost', choice(ports))
-
-    # Buffering is critical. Raw sockets are very slow
-    transport = TTransport.TBufferedTransport(transport)
-
-    # Wrap in a protocol
-    protocol = TBinaryProtocol.TBinaryProtocol(transport)
     
-    client = Dynomite.Client(protocol)
-    transport.open()
-
+    client = Client('localhost', choice(ports))
+    client.connect()
+    
     for i in range(0, num):
         tk = 0.0
         key = ''.join([choice(keys) for i in range(0, ks)])
         st = time()
         cur = client.get(key)
+        if cur is None:
+            context = ''
+        else:
+            context = cur[0]
         tk += time() - st
         res['get'].append(tk)
         newval = rval(vs)
         st = time()
-        client.put(key, cur.context, newval)
+        client.put(key, newval, context)
         tk += time() - st
         res['requests'] += 1
         res['put'].append(tk)
-    rq.put(res)
+    if rq is not None:
+        rq.put(res)
+    else:
+        return res
 
 
 def consolidate(res, results):
