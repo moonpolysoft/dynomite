@@ -127,3 +127,16 @@ listify(List) when is_list(List) ->
   List;
   
 listify(El) -> [El].
+
+reverse_bits(V) when is_integer(V) ->
+  % swap odd and even bits
+  V1 = ((V bsr 1) band 16#55555555) bor (((V band 16#55555555) bsl 1) band 16#ffffffff),
+  % swap consecutive pairs
+  V2 = ((V1 bsr 2) band 16#33333333) bor (((V1 band 16#33333333) bsl 2) band 16#ffffffff),
+  % swap nibbles ... 
+  V3 = ((V2 bsr 4) band 16#0F0F0F0F) bor (((V2 band 16#0F0F0F0F) bsl 4) band 16#ffffffff),
+  % swap bytes
+  V4 = ((V3 bsr 8) band 16#00FF00FF) bor (((V3 band 16#00FF00FF) bsl 8) band 16#ffffffff),
+  % swap 2-byte long pairs
+  ((V4 bsr 16) band 16#ffffffff) bor ((V4 bsl 16) band 16#ffffffff).
+  

@@ -92,6 +92,8 @@ def run(rq, host, port, sleep, minsize, maxsize):
 def opts():
     parser = OptionParser()
 
+    # FIXME num requests / time to run
+
     parser.add_option('--host', dest='host', default='localhost',
                       action='store', help='Connect to host')
     parser.add_option('-p', '--port', dest='port', default=9200,

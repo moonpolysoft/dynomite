@@ -21,3 +21,36 @@ EC2_GET_THRESHOLD       -- If 99.9% of gets are not faster than this # of
 EC2_PUT_THRESHOLD       -- If 99.9% of puts are not faster than this # of
                            milliseconds, the test fails
 """
+import os
+import sys
+import boto
+
+
+def load_test(conf=None):
+    if conf is None:
+        conf = configure()
+    instances = start_instances(conf)
+    try:
+        start_load(conf, instances)
+        wait(conf)
+        stats = collect_stats(conf, instances)
+    finally:
+        stop_instances(conf, instances)
+    evaluate_stats(conf, stats)
+
+
+def main():
+    conf = configure(sys.argv)
+    load_test(conf)
+    
+
+def configure(argv=None):
+    if argv is None:
+        argv = []
+    # FIXME
+    env = os.environ
+    return options
+    
+
+if __name__ == '__main__':
+    main()

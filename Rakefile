@@ -23,6 +23,10 @@ task :native do
   ERLC_FLAGS = "+native #{ERLC_FLAGS}"
 end
 
+task :profile do
+  ERLC_FLAGS = "-DPROF #{ERLC_FLAGS}"
+end
+
 task :run do
   sh %Q{erl -boot start_sasl +K true +A 128 -smp enable -pz ./ebin/ -sname local_console#{$$} -mnesia dir '"/tmp/mbd"' -noshell -run dynomite start}
 end
