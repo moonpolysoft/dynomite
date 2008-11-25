@@ -7,7 +7,7 @@ ERLC_FLAGS = "+debug_info -W0 -I include -pa deps/mochiweb/ebin -I deps/mochiweb
 
 task :default => [:build_deps] do
   puts "building #{ENV['TEST']}"
-  sh "erlc  #{ERLC_FLAGS} #{ENV['TEST'] ? ERLC_TEST_FLAGS : ''} elibs/*.erl gen-erl/*.erl"
+  sh "erlc  #{ERLC_FLAGS} #{ENV['TEST'] ? ERLC_TEST_FLAGS : ''} #{ENV['DEBUG'] ? '-DDEBUG' : ''} elibs/*.erl gen-erl/*.erl"
   # Dir["templates/*"].each do |template|
   #   sh %Q(erl -pz ebin -noshell -eval 'erltl:compile("#{template}", [{outdir, "ebin"}, debug_info, show_errors, show_warnings])' -s erlang halt)
   # end
