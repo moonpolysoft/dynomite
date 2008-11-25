@@ -10,14 +10,14 @@ initialize_index_test() ->
   setup(),
   {ok, XHash} = open("/Users/cliff/data/xhash", "xhash"),
   close(XHash),
-  {ok, <<"XI", 0:16, 1024:32, 0:256, 0:65536>>} = file:read_file("/Users/cliff/data/xhash/xhash.xi").
+  {ok, <<"XI", 0:16, 1:32, 0:256, 0:64>>} = file:read_file("/Users/cliff/data/xhash/xhash.xi").
   
 initialize_read_test() ->
   setup(),
   {ok, XHash} = open("/Users/cliff/data/xhash", "xhash"),
   close(XHash),
   {ok, XHash1} = open("/Users/cliff/data/xhash", "xhash"),
-  1024 = XHash1#xhash.capacity,
+  1 = XHash1#xhash.capacity,
   0 = XHash1#xhash.size,
   0 = XHash1#xhash.head.
   
@@ -35,26 +35,26 @@ insert_one_test() ->
   close(XHash1).
   
 insert_20_test_() ->
-  {timeout, 120, [{?LINE, fun() ->
-    setup(),
-    {ok, XHash} = open("/Users/cliff/data/xhash", "xhash"),
-    XHash1 = lists:foldl(fun(E, X) ->
-        {ok, XH} = put(lists:concat(["key", E]), context, [lists:concat(["value", E])], X),
-        % error_logger:info_msg("dump ~p", [dump(XH)]),
-        % timer:sleep(100),
-        XH
-      end, XHash, lists:seq(1,20)),
-    lists:foreach(fun(E) ->
-        ExpKey = lists:concat(["key", E]),
-        ExpVal = [lists:concat(["value", E])],
-        % error_logger:info_msg("key ~p", [ExpKey]),
-        % timer:sleep(100),
-        {ok, {context, ExpVal}} = get(ExpKey, XHash1)
-      end, lists:seq(1, 20))
-      % error_logger:info_msg("dump ~p", [dump(XHash1)]),
-      % timer:sleep(1000)
-    % timer:sleep(100)
-  end}]}.
+{timeout, 120, [{?LINE, fun() ->
+  setup(),
+  {ok, XHash} = open("/Users/cliff/data/xhash", "xhash"),
+  XHash1 = lists:foldl(fun(E, X) ->
+      {ok, XH} = put(lists:concat(["key", E]), context, [lists:concat(["value", E])], X),
+      % error_logger:info_msg("dump ~p", [dump(XH)]),
+      % timer:sleep(100),
+      XH
+    end, XHash, lists:seq(1,20)),
+  lists:foreach(fun(E) ->
+      ExpKey = lists:concat(["key", E]),
+      ExpVal = [lists:concat(["value", E])],
+      % error_logger:info_msg("key ~p", [ExpKey]),
+      % timer:sleep(100),
+      {ok, {context, ExpVal}} = get(ExpKey, XHash1)
+    end, lists:seq(1, 20))
+    % error_logger:info_msg("dump ~p", [dump(XHash1)]),
+    % timer:sleep(1000)
+  % timer:sleep(100)
+end}]}.
   
 count_20_with_fold_test() ->
  setup(),
@@ -70,36 +70,58 @@ count_20_with_fold_test() ->
 insert_1024_test_() ->
  {timeout, 5000, [{?LINE, fun() ->
    setup(),
+   Max = 1024,
    {ok, XHash} = open("/Users/cliff/data/xhash", "xhash"),
    XHash1 = lists:foldl(fun(E, X) ->
-       {ok, XH} = put(lists:concat(["key", E]), context, [lists:concat(["value", E])], X),
+       ExpKey = lists:concat(["key", E]),
+       ExpVal = [lists:concat(["value", E])],
+       {ok, XH} = put(ExpKey, context, ExpVal, X),
+       if
+         % true -> error_logger:info_msg("dump ~p", [dump(XH)]);
+         % ExpKey == "key444" -> error_logger:info_msg("dump ~p", [dump(XH)]);
+         % ExpKey == "key155" -> error_logger:info_msg("dump ~p", [dump(XH)]);
+         % ExpKey == "key299" -> error_logger:info_msg("dump ~p", [dump(XH)]);
+         true -> noop
+       end,
        XH
-     end, XHash, lists:seq(1,1024)),
+     end, XHash, lists:seq(1,Max)),
    lists:foreach(fun(E) ->
        ExpKey = lists:concat(["key", E]),
        ExpVal = [lists:concat(["value", E])],
        % error_logger:info_msg("key ~p", [ExpKey]),
        Val = get(ExpKey, XHash1),
-              % timer:sleep(150),
+       % timer:sleep(50),
        {ok, {context, ExpVal}} = Val
-     end, lists:seq(1, 1024))
+     end, lists:seq(1, Max))
  end}]}.
  
- insert_10000_test() ->
-   setup(),
-    {ok, XHash} = open("/Users/cliff/data/xhash", "xhash"),
-    XHash1 = lists:foldl(fun(E, X) ->
-        {ok, XH} = put(lists:concat(["key", E]), context, [lists:concat(["value", E])], X),
-        XH
-      end, XHash, lists:seq(1,10000)),
-    lists:foreach(fun(E) ->
-        ExpKey = lists:concat(["key", E]),
-        ExpVal = [lists:concat(["value", E])],
-        % error_logger:info_msg("key ~p", [ExpKey]),
-        Val = get(ExpKey, XHash1),
-               % timer:sleep(150),
-        {ok, {context, ExpVal}} = Val
-      end, lists:seq(1, 10000)).
+% insert_10000_test_() ->
+%   {timeout, 1000, [{?LINE, fun() ->
+%       setup(),
+%       {ok, XHash} = open("/Users/cliff/data/xhash", "xhash"),
+%       Fun = fun() ->
+%           lists:foldl(fun(E, X) ->
+%               {ok, XH} = put(lists:concat(["key", E]), context, [lists:concat(["value", E])], X),
+%               XH
+%             end, XHash, lists:seq(1,1024))
+%         end,
+%       {ok, Pid} = fprof:start(),
+%       ok = fprof:trace(start, "/Users/cliff/data/trace"),
+%       XHash1 = Fun(),
+%       ok = fprof:trace(stop),
+%       ok = fprof:profile([{file, "/Users/cliff/data/trace"}]),
+%       ok = fprof:analyse([{dest, "/Users/cliff/data/put_analysis"}]),
+%       Fun1 = fun() ->
+%           lists:foreach(fun(E) ->
+%               ExpKey = lists:concat(["key", E]),
+%               ExpVal = [lists:concat(["value", E])],
+%               % error_logger:info_msg("key ~p", [ExpKey]),
+%               Val = get(ExpKey, XHash1),
+%                      % timer:sleep(150),
+%               {ok, {context, ExpVal}} = Val
+%             end, lists:seq(1, 1024))
+%         end
+%   end}]}.
   
 setup() ->
   filelib:ensure_dir("/Users/cliff/data/xhash"),
