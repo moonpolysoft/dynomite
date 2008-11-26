@@ -3,3 +3,31 @@
   - seeming instability in get/put as nodes join/leave?
 
 - missing tests for node joining?
+
+- after activating a new node in a group, got an error when getting a key:
+
+
+Error in process <0.774.0> on node 'b5@localhost' with exit value: {{case_clause,{exit,{{function_clause,[{vector_clock,resolve,[not_found,{[{'b1@localhost',1.227209e+09},{'b2@localhost',1.227212e+09},{'b3@localhost',1.227212e+09},{'b4@localhost',1.227212e+09}],[<<50 bytes>>]}]},{mediator,internal_get,2},{mediator,'-handle_call/3-fun-0-',3}]},{gen_server... 
+
+
+- is gossip necessary? it's very busy, can we instead just use erlang node 
+  monitoring?
+
+
+ec2 baseline
+
+4 clients on 1 server, 4 nodes:
+
+[root@domU-12-31-38-00-A1-D8 pylibs]# PYTHONPATH=. ./tools/dbench_thrift.py -n 1000 -c 4
+. . . .
+4 client(s) 1000 request(s) 288.8384120.3s
+get avg: 19.2921230.3ms mean: 7.6100830.3ms 99.9: 128.2091140.3ms
+put avg: 52.9174800.3ms mean: 44.9030400.3ms 99.9: 192.3902030.3ms
+
+19 clients on 1 server, 4 nodes:
+
+[root@domU-12-31-38-00-A1-D8 pylibs]# PYTHONPATH=. ./tools/dbench_thrift.py -n 1000 -c 10
+. . . . . . . . . .
+10 client(s) 1000 request(s) 2450.8665540.3s
+get avg: 69.8761190.3ms mean: 63.1911750.3ms 99.9: 479.4890880.3ms
+put avg: 175.2105370.3ms mean: 164.6809580.3ms 99.9: 581.4800260.3ms

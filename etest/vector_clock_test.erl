@@ -67,3 +67,8 @@ overlap_unequal_merge_test() ->
   ClockA = [{a,3},{b,4}],
   ClockB = [{a,4},{c,5}],
   [{a,4},{b,4},{c,5}] = merge(ClockA, ClockB).
+
+resolve_notfound_test() ->
+    ClockVals = {[{a,1}, {b, 2}], ["a", "b"]},
+    ClockVals = resolve(not_found, ClockVals),
+    ClockVals = resolve(ClockVals, not_found).

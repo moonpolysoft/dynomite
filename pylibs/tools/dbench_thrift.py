@@ -1,14 +1,7 @@
 #!/usr/bin/env python
 
-import sys
-sys.path.append("gen-py")
-from dynomite import Dynomite
+from dynomite.thrift_client import Client
 from dynomite.ttypes import *
-
-from thrift import Thrift
-from thrift.transport import TSocket
-from thrift.transport import TTransport
-from thrift.protocol import TBinaryProtocol
 
 from optparse import OptionParser
 from threading import Thread
@@ -17,7 +10,7 @@ from Queue import Queue
 from time import time
 from random import choice
 
-ports = [9200, 9201, 9202, 9203]
+ports = [9200] #, 9201, 9202, 9203, 9204]
 
 
 def main():
@@ -67,17 +60,7 @@ def run(num, rq, ks, vs):
 
     keys = "abcdefghijklmnop"
 
-    # Make socket
-    transport = TSocket.TSocket('localhost', choice(ports))
-
-    # Buffering is critical. Raw sockets are very slow
-    transport = TTransport.TBufferedTransport(transport)
-
-    # Wrap in a protocol
-    protocol = TBinaryProtocol.TBinaryProtocol(transport)
-    
-    client = Dynomite.Client(protocol)
-    transport.open()
+    client = Client('localhost', choice(ports))
 
     for i in range(0, num):
         tk = 0.0
@@ -88,7 +71,7 @@ def run(num, rq, ks, vs):
         res['get'].append(tk)
         newval = rval(vs)
         st = time()
-        client.put(key, cur.context, newval)
+        client.put(key, newval, cur.context)
         tk += time() - st
         res['requests'] += 1
         res['put'].append(tk)
