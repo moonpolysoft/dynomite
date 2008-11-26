@@ -75,7 +75,7 @@ get(Key, XHash = #xhash{capacity=Capacity,data=Data,index=Index,size=Size,head=H
       UnrevHash = lib_misc:hash(Key),
       KeyHash = lib_misc:reverse_bits(UnrevHash), % bor 16#80000000),
       BucketIndex = UnrevHash rem Capacity,
-      ?debug("get from bucket ~p", [BucketIndex]),
+      ?debug("get(~p) bucket ~p", [Key, BucketIndex]),
       {ReadBucket, Pointer} = read_bucket(BucketIndex, XHash),
       if
         Pointer == 0 -> {ok, not_found};
@@ -90,7 +90,7 @@ get(Key, XHash = #xhash{capacity=Capacity,data=Data,index=Index,size=Size,head=H
   end.
   
 put(Key, Context, Values, XHash = #xhash{capacity=Capacity,size=Size,data=Data,index=Index,head=Head}) ->
-  ?debug("put(~p, Context, Values, ~w)", [Key, XHash]),
+  ?debug("put(~p, Context, Values, XHash)", [Key]),
   LoadFactor = Size / Capacity,
   XHash1 = if
     LoadFactor > 0.8 -> double_index(XHash);
@@ -105,8 +105,20 @@ put(Key, Context, Values, XHash = #xhash{capacity=Capacity,size=Size,data=Data,i
   {_, NewHash} = write_node(Bucket, Header, KeyBin, DataBin, XHash1),
   {ok, NewHash}.
   
-has_key(Key, #xhash{}) ->
-  ok.
+has_key(Key, XHash = #xhash{capacity=Capacity,data=Data}) ->
+  ?debug("has_key(~p, XHash)", [Key]),
+  UnrevHash = lib_misc:hash(Key),
+  KeyHash = lib_misc:reverse_bits(UnrevHash),
+  Bucket = UnrevHash rem Capacity,
+  {_, Pointer} = read_bucket(Bucket, XHash),
+  if
+    Pointer == 0 -> {ok, false};
+    true ->
+      case find_node(Pointer, Key, KeyHash, Data) of
+        not_found -> {ok, false};
+        {NewPointer, Header} -> {ok, true}
+      end
+  end.
   
 delete(Key, #xhash{}) ->
   ok.
@@ -200,15 +212,6 @@ int_fold(Fun, Pointer, XHash = #xhash{data=Data}, AccIn) ->
       AccOut = Fun({Key, Context, Values}, AccIn),
       int_fold(Fun, NodeHeader#node_header.nextptr, XHash, AccOut)
   end.
-
-% write_node(0, Header, KeyBin, DataBin, XHash = #xhash{index=Index,data=Data}) ->
-%   ?debug("write_node(0, ~p, KeyBin, DataBin, #xhash{head=0})", [Header]),
-%   {ok, NewPointer} = write_node_header(Header, eof, Data),
-%   ok = write_node_data(KeyBin, DataBin, eof, Data),
-%   XHash1 = increment_size(Header, XHash),
-%   write_head_pointer(NewPointer, Data),
-%   XHash2 = write_bucket(0, NewPointer, XHash1),
-%   {NewPointer, XHash2#xhash{head=NewPointer}};
 
 write_node(Bucket, Header, KeyBin, DataBin, XHash = #xhash{index=Index,data=Data}) ->
   ?debug("write_node(~p, ~p, KeyBin, DataBin, XHash)", [Bucket, Header]),
@@ -441,16 +444,48 @@ read_pointer(Bucket, XHash = #xhash{index=Index}) ->
     not_found -> 
       Loc = 8 * Bucket + ?INDEX_HEADER_SIZE,
       {ok, <<Pointer:64/integer>>} = file:pread(Index, Loc, 8),
-      ?debug("read_pointer(~p, ~p) -> ~p", [Bucket, Index, Pointer]),
+      ?debug("read_pointer(~p, Index) -> ~p", [Bucket, Pointer]),
       Pointer;
     Pointer -> Pointer
   end.
     
 index_cache_get(Bucket, XHash = #xhash{idx_cache=Cache,index=Index}) ->
-  not_found.
+  N = (Bucket * 8) div ?CHUNK_SIZE,
+  BytePos = (Bucket * 8) rem ?CHUNK_SIZE,
+  case dict:find(N, Cache) of
+    {ok, Binary} when BytePos >= byte_size(Binary) -> 
+      ?debug("index_cache_get(~w, XHash) N ~w BytePos ~w cache miss", [Bucket, N, BytePos]),
+      not_found;
+    {ok, <<_:BytePos/binary, Pointer:64/integer, _/binary>>}  ->
+      ?debug("index_cache_get(~w, XHash) N ~w BytePos ~w Pointer ~w cache hit", [Bucket, N, BytePos, Pointer]),
+      Pointer;
+    error -> 
+      ?debug("index_cache_get(~w, XHash) N ~w BytePos ~w cache miss", [Bucket, N, BytePos]),
+      not_found
+  end.
 
 index_cache_set(Bucket, Pointer, XHash = #xhash{idx_cache=Cache,index=Index}) ->
-  XHash.
+  N = (Bucket * 8) div ?CHUNK_SIZE,
+  Chunk = N * ?CHUNK_SIZE,
+  BytePos = (Bucket * 8) rem ?CHUNK_SIZE,
+  ?debug("index_cache_set(~w, ~w, XHash) N ~w Chunk ~w BytePos ~w", [Bucket, Pointer, N, Chunk, BytePos]),
+  NewBinary = case dict:find(N, Cache) of
+    {ok, Binary} when BytePos >= byte_size(Binary) ->
+      NewPos = (BytePos - byte_size(Binary))*8,
+      <<Binary/binary, 0:NewPos/integer, Pointer:64/integer>>;
+    {ok, <<Before:BytePos/binary, _:8/binary, After/binary>>} -> 
+      <<Before/binary, Pointer:64/integer, After/binary>>;
+    error ->
+      case file:pread(Index, Chunk + ?INDEX_HEADER_SIZE, ?CHUNK_SIZE) of
+        {ok, <<Before:BytePos/binary, _:8/binary, After/binary>>} -> <<Before/binary, Pointer:64/integer, After/binary>>;
+        eof -> eof
+      end
+  end,
+  Cache1 = if
+    NewBinary == eof -> Cache;
+    true -> dict:store(N, NewBinary, Cache)
+  end,
+  XHash#xhash{idx_cache=Cache1}.
 
 initialize_or_verify(Hash = #xhash{data=Data,index=Index}) ->
   case {read_data_header(Data), read_index_header(Index)} of
@@ -498,7 +533,7 @@ initialize(Hash = #xhash{data=Data,index=Index}) ->
   case file:pwrite(Data, 0, <<"XD", ?VERSION:16, Size:32, Head:64, 0:256>>) of
     ok ->
       case file:pwrite(Index, 0, <<"XI", ?VERSION:16, Capacity:32, 0:256, 0:TableSize>>) of
-        ok -> {ok, Hash#xhash{head=Head,capacity=Capacity,size=Size}};
+        ok -> {ok, init_cache(Hash#xhash{head=Head,capacity=Capacity,size=Size})};
         Failure -> Failure
       end;
     Failure -> Failure
@@ -511,8 +546,11 @@ init_cache(XHash = #xhash{capacity=Capacity,index=Index}) ->
       if
         Chunk >= Capacity -> D;
         true ->
-          {ok, Binary} = file:pread(Index, Chunk, ?CHUNK_SIZE),
-          dict:store(Chunk, Binary, D)
+          case file:pread(Index, Chunk + ?INDEX_HEADER_SIZE, ?CHUNK_SIZE) of
+            {ok, Binary} -> dict:store(N, Binary, D);
+            eof -> D
+          end
       end
-    end, Dict, lists:seq(0,?MAX_CHUNKS-1)).
+    end, Dict, lists:seq(0,?MAX_CHUNKS-1)),
+  XHash#xhash{idx_cache=Dict1}.
   
