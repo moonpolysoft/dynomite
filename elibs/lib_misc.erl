@@ -46,13 +46,24 @@ pmap(Fun, List, ReturnNum) ->
   %% this is so that there will be no leaked messages sitting in our mailbox
   Parent = spawn(fun() ->
       L = gather(N, length(List), Ref, []),
-      SuperParent ! {SuperRef, L}
+      SuperParent ! {SuperRef, pmap_sort(List, L)}
     end),
   _Pids = [spawn(fun() -> 
       Parent ! {Ref, {Elem, (catch Fun(Elem))}} 
     end) || Elem <- List],
   receive
     {SuperRef, Ret} -> Ret
+  end.
+  
+pmap_sort(Original, Results) ->
+  pmap_sort([], Original, lists:reverse(Results)).
+  
+% pmap_sort(Sorted, [], _) -> lists:reverse(Sorted);
+pmap_sort(Sorted, _, []) -> lists:reverse(Sorted);
+pmap_sort(Sorted, [E|Original], Results) ->
+  case lists:keytake(E, 1, Results) of
+    {value, {E, Val}, Rest} -> pmap_sort([Val|Sorted], Original, Rest);
+    false -> pmap_sort(Sorted, Original, Results)
   end.
   
 gather(_, Max, _, L) when length(L) == Max -> L;
