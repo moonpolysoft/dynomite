@@ -243,8 +243,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 
 internal_put(Key, Context, Values, Tree, Table, Module, State) ->
-  UpdatedTree = dmerkle:update(Key, Values, Tree),
-  case catch Module:put(sanitize_key(Key), Context, Values, Table) of
+  TreeFun = fun() -> dmerkle:update(Key, Values, Tree) end,
+  TableFun = fun() -> Module:put(sanitize_key(Key), Context, Values, Table) end,
+  [UpdatedTree, TableResult] = lib_misc:pmap(fun(F) -> F() end, [TreeFun, TableFun], 2),
+  case TableResult of
     {ok, ModifiedTable} ->
       stats_server:request(put, lib_misc:byte_size(Values)),
       {reply, ok, State#storage{table=ModifiedTable,tree=UpdatedTree}};
