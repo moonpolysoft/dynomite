@@ -245,11 +245,11 @@ pcall(MapFun, Servers, N) ->
   % membership:mark_as_bad(lists:map(fun({Server, _}) -> Server end, Bad)),
   {Good, Bad}.
   
-valid({_, {ok, _}}) -> true;
-valid({_, ok}) -> true;
+valid({ok, _}) -> true;
+valid(ok) -> true;
 valid(_) -> false.
 
-strip_ok({_, {ok, Val}}) -> Val;
+strip_ok({ok, Val}) -> Val;
 strip_ok(Val) -> Val.
 
 error_message(Good, Bad, N, T) ->
