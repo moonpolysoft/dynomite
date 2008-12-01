@@ -444,25 +444,26 @@ read_pointer(Bucket, XHash = #xhash{index=Index}) ->
   end.
     
 node_cache_get(Pointer, XHash = #xhash{node_cache=Cache}) ->
-  case dict:find(Pointer, Cache) of
+  case memcache:get(Cache, integer_to_list(Pointer)) of
     {ok, Header} -> Header;
     error -> not_found
   end.
   
 node_cache_set(Pointer, Header, XHash = #xhash{node_cache=Cache}) ->
-  XHash#xhash{node_cache=dict:store(Pointer, Header, Cache)}.
+  memcache:set(Cache, integer_to_list(Pointer), Header),
+  XHash.
     
 index_cache_get(Bucket, XHash = #xhash{idx_cache=Cache,index=Index}) ->
   N = (Bucket * 8) div ?CHUNK_SIZE,
   BytePos = (Bucket * 8) rem ?CHUNK_SIZE,
-  case dict:find(N, Cache) of
+  case memcache:get(Cache, integer_to_list(N)) of
     {ok, Binary} when BytePos >= byte_size(Binary) -> 
       ?debug("index_cache_get(~w, XHash) N ~w BytePos ~w cache miss", [Bucket, N, BytePos]),
       not_found;
     {ok, <<_:BytePos/binary, Pointer:64/integer, _/binary>>}  ->
       ?debug("index_cache_get(~w, XHash) N ~w BytePos ~w Pointer ~w cache hit", [Bucket, N, BytePos, Pointer]),
       Pointer;
-    error -> 
+    _ -> 
       ?debug("index_cache_get(~w, XHash) N ~w BytePos ~w cache miss", [Bucket, N, BytePos]),
       not_found
   end.
@@ -472,23 +473,23 @@ index_cache_set(Bucket, Pointer, XHash = #xhash{idx_cache=Cache,index=Index}) ->
   Chunk = N * ?CHUNK_SIZE,
   BytePos = (Bucket * 8) rem ?CHUNK_SIZE,
   ?debug("index_cache_set(~w, ~w, XHash) N ~w Chunk ~w BytePos ~w", [Bucket, Pointer, N, Chunk, BytePos]),
-  NewBinary = case dict:find(N, Cache) of
+  NewBinary = case memcache:get(Cache, integer_to_list(N)) of
     {ok, Binary} when BytePos >= byte_size(Binary) ->
       NewPos = (BytePos - byte_size(Binary))*8,
       <<Binary/binary, 0:NewPos/integer, Pointer:64/integer>>;
     {ok, <<Before:BytePos/binary, _:8/binary, After/binary>>} -> 
       <<Before/binary, Pointer:64/integer, After/binary>>;
-    error ->
+    _ ->
       case file:pread(Index, Chunk + ?INDEX_HEADER_SIZE, ?CHUNK_SIZE) of
         {ok, <<Before:BytePos/binary, _:8/binary, After/binary>>} -> <<Before/binary, Pointer:64/integer, After/binary>>;
         eof -> eof
       end
   end,
-  Cache1 = if
+  if
     NewBinary == eof -> Cache;
-    true -> dict:store(N, NewBinary, Cache)
+    true -> memcache:set(Cache, integer_to_list(N), NewBinary)
   end,
-  XHash#xhash{idx_cache=Cache1}.
+  XHash.
 
 initialize_or_verify(Hash = #xhash{data=Data,index=Index}) ->
   case {read_data_header(Data), read_index_header(Index)} of
@@ -543,20 +544,20 @@ initialize(Hash = #xhash{data=Data,index=Index}) ->
   end.
 
 init_index_cache(XHash = #xhash{capacity=Capacity,index=Index}) ->
-  Dict = dict:new(),
-  Dict1 = lists:foldl(fun(N, D) ->
+  {ok, Memcache} = memcache:start(8),
+  lists:foldl(fun(N, D) ->
       Chunk = N * ?CHUNK_SIZE,
       if
         Chunk >= Capacity -> D;
         true ->
           case file:pread(Index, Chunk + ?INDEX_HEADER_SIZE, ?CHUNK_SIZE) of
-            {ok, Binary} -> dict:store(N, Binary, D);
+            {ok, Binary} -> memcache:set(Memcache, integer_to_list(N), Binary);
             eof -> D
           end
       end
-    end, Dict, lists:seq(0,?MAX_CHUNKS-1)),
-  XHash#xhash{idx_cache=Dict1}.
+    end, Memcache, lists:seq(0,?MAX_CHUNKS-1)),
+  XHash#xhash{idx_cache=Memcache}.
   
 init_node_cache(XHash) ->
-  Dict = dict:new(),
-  XHash#xhash{node_cache=Dict}.
+  {ok, Memcache} = memcache:start(8),
+  XHash#xhash{node_cache=Memcache}.
