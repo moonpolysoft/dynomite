@@ -1,6 +1,6 @@
 This is dynomite.  It is a clone of the amazon dynamo key value store written in Erlang.
 
-http://www.allthingsdistributed.com/2007/10/amazons_dynamo.html
+[Amazon's Dynamo](http://www.allthingsdistributed.com/2007/10/amazons_dynamo.html)
 
 To use:
 
