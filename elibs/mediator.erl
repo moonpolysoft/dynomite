@@ -23,6 +23,7 @@
          terminate/2, code_change/3]).
 
 -include("config.hrl").
+-include("chunk_size.hrl").
 
 -record(mediator, {config}).
   
@@ -160,7 +161,13 @@ internal_put(Key, Context, Value, #mediator{config=Config}) ->
   Part = membership:partition_for_key(Key),
   Incremented = vector_clock:increment(node(), Context),
   MapFun = fun(Server) ->
-    storage_server:put({list_to_atom(lists:concat([storage_, Part])), Server}, Key, Incremented, Value)
+    Pid = {list_to_atom(lists:concat([storage_, Part])), Server},
+    Size = lib_misc:byte_size(Value),
+    if
+      (Size > ?CHUNK_SIZE) and (Server /= node()) -> 
+        storage_server:stream(Pid, Key, Incremented, Value);
+      true -> storage_server:put(Pid, Key, Incremented, Value)
+    end
   end,
   {Good, Bad} = pcall(MapFun, Servers, W),
   if
