@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/6, start_link/7, get/2, diff/2, get/3, stream/4, put/4, put/5, fold/3, sync/2, get_tree/1, rebuild_tree/1, has_key/2, has_key/3, delete/2, delete/3, close/1, close/2]).
+-export([start_link/6, start_link/7, get/2, diff/2, get/3, put/4, put/5, fold/3, sync/2, get_tree/1, rebuild_tree/1, has_key/2, has_key/3, delete/2, delete/3, close/1, close/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -48,20 +48,20 @@ get(Name, Key) ->
 	get(Name, Key, infinity).
 	
 get(Name, Key, Timeout) ->
-  gen_server:call(Name, {get, Key}, Timeout).
-	
-% we want to pre-arrange a rendevous so as to not block the storage server
-% blocking whomever is local is perfectly ok
-stream(Name, Key, Context, Value) ->
-  Pid = gen_server:call(Name, streaming_put),
-  stream:reply(Pid, {{Key, Context}, lib_misc:listify(Value)}),
-  ok.
+  case gen_server:call(Name, {get, Key}, Timeout) of
+    {stream, Pid} -> stream:recv(Pid, 200);
+    Results -> Results
+  end.
 	
 put(Name, Key, Context, Value) ->
 	put(Name, Key, Context, Value, infinity).
 	
 put(Name, Key, Context, Value, Timeout) ->
-	gen_server:call(Name, {put, Key, Context, Value}, Timeout).
+  Size = lib_misc:byte_size(Value),
+  if
+    (Size > ?CHUNK_SIZE) and (node(Name) /= node()) -> stream(Name, Key, Context, Value);
+    true -> int_put(Name, Key, Context, Value, Timeout)
+  end.
 	
 has_key(Name, Key) ->
 	has_key(Name, Key, infinity).
@@ -269,6 +269,16 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+
+int_put(Name, Key, Context, Value, Timeout) ->
+  gen_server:call(Name, {put, Key, Context, Value}, Timeout).
+  
+% we want to pre-arrange a rendevous so as to not block the storage server
+% blocking whomever is local is perfectly ok
+stream(Name, Key, Context, Value) ->
+  Pid = gen_server:call(Name, streaming_put),
+  stream:reply(Pid, {{Key, Context}, lib_misc:listify(Value)}),
+  ok.
 
 internal_put(Key, Context, Values, Tree, Table, Module, State) ->
   TreeFun = fun() -> dmerkle:update(Key, Values, Tree) end,
