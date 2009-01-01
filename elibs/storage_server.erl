@@ -22,6 +22,8 @@
 
 -record(storage, {module,table,name,tree,dbkey,blocksize}).
 
+-include("chunk_size.hrl").
+
 -ifdef(TEST).
 -include("etest/storage_server_test.erl").
 -endif.
@@ -136,14 +138,22 @@ init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
 %% @doc Handling call messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_call({get, Key}, _From, State = #storage{module=Module,table=Table}) ->
+handle_call({get, Key}, {RemotePid, _Tag}, State = #storage{module=Module,table=Table}) ->
   Result = (catch Module:get(sanitize_key(Key), Table)),
   case Result of
     {ok, {Context, Values}} -> 
-      stats_server:request(get, lists:foldl(fun(Bin, Acc) -> Acc + byte_size(Bin) end, 0, Values));
-    _ -> ok
-  end,
-	{reply, Result, State};
+      Size = lists:foldl(fun(Bin, Acc) -> Acc + byte_size(Bin) end, 0, Values),
+      stats_server:request(get, Size),
+      if
+        (Size > ?CHUNK_SIZE) and (node(RemotePid) /= node()) ->
+          Pid = spawn_link(fun() ->
+              stream:reply(RemotePid, {Context, Values})
+            end),
+          {reply, {stream, Pid}, State};
+        true -> {reply, Result, State}
+      end;
+    _ -> {reply, Result, State}
+  end;
 	
 handle_call({put, Key, Context, ValIn}, _From, State = #storage{module=Module,table=Table,tree=Tree}) ->
   Values = lib_misc:listify(ValIn),
