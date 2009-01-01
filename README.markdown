@@ -10,3 +10,5 @@ To use:
 	git submodule update
 	rake
 	./bin/dynomite start -m ~/some/data/dir -n 1 -r 1 -w 1
+	
+[Dynomite Mailing List](http://groups.google.com/group/dynomite-users)
