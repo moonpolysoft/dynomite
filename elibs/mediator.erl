@@ -173,7 +173,6 @@ internal_get(Key, #mediator{config=Config}) ->
   Servers = membership:nodes_for_key(Key),
   Part = membership:partition_for_key(Key),
   Name = list_to_atom(lists:concat([storage_, Part])),
-
   MapFun = fun(Server) ->
     storage_server:get({Name, Server}, Key)
   end,

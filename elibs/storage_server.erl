@@ -22,6 +22,8 @@
 
 -record(storage, {module,table,name,tree,dbkey,blocksize}).
 
+-include("chunk_size.hrl").
+
 -ifdef(TEST).
 -include("etest/storage_server_test.erl").
 -endif.
@@ -48,13 +50,20 @@ get(Name, Key) ->
     ?MODULE:get(Name, Key, infinity).
 	
 get(Name, Key, Timeout) ->
-    gen_server:call(Name, {get, Key}, Timeout).
+  case gen_server:call(Name, {get, Key}, Timeout) of
+    {stream, Pid, Ref} -> stream:recv(Pid, Ref, 200);
+    Results -> Results
+  end.
 	
 put(Name, Key, Context, Value) ->
     ?MODULE:put(Name, Key, Context, Value, infinity).
 	
 put(Name, Key, Context, Value, Timeout) ->
-	gen_server:call(Name, {put, Key, Context, Value}, Timeout).
+  Size = lib_misc:byte_size(Value),
+  if
+    (Size > ?CHUNK_SIZE) and (node(Name) /= node()) -> stream(Name, Key, Context, Value);
+    true -> int_put(Name, Key, Context, Value, Timeout)
+  end.
 	
 has_key(Name, Key) ->
 	has_key(Name, Key, infinity).
@@ -141,14 +150,23 @@ init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
 %% @doc Handling call messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_call({get, Key}, _From, State = #storage{module=Module,table=Table}) ->
+handle_call({get, Key}, {RemotePid, _Tag}, State = #storage{module=Module,table=Table}) ->
   Result = (catch Module:get(sanitize_key(Key), Table)),
   case Result of
     {ok, {Context, Values}} -> 
-      stats_server:request(get, lists:foldl(fun(Bin, Acc) -> Acc + byte_size(Bin) end, 0, Values));
-    _ -> ok
-  end,
-	{reply, Result, State};
+      Size = lib_misc:byte_size(Values),
+      stats_server:request(get, Size),
+      if
+        (Size > ?CHUNK_SIZE) and (node(RemotePid) /= node()) ->
+          Ref = make_ref(),
+          Pid = spawn_link(fun() ->
+              stream:send(RemotePid, Ref, {Context, Values})
+            end),
+          {reply, {stream, Pid, Ref}, State};
+        true -> {reply, Result, State}
+      end;
+    _ -> {reply, Result, State}
+  end;
 	
 handle_call({put, Key, Context, ValIn}, _From, State = #storage{module=Module,table=Table,tree=Tree}) ->
     %% ?debugFmt("handle_call put ~p", [Key]),
@@ -184,6 +202,17 @@ handle_call({fold, Fun, AccIn}, _From, State = #storage{module=Module,table=Tabl
   
 handle_call(info, _From, State = #storage{module=Module, table=Table}) ->
   {reply, State, State};
+  
+% spawn so that we don't block the storage server
+handle_call({streaming_put, Ref}, {RemotePid, _Tag}, State) ->
+  SS = self(),
+  LocalPid = spawn_link(fun() -> 
+      case stream:recv(RemotePid, Ref, 200) of
+        {ok, {{Key, Context}, Values}} -> storage_server:put(SS, Key, Context, Values);
+        {error, timeout} -> {error, timeout}
+      end
+    end),
+  {reply, LocalPid, State};
   
 handle_call({swap_tree, NewDmerkle}, _From, State = #storage{tree=Dmerkle}) ->
   {reply, ok, State#storage{tree=dmerkle:swap_tree(Dmerkle, NewDmerkle)}};
@@ -247,6 +276,17 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+
+int_put(Name, Key, Context, Value, Timeout) ->
+  gen_server:call(Name, {put, Key, Context, Value}, Timeout).
+  
+% we want to pre-arrange a rendevous so as to not block the storage server
+% blocking whomever is local is perfectly ok
+stream(Name, Key, Context, Value) ->
+  Ref = make_ref(),
+  Pid = gen_server:call(Name, {streaming_put, Ref}),
+  stream:send(Pid, Ref, {{Key, Context}, lib_misc:listify(Value)}),
+  ok.
 
 internal_put(Key, Context, Values, Tree, Table, Module, State) ->
   TreeFun = fun() ->
