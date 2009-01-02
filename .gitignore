@@ -7,3 +7,5 @@ deps/thrift/ebin
 *.pyc
 *.egg
 *.egg-info
+etest/log/*
+test.config
