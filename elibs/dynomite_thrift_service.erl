@@ -1,4 +1,4 @@
--module(thrift_service).
+-module(dynomite_thrift_service).
 
 -export([start_link/1, stop/1,
          handle_function/2,

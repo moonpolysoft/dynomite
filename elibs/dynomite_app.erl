@@ -43,6 +43,12 @@ start(_Type, []) ->
 		undefined -> process_arguments([r, w, n, q, directory, blocksize, port, storage_mod, thrift_port])
 	end,
 	Options = process_options([web_port]),
+  case init:get_argument(profile) of
+      error ->
+          ok;
+      _ ->
+          prof_start()
+  end,
   dynomite_sup:start_link(Config, Options).
 
 %%--------------------------------------------------------------------
@@ -53,6 +59,7 @@ start(_Type, []) ->
 %% @end 
 %%--------------------------------------------------------------------
 stop({_, Sup}) ->
+    prof_stop(),
   exit(Sup, shutdown),
   ok.
 
@@ -92,3 +99,12 @@ config_replace([Field | _], Field, Tuple, Value, Index) ->
   
 config_replace([_|Fields], Field, Tuple, Value, Index) ->
   config_replace(Fields, Field, Tuple, Value, Index+1).
+
+
+prof_start() ->
+    error_logger:info_msg("Profiling"),
+    fprof:trace(start).
+
+prof_stop() ->
+    error_logger:info_msg("Stop profiling"),
+    fprof:trace(stop).

@@ -41,7 +41,7 @@ OptionParser.new do |opts|
   end
   
   opts.on('-m', "--data [DATADIR]", "data directory") do |dir|
-    options[:directory] = %Q(-dynomite directory '"#{dir}"')
+    options[:directory] = %Q(-dynomite directory '"#{dir}"' -mnesia dir '"#{dir}"')
   end
   
   opts.on('-n', "--replication [N]", "replication factor") do |n|
@@ -62,6 +62,10 @@ OptionParser.new do |opts|
   
   opts.on('-d', "--detached", "run detached from the shell") do |detached|
     options[:detached] = '-detached'
+  end
+
+  opts.on('-z', "--profile", "run profiler") do |detached|
+    options[:profile] = '-profile 1'
   end
 end.parse!
 
@@ -92,6 +96,7 @@ str = "erl \
   #{options[:blocksize]} \
   -setcookie #{cookie} \
   -run dynomite start \
-  #{options[:detached]}"
+  #{options[:detached]} \
+  #{options[:profile]}"
 puts str
 exec str

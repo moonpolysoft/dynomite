@@ -4,3 +4,6 @@
 erl_crash.dump
 *.beam
 deps/thrift/ebin
+*.pyc
+*.egg
+*.egg-info

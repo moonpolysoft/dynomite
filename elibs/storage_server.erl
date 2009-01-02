@@ -26,6 +26,8 @@
 -include("etest/storage_server_test.erl").
 -endif.
 
+-include("profile.hrl").
+
 %%====================================================================
 %% API
 %%====================================================================
@@ -43,13 +45,13 @@ start_link(StorageModule, DbKey, Name, Min, Max, BlockSize, OldNode) ->
   {ok, Pid}.
 
 get(Name, Key) ->
-	get(Name, Key, infinity).
+    ?MODULE:get(Name, Key, infinity).
 	
 get(Name, Key, Timeout) ->
-  gen_server:call(Name, {get, Key}, Timeout).
+    gen_server:call(Name, {get, Key}, Timeout).
 	
 put(Name, Key, Context, Value) ->
-	put(Name, Key, Context, Value, infinity).
+    ?MODULE:put(Name, Key, Context, Value, infinity).
 	
 put(Name, Key, Context, Value, Timeout) ->
 	gen_server:call(Name, {put, Key, Context, Value}, Timeout).
@@ -120,10 +122,13 @@ close(Name, Timeout) ->
 %% @end 
 %%--------------------------------------------------------------------
 init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
-  process_flag(trap_exit, true),
-  {ok, Table} = StorageModule:open(DbKey,Name),
-  Tree = dmerkle:open(lists:concat([DbKey, "/dmerkle"]), BlockSize),
-  {ok, #storage{module=StorageModule,dbkey=DbKey,blocksize=BlockSize,table=Table,name=Name,tree=Tree}}.
+    %% ?debugMsg("storage_server init"),
+    process_flag(trap_exit, true),
+    {ok, Table} = StorageModule:open(DbKey,Name),
+    %% ?debugFmt("storage table ~p", [Table]),
+    Tree = dmerkle:open(lists:concat([DbKey, "/dmerkle"]), BlockSize),
+    %% ?debugFmt("dmerkle tree ~p", [Tree]),
+    {ok, #storage{module=StorageModule,dbkey=DbKey,blocksize=BlockSize,table=Table,name=Name,tree=Tree}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -146,6 +151,7 @@ handle_call({get, Key}, _From, State = #storage{module=Module,table=Table}) ->
 	{reply, Result, State};
 	
 handle_call({put, Key, Context, ValIn}, _From, State = #storage{module=Module,table=Table,tree=Tree}) ->
+    %% ?debugFmt("handle_call put ~p", [Key]),
   Values = lib_misc:listify(ValIn),
   case (catch Module:get(sanitize_key(Key), Table)) of
     {ok, {ReadContext, ReadValues}} ->
@@ -243,8 +249,16 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 
 internal_put(Key, Context, Values, Tree, Table, Module, State) ->
-  TreeFun = fun() -> dmerkle:update(Key, Values, Tree) end,
-  TableFun = fun() -> Module:put(sanitize_key(Key), Context, Values, Table) end,
+  TreeFun = fun() ->
+      ?prof(dmerkle_update),
+      dmerkle:update(Key, Values, Tree),
+      ?prof(dmerkle_update)
+    end,
+  TableFun = fun() -> 
+      ?prof(put),
+      Module:put(sanitize_key(Key), Context, Values, Table),
+      ?prof(put)
+    end,
   [UpdatedTree, TableResult] = lib_misc:pmap(fun(F) -> F() end, [TreeFun, TableFun], 2),
   case TableResult of
     {ok, ModifiedTable} ->

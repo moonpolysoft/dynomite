@@ -205,9 +205,7 @@ internal_delete(Key, #mediator{config=Config}) ->
   MapFun = fun(Server) ->
     storage_server:delete({list_to_atom(lists:concat([storage_, Part])), Server}, Key, 10000)
   end,
-  Blah = pcall(MapFun, Servers, W),
-  {Good, Bad} = Blah,
-  % ok = Blah,
+  {Good, Bad} = pcall(MapFun, Servers, W),
   if
     length(Good) >= W -> {ok, length(Good)};
     true -> {failure, error_message(Good, Bad, N, W)}

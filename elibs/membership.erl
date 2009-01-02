@@ -43,7 +43,14 @@ start_link(Config) ->
   gen_server:start_link({local, membership}, ?MODULE, Config, []).
 
 join_node(JoinTo, Me) ->
-	gen_server:call({membership, JoinTo}, {join_node, Me}).
+	case catch(gen_server:call({membership, JoinTo}, {join_node, Me})) of
+        {'EXIT', R} ->
+            error_logger:info_msg("join_node call at ~p failed: ~p", 
+                                  [JoinTo, R]),
+            failed;
+        Other ->
+            Other
+    end.
 	
 nodes_for_partition(Partition) ->
   gen_server:call(membership, {nodes_for_partition, Partition}).
@@ -110,21 +117,30 @@ fire_gossip({A1, A2, A3}) ->
 %% @end 
 %%--------------------------------------------------------------------
 init(ConfigIn) ->
-  process_flag(trap_exit, true),
-  Nodes = erlang:nodes(),
-  {ok, State} = case load_state(ConfigIn) of
-    {ok, Value} -> 
-      error_logger:info_msg("loading membership from disk~n", []),
-      configuration:set_config(Value#membership.config),
-      {ok, Value};
-    _ -> if
-		  length(Nodes) > 0 -> 
-  		  Node = random_node(Nodes),
-  		  error_logger:info_msg("joining node ~p~n", [Node]),
-  		  join_node(Node, node());
-  		true -> {ok, create_initial_state(ConfigIn)}
-  	end
-  end,
+    process_flag(trap_exit, true),
+    Nodes = erlang:nodes(),
+    {ok, State} = 
+        case load_state(ConfigIn) of
+            {ok, Value} -> 
+                error_logger:info_msg("loading membership from disk~n", []),
+                configuration:set_config(Value#membership.config),
+                {ok, Value};
+            _ ->
+                if
+                    length(Nodes) > 0 -> 
+                        Node = random_node(Nodes),
+                        error_logger:info_msg("joining node ~p~n", [Node]),
+                        case join_node(Node, node()) of
+                            {ok, JoinedState} ->
+                                {ok, JoinedState};
+                            Other ->
+                                error_logger:info_msg("join_node ~p result ~p", [Node, Other]),
+                                {ok, create_initial_state(ConfigIn)}
+                        end;
+                    true -> 
+                        {ok, create_initial_state(ConfigIn)}
+                end
+        end,
   error_logger:info_msg("Loading storage servers.~n"),
 	reload_storage_servers(empty, State),
 	error_logger:info_msg("Loading sync servers.~n"),
