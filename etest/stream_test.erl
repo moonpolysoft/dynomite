@@ -12,12 +12,12 @@ simple_streaming_test() ->
   Receiver = spawn_link(fun() -> 
       receive
         {Ref, Sender} -> 
-          Results = recv(Sender, 200),
+          Results = recv(Sender, Ref, 1000),
           Parent ! {Ref, Results}
       end
     end),
   Sender = spawn_link(fun() ->
-      reply(Receiver, {context, [Bin]})
+      send(Receiver, Ref, {context, [Bin]})
     end),
   Receiver ! {Ref, Sender},
   {ok, {context, [Bin]}} = receive

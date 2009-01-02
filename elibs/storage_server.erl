@@ -49,7 +49,7 @@ get(Name, Key) ->
 	
 get(Name, Key, Timeout) ->
   case gen_server:call(Name, {get, Key}, Timeout) of
-    {stream, Pid} -> stream:recv(Pid, 200);
+    {stream, Pid, Ref} -> stream:recv(Pid, Ref, 200);
     Results -> Results
   end.
 	
@@ -153,10 +153,11 @@ handle_call({get, Key}, {RemotePid, _Tag}, State = #storage{module=Module,table=
       stats_server:request(get, Size),
       if
         (Size > ?CHUNK_SIZE) and (node(RemotePid) /= node()) ->
+          Ref = make_ref(),
           Pid = spawn_link(fun() ->
-              stream:reply(RemotePid, {Context, Values})
+              stream:send(RemotePid, Ref, {Context, Values})
             end),
-          {reply, {stream, Pid}, State};
+          {reply, {stream, Pid, Ref}, State};
         true -> {reply, Result, State}
       end;
     _ -> {reply, Result, State}
@@ -197,10 +198,10 @@ handle_call(info, _From, State = #storage{module=Module, table=Table}) ->
   {reply, State, State};
   
 % spawn so that we don't block the storage server
-handle_call(streaming_put, {RemotePid, _Tag}, State) ->
+handle_call({streaming_put, Ref}, {RemotePid, _Tag}, State) ->
   SS = self(),
   LocalPid = spawn_link(fun() -> 
-      case stream:recv(RemotePid, 200) of
+      case stream:recv(RemotePid, Ref, 200) of
         {ok, {{Key, Context}, Values}} -> storage_server:put(SS, Key, Context, Values);
         {error, timeout} -> {error, timeout}
       end
@@ -276,8 +277,9 @@ int_put(Name, Key, Context, Value, Timeout) ->
 % we want to pre-arrange a rendevous so as to not block the storage server
 % blocking whomever is local is perfectly ok
 stream(Name, Key, Context, Value) ->
-  Pid = gen_server:call(Name, streaming_put),
-  stream:reply(Pid, {{Key, Context}, lib_misc:listify(Value)}),
+  Ref = make_ref(),
+  Pid = gen_server:call(Name, {streaming_put, Ref}),
+  stream:send(Pid, Ref, {{Key, Context}, lib_misc:listify(Value)}),
   ok.
 
 internal_put(Key, Context, Values, Tree, Table, Module, State) ->
