@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% File:      untitled.erl
-%%% @author    Cliff Moon <> []
+%%% @author    Cliff Moon <cliff@powerset.com> []
 %%% @copyright 2008 Cliff Moon
 %%% @doc  Membership process keeps track of dynomite node membership.  Maintains a version history.
 %%%
@@ -9,7 +9,7 @@
 %%% @since 2008-03-30 by Cliff Moon
 %%%-------------------------------------------------------------------
 -module(membership).
--author('Cliff Moon').
+-author('cliff@powerset.com').
 
 -behaviour(gen_server).
 -define(VIRTUALNODES, 100).

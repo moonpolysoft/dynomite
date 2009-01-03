@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% File:      storage_server.erl
-%%% @author    Cliff Moon <> []
+%%% @author    Cliff Moon <cliff@powerset.com> []
 %%% @copyright 2008 Cliff Moon
 %%% @doc  
 %%%
@@ -9,7 +9,7 @@
 %%% @since 2008-04-02 by Cliff Moon
 %%%-------------------------------------------------------------------
 -module(storage_server).
--author('Cliff Moon').
+-author('cliff@powerset.com').
 
 -behaviour(gen_server).
 

@@ -9,7 +9,7 @@
 %%% @since 2008-07-18 by Cliff Moon
 %%%-------------------------------------------------------------------
 -module(configuration).
--author('').
+-author('cliff@powerset.com').
 
 -behaviour(gen_server).
 

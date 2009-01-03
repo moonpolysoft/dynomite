@@ -1,6 +1,6 @@
 %%%-------------------------------------------------------------------
 %%% File:      stream.erl
-%%% @author    Cliff Moon <> []
+%%% @author    Cliff Moon <cliff@powerset.com> []
 %%% @copyright 2009 Cliff Moon
 %%% @doc  
 %%%

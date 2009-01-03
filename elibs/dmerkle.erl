@@ -9,7 +9,7 @@
 %%% @since 2008-08-03 by Cliff Moon
 %%%-------------------------------------------------------------------
 -module(dmerkle).
--author('cliff moon').
+-author('cliff@powerset.com').
 
 -record(dmerkle, {file, block, root, d, filename}).
 

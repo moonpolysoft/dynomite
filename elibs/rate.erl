@@ -9,7 +9,7 @@
 %%% @since 2008-08-27 by Cliff Moon
 %%%-------------------------------------------------------------------
 -module(rate).
--author('cliff@moonpolysoft.com').
+-author('cliff@powerset.com').
 
 -behaviour(gen_server).
 

@@ -9,7 +9,7 @@
 %%% @since 2008-07-27 by Cliff Moon
 %%%-------------------------------------------------------------------
 -module(commands).
--author('cliff moon').
+-author('cliff@powerset.com').
 
 %% API
 -export([start/0]).

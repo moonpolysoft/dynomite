@@ -11,7 +11,7 @@
 %%% @since 2008-04-12 by Cliff Moon
 %%%-------------------------------------------------------------------
 -module(mediator).
--author('cliff moon').
+-author('cliff@powerset.com').
 
 -behaviour(gen_server).
 

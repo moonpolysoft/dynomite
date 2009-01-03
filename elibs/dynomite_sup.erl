@@ -9,7 +9,7 @@
 %%% @since 2008-06-27 by Cliff Moon
 %%%-------------------------------------------------------------------
 -module(dynomite_sup).
--author('cliff moon').
+-author('cliff@powerset.com').
 
 -behaviour(supervisor).
 
