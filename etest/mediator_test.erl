@@ -1,207 +1,67 @@
 -include_lib("eunit.hrl").
+ 
 
-init_integrated(Good, Bad) ->
-    GoodNodes = start_nodes(dict_storage, Good),
-    BadNodes = start_nodes(fail_storage, Bad),
-    wait(500),
-    Nodes = jointo(GoodNodes ++ BadNodes),
-    wait(500),
-    Nodes.
+init_integrated(Good, Bad, Config) ->
+  process_flag(trap_exit, true),
+  {ok, _} = configuration:start_link(Config),
+  GoodServers = start_storage_servers(dict_storage, good_store, Good, []),
+  BadServers = start_storage_servers(fail_storage, bad_store, Bad, []),
+  {ok, MockMem} = mock_genserver:start_link({local, membership}),
+  mock_genserver:expects_call(MockMem, {servers_for_key, unbound}, fun(_, _) -> GoodServers ++ BadServers end),
+  {ok, _} = mediator:start_link(Config).
   
-stop_integrated(Nodes) ->
-    [ slave:stop(N) || N <- Nodes ].
+stop_integrated(Good, Bad) ->
+  ok = stop_storage_servers(bad_store, Bad),
+  ok = stop_storage_servers(good_store, Good),
+  configuration:stop(),
+  receive {'EXIT', Pid, Val} -> ok end,
+  mediator:stop(),
+  mock_genserver:stop(membership).
   
-start_nodes(Module, Num) ->
-    start_nodes(Module, Num, []).
-
-start_nodes(_Module, 0, Nodes) ->
-    Nodes;
-start_nodes(Module, N, Nodes) ->
-    Name = list_to_atom(
-             "mediator_test_" ++ 
-             atom_to_list(Module) ++
-             integer_to_list(N)),
-    Args = node_args(N),
-    Args1 = Args ++ 
-        " -dynomite storage_mod " ++ atom_to_list(Module) ++
-        " -run dynomite start",
-    {ok, Node} = slave:start(localhost, Name, Args1),
-    ?debugFmt("Started slave node ~p", [Node]),
-    start_nodes(Module, N - 1, [Node|Nodes]).
-
-
-jointo([N|Others]) ->
-    jointo(N, Others, []).
-
-jointo(Main, [], Nodes) ->
-    [Main|Nodes];
-jointo(Main, [O|Others], Nodes) ->
-    rpc:call(O, membership, join_node, [Main, O]),
-    jointo(Main, Others, [O|Nodes]).
-
-node_args(N) ->
-    node_args(N, [boot, pz, pa, priv_dir], []).
-
-node_args(N, [], Args) ->
-    Args ++ 
-        " -dynomite port " ++ integer_to_list(11222 + N) ++
-        " -dynomite thrift_port " ++ integer_to_list(9200 + N);
-node_args(N, [priv_dir|Rest], Args) ->
-    {ok, [[Pd]]} = init:get_argument(priv_dir),
-    DynDir =  filename:join(Pd, "mediator." ++ uniq(N)),
-    filelib:ensure_dir(filename:join(DynDir, "dummy")),
-    node_args(N, Rest, Args ++ " -dynomite directory '\"" ++ DynDir ++ "\"'" ++
-              " -sasl sasl_error_logger '{file, \"" ++ 
-              filename:join(DynDir, "sasl.log") ++ "\"}'" ++
-              " -kernel error_logger '{file, \"" ++
-              filename:join(DynDir, "kernel.log") ++ "\"}'");
-node_args(N, [A|Rest], Args) when A =:= pa orelse A =:= pz ->
-    case arg_val(A) of 
-        undefined ->
-            node_args(N, Rest, Args);
-        Val ->
-            Arg = string:join(
-                    [root_path(P) || P <- Val],
-                    " "),
-            node_args(N, Rest, Args ++ " -" ++ atom_to_list(A) ++ " " ++ Arg)
-    end;
-node_args(N, [A|Rest], Args) ->
-    case arg_val(A) of
-        undefined ->
-            node_args(N, Rest, Args);
-        Val ->
-            Arg = string:join(Val, " "),
-            node_args(N, Rest, Args ++ " -" ++ atom_to_list(A) ++ " " ++ Arg)
-    end.
-            
-
-arg_val(A) ->
-    %% init:get_argument returns lists of lists of lists, we don't need that
-    %% proplists:get_value returns just a list of lists which is easier
-    %% to work with
-    case proplists:get_value(A, init:get_arguments()) of
-        undefined ->
-            undefined;
-        Val ->
-            Val
-    end.
-
-root_path(P) ->
-    Root = filename:dirname(t:config(test_dir)),
-    filename:absname(filename:join(Root, P)).
-        
-all_servers_working_test_() ->
-    [{setup, local,
-      fun() ->
-              init_integrated(3, 0)
-      end,
-      fun(Nodes) ->
-              stop_integrated(Nodes)
-      end,
-      fun([N|_Nodes]) ->
-              [?_assertEqual({ok, 2}, 
-                             rpc:call(N, mediator, 
-                                      put, [<<"key1">>, [], <<"value1">>])),
-               ?_assertMatch({ok, {_, [<<"value1">>]}},
-                             rpc:call(N, mediator, get, [<<"key1">>])),
-               ?_assertEqual({ok, {true, 2}}, 
-                             rpc:call(N, mediator, has_key, [<<"key1">>])),
-               ?_assertEqual({ok, 2}, 
-                             rpc:call(N, mediator, delete, [<<"key1">>])),
-               ?_assertEqual({ok, {false, 2}}, 
-                             rpc:call(N, mediator, has_key, [<<"key1">>])),
-               ?_assertEqual({ok, not_found}, 
-                             rpc:call(N, mediator, get, [<<"key1">>]))
-              ]
-      end      
-     }].
+start_storage_servers(_Module, _Name, 0, Servers) -> Servers;
+start_storage_servers(Module, Name, N, Servers) ->
+  {ok, Pid} = storage_server:start_link(Module, ok, list_to_atom(lists:concat([Name, N])), 0, 0, undefined),
+  start_storage_servers(Module, Name, N-1, [Pid|Servers]).
   
-one_bad_server_test_() ->
-    [{setup, local,
-      fun() ->
-              init_integrated(2, 1)
-      end,
-      fun(Nodes) ->
-              stop_integrated(Nodes)
-      end,
-      fun([N|_Nodes]) ->
-              [?_assertEqual({ok, 2},
-                             rpc:call(N, mediator,
-                                      put, [<<"key1">>, [], <<"value1">>])),
-               ?_assertMatch({ok, {_, [<<"value1">>]}},
-                             rpc:call(N, mediator, 
-                                      get, [<<"key1">>])),
-               ?_assertEqual({ok, {true, 2}},
-                             rpc:call(N, mediator, has_key, [<<"key1">>])),
-               ?_assertEqual({ok, 2},
-                             rpc:call(N, mediator, delete, [<<"key1">>])),
-               ?_assertEqual({ok, {false, 2}},
-                             rpc:call(N, mediator, has_key, [<<"key1">>])),
-               ?_assertEqual({ok, not_found},
-                             rpc:call(N, mediator, get, [<<"key1">>]))
-              ]
-      end
-     }].
+stop_storage_servers(_Name, 0) -> ok;
+stop_storage_servers(Name, N) ->
+  storage_server:close(list_to_atom(lists:concat([Name, N]))),
+  receive {'EXIT', Pid, Val} -> ok end,
+  stop_storage_servers(Name, N-1).
   
-two_bad_servers_test_() ->
-    [{setup, local,
-      fun() ->
-              init_integrated(1, 2)
-      end,
-      fun(Nodes) ->
-              stop_integrated(Nodes)
-      end,
-      fun([N|_Nodes]) ->
-              [?_assertMatch({failure, _},
-                             rpc:call(N, mediator, 
-                                      put, [<<"key1">>, [], <<"value1">>])),
-               ?_assertMatch({failure, _},
-                             rpc:call(N, mediator, get, [<<"key1">>])),
-               ?_assertMatch({failure, _},
-                             rpc:call(N, mediator, delete, [<<"key1">>])),
-               ?_assertMatch({failure, _},
-                             rpc:call(N, mediator, has_key, [<<"key1">>]))
-               ]
-      end
-     }].
+all_servers_working_test() ->
+  init_integrated(3, 0, #config{n=3,r=2,w=2,q=1}),
+  % we get back 2 because we bank out before the 3rd can come back
+  ?assertEqual({ok, 2}, mediator:put(<<"key1">>, [], <<"value1">>)),
+  {ok, {_, [<<"value1">>]}} = mediator:get(<<"key1">>),
+  ?assertEqual({ok, {true, 2}}, mediator:has_key(<<"key1">>)),
+  ?assertEqual({ok, 2}, mediator:delete(<<"key1">>)),
+  ?assertEqual({ok, {false, 2}}, mediator:has_key(<<"key1">>)),
+  ?assertEqual({ok, not_found}, mediator:get(<<"key1">>)),
+  stop_integrated(3, 0).
   
-three_bad_servers_test_() ->
-    [{setup, local,
-      fun() ->
-              init_integrated(0, 3)
-      end,
-      fun(Nodes) ->
-              stop_integrated(Nodes)
-      end,
-      fun([N|_Nodes]) ->
-              [?_assertMatch({failure, _},
-                             rpc:call(N, mediator, 
-                                      put, [<<"key1">>, [], <<"value1">>])),
-               ?_assertMatch({failure, _},
-                             rpc:call(N, mediator, get, [<<"key1">>])),
-               ?_assertMatch({failure, _},
-                             rpc:call(N, mediator, delete, [<<"key1">>])),
-               ?_assertMatch({failure, _},
-                             rpc:call(N, mediator, has_key, [<<"key1">>]))
-               ]
-      end
-     }].
-               
-
-%% Internal
-db_key(Name) ->
-    Fpath =  filename:join(
-               [t:config(priv_dir), "mediator", atom_to_list(Name)]),
-    filelib:ensure_dir(filename:join(Fpath, "dmerkle")),
-    Fpath.
-
-wait(Ms) ->
-    receive
-        after 
-            Ms ->
-                ok
-        end.
-
-uniq(N) ->
-    {M, S, Ms} = erlang:now(),
-    io_lib:format("~p.~p.~p", [N, S, Ms]).
+one_bad_server_test() ->
+  init_integrated(2, 1, #config{n=3,r=2,w=2,q=1}),
+  ?assertEqual({ok, 2}, mediator:put(<<"key1">>, [], <<"value1">>)),
+  {ok, {_Context, [<<"value1">>]}} = mediator:get(<<"key1">>),
+  ?assertEqual({ok, {true, 2}}, mediator:has_key(<<"key1">>)),
+  ?assertEqual({ok, 2}, mediator:delete(<<"key1">>)),
+  ?assertEqual({ok, {false, 2}}, mediator:has_key(<<"key1">>)),
+  ?assertEqual({ok, not_found}, mediator:get(<<"key1">>)),
+  stop_integrated(2, 1).
+  
+two_bad_servers_test() ->
+  init_integrated(1, 2, #config{n=3,r=2,w=2,q=1}),
+  {failure, _} = mediator:put(<<"key1">>, [], <<"value1">>),
+  {failure, _} = mediator:get(<<"key1">>),
+  {failure, _} = mediator:delete(<<"key1">>),
+  {failure, _} = mediator:has_key(<<"key1">>),
+  stop_integrated(1, 2).
+  
+three_bad_servers_test() ->
+  init_integrated(0, 3, #config{n=3,r=2,w=2,q=1}),
+  {failure, _} = mediator:put(<<"key1">>, [], <<"value1">>),
+  {failure, _} = mediator:get(<<"key1">>),
+  {failure, _} = mediator:delete(<<"key1">>),
+  {failure, _} = mediator:has_key(<<"key1">>),
+  stop_integrated(0, 3).

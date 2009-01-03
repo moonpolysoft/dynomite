@@ -135,7 +135,11 @@ init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
     process_flag(trap_exit, true),
     {ok, Table} = StorageModule:open(DbKey,Name),
     %% ?debugFmt("storage table ~p", [Table]),
-    Tree = dmerkle:open(lists:concat([DbKey, "/dmerkle"]), BlockSize),
+    
+    Tree = if
+      BlockSize == undefined -> undefined;
+      true -> dmerkle:open(lists:concat([DbKey, "/dmerkle"]), BlockSize)
+    end,
     %% ?debugFmt("dmerkle tree ~p", [Tree]),
     {ok, #storage{module=StorageModule,dbkey=DbKey,blocksize=BlockSize,table=Table,name=Name,tree=Tree}}.
 
@@ -228,7 +232,6 @@ handle_call(rebuild_tree, {FromPid, _Tag}, State = #storage{dbkey=DbKey,table=Ta
       gen_server:call(Parent, {swap_tree, FinalDmerkle})
     end),
   {reply, ok, State};
-  
 	
 handle_call(close, _From, State) ->
 	{stop, shutdown, ok, State}.
@@ -263,7 +266,10 @@ handle_info(_Info, State) ->
 %%--------------------------------------------------------------------
 terminate(_Reason, #storage{module=Module,table=Table,tree=Tree}) ->
   Module:close(Table),
-  dmerkle:close(Tree).
+  if
+    Tree == undefined -> ok;
+    true -> dmerkle:close(Tree)
+  end.
 
 %%--------------------------------------------------------------------
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
@@ -291,13 +297,18 @@ stream(Name, Key, Context, Value) ->
 internal_put(Key, Context, Values, Tree, Table, Module, State) ->
   TreeFun = fun() ->
       ?prof(dmerkle_update),
-      dmerkle:update(Key, Values, Tree),
-      ?prof(dmerkle_update)
+      T = if
+        Tree == undefined -> Tree;
+        true -> dmerkle:update(Key, Values, Tree)
+      end,
+      ?prof(dmerkle_update),
+      T
     end,
   TableFun = fun() -> 
       ?prof(put),
-      Module:put(sanitize_key(Key), Context, Values, Table),
-      ?prof(put)
+      T = Module:put(sanitize_key(Key), Context, Values, Table),
+      ?prof(put),
+      T
     end,
   [UpdatedTree, TableResult] = lib_misc:pmap(fun(F) -> F() end, [TreeFun, TableFun], 2),
   case TableResult of

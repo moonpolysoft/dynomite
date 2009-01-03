@@ -10,13 +10,13 @@ close(_Table) -> ok.
 fold(_, _, Acc) -> Acc.
 
 put(_Key, _Context, _Value, _Table) ->
-	{failure, "Sysadmin accidentally destroyed pager with a large hammer."}.
+	{'EXIT', "Sysadmin accidentally destroyed pager with a large hammer."}.
 	
 get(_Key, _Table) ->
-  {failure, "Groundskeepers stole the root password"}.
+  {'EXIT', "Groundskeepers stole the root password"}.
 	
 has_key(_Key, _Table) ->
-	{failure, "piezo-electric interference!"}.
+	{'EXIT', "piezo-electric interference!"}.
 	
 delete(_Key, _Table) ->
-  {failure, "Netscape has crashed"}.
+  {'EXIT', "Netscape has crashed"}.

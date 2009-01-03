@@ -15,7 +15,7 @@
 -define(VIRTUALNODES, 100).
 
 %% API
--export([start_link/1, join_node/2, nodes_for_partition/1, replica_nodes/1, nodes_for_key/1, partitions/0, nodes/0, state/0, old_partitions/0, partitions_for_node/2, fire_gossip/1, partition_for_key/1, stop/0, range/1]).
+-export([start_link/1, join_node/2, nodes_for_partition/1, replica_nodes/1, servers_for_key/1, nodes_for_key/1, partitions/0, nodes/0, state/0, old_partitions/0, partitions_for_node/2, fire_gossip/1, partition_for_key/1, stop/0, range/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -51,6 +51,9 @@ join_node(JoinTo, Me) ->
         Other ->
             Other
     end.
+	
+servers_for_key(Key) ->
+  gen_server:call(membership, {servers_for_key, Key}).
 	
 nodes_for_partition(Partition) ->
   gen_server:call(membership, {nodes_for_partition, Partition}).
@@ -217,6 +220,12 @@ handle_call({range, Partition}, _From, State) ->
 	
 handle_call({nodes_for_partition, Partition}, _From, State) ->
   {reply, int_nodes_for_partition(Partition, State), State};
+	
+handle_call({servers_for_key, Key}, _From, State) ->
+  Nodes = int_nodes_for_key(Key, State),
+  Part = int_partition_for_key(Key, State),
+  MapFun = fun(Node) -> {list_to_atom(lists:concat([storage_, Part])), Node} end,
+  {reply, lists:map(MapFun, Nodes), State};
 	
 handle_call({nodes_for_key, Key}, _From, State) ->
 	{reply, int_nodes_for_key(Key, State), State};

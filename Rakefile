@@ -9,6 +9,10 @@ ERLC_FLAGS = "+debug_info -W0 -I include -pa deps/mochiweb/ebin -I deps/mochiweb
 task :default => [:build_deps] do
   puts "building #{ENV['TEST']}"
   sh "erlc  #{ERLC_FLAGS} #{ENV['TEST'] ? ERLC_TEST_FLAGS : ''} elibs/*.erl gen-erl/*.erl"
+  if ENV['TEST']
+    files = Dir["etest/*.erl"].select {|d| d !~ /^.*_test.erl$/}
+    sh "erlc #{ERLC_FLAGS} #{ERLC_TEST_FLAGS} #{files.join(' ')}"
+  end
   # Dir["templates/*"].each do |template|
   #   sh %Q(erl -pz ebin -noshell -eval 'erltl:compile("#{template}", [{outdir, "ebin"}, debug_info, show_errors, show_warnings])' -s erlang halt)
   # end

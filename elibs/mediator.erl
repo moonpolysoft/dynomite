@@ -156,11 +156,10 @@ code_change(_OldVsn, State, _Extra) ->
 
 internal_put(Key, Context, Value, #mediator{config=Config}) ->
   {N,R,W} = unpack_config(Config),
-  Servers = membership:nodes_for_key(Key),
-  Part = membership:partition_for_key(Key),
+  Servers = membership:servers_for_key(Key),
   Incremented = vector_clock:increment(node(), Context),
   MapFun = fun(Server) ->
-    storage_server:put({list_to_atom(lists:concat([storage_, Part])), Server}, Key, Incremented, Value)
+    storage_server:put(Server, Key, Incremented, Value)
   end,
   {Good, Bad} = pcall(MapFun, Servers, W),
   if
@@ -170,11 +169,9 @@ internal_put(Key, Context, Value, #mediator{config=Config}) ->
   
 internal_get(Key, #mediator{config=Config}) ->
   {N,R,W} = unpack_config(Config),
-  Servers = membership:nodes_for_key(Key),
-  Part = membership:partition_for_key(Key),
-  Name = list_to_atom(lists:concat([storage_, Part])),
+  Servers = membership:servers_for_key(Key),
   MapFun = fun(Server) ->
-    storage_server:get({Name, Server}, Key)
+    storage_server:get(Server, Key)
   end,
   {Good, Bad} = pcall(MapFun, Servers, R),
   NotFound = resolve_not_found(Bad, R),
@@ -186,10 +183,9 @@ internal_get(Key, #mediator{config=Config}) ->
   
 internal_has_key(Key, #mediator{config=Config}) ->
   {N,R,W} = unpack_config(Config),
-  Servers = membership:nodes_for_key(Key),
-  Part = membership:partition_for_key(Key),
+  Servers = membership:servers_for_key(Key),
   MapFun = fun(Server) ->
-    storage_server:has_key({list_to_atom(lists:concat([storage_, Part])), Server}, Key)
+    storage_server:has_key(Server, Key)
   end,
   {Good, Bad} = pcall(MapFun, Servers, R),
   if
@@ -199,10 +195,9 @@ internal_has_key(Key, #mediator{config=Config}) ->
   
 internal_delete(Key, #mediator{config=Config}) ->
   {N,R,W} = unpack_config(Config),
-  Servers = membership:nodes_for_key(Key),
-  Part = membership:partition_for_key(Key),
+  Servers = membership:servers_for_key(Key),
   MapFun = fun(Server) ->
-    storage_server:delete({list_to_atom(lists:concat([storage_, Part])), Server}, Key, 10000)
+    storage_server:delete(Server, Key, 10000)
   end,
   {Good, Bad} = pcall(MapFun, Servers, W),
   if
@@ -250,7 +245,7 @@ strip_ok({ok, Val}) -> Val;
 strip_ok(Val) -> Val.
 
 error_message(Good, Bad, N, T) ->
-  io_lib:format("contacted ~p of ~p servers.  Needed ~p. Errors: ~w", [length(Good), N, T, Bad]).
+  lists:flatten(io_lib:format("contacted ~p of ~p servers.  Needed ~p. Errors: ~w", [length(Good), N, T, Bad])).
   
 unpack_config(#config{n=N,r=R,w=W}) ->
   {N, R, W}.
