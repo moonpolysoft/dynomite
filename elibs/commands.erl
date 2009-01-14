@@ -24,27 +24,32 @@
 %%--------------------------------------------------------------------
 
 start() ->
-  {Node, M, F, A} = case init:get_plain_arguments() of
-    [] -> io:format("Sorry, I don't know what you want.");
-    Args -> parse_args(Args)
-  end,
-  Results = rpc:call(Node, M, F, A),
-  io:format("results: ~p~n", [Results]),
-  timer:sleep(1000),
-  halt().
+  {Node, Module, Function, Arguments} = process_arguments([node, m, f, a]),
+  Result = rpc:call(Node, Module, Function, Arguments),
+  io:format("~p~n", [Result]).
+  
+process_arguments(Args) ->
+  process_arguments([], Args).
+  
+process_arguments(Res, []) ->
+  list_to_tuple(lists:reverse(Res));
+  
+process_arguments(Res, [Arg|Args]) ->
+  case init:get_argument(Arg) of
+    {ok, Lists} ->
+      ArgList = lists:flatten(lists:map(fun atomize/1, Lists)),
+      if
+        length(ArgList) == 1 -> 
+          [A] = ArgList,
+          process_arguments([A|Res], Args);
+        true ->
+          process_arguments([ArgList|Res], Args)
+      end;
+    error -> 
+      process_arguments([[]|Res], Args)
+  end.
+  
+atomize([E|L]) when is_list(E) ->
+  lists:map(fun atomize/1, [E|L]);
 
-%%====================================================================
-%% Internal functions
-%%====================================================================
-
-parse_args(Args) -> parse_args(Args, {}).
-
-parse_args([], {Node, M, F}) -> {Node, M, F, []};
-
-parse_args([], Tuple) -> Tuple;
-
-parse_args([Arg|Args], {Node, M, F, A}) ->
-  parse_args(Args, {Node, M, F, [list_to_atom(Arg)|A]});
-
-parse_args([Arg|Args], Tuple) ->
-  parse_args(Args, erlang:append_element(Tuple, list_to_atom(Arg))).
+atomize(L) -> list_to_atom(L).
