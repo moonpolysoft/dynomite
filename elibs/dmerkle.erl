@@ -11,6 +11,8 @@
 -module(dmerkle).
 -author('cliff@powerset.com').
 
+-behavior(gen_server).
+
 -record(dmerkle, {file, block, root, d, filename}).
 
 -record(node, {m=0, keys=[], children=[], offset=eof}).
@@ -18,25 +20,87 @@
 
 
 %% API
--export([open/1, open/2, equals/2, count/2, count_trace/2, update/3, delete/2, leaves/1, find/2, leaf_size/1, visualized_find/2, key_diff/2, close/1, scan_for_empty/1, swap_tree/2]).
+-export([open/1, open/2, equals/2, get_tree/1, count/2, count_trace/2, update/3, delete/2, leaves/1, find/2, visualized_find/2, key_diff/2, close/1, scan_for_empty/1, swap_tree/2]).
+
+%% gen_server callbacks
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+         terminate/2, code_change/3]).
 
 -ifdef(TEST).
 -include("etest/dmerkle_test.erl").
 -endif.
 
 %%====================================================================
-%% Internal API
+%% Public API
 %%====================================================================
-%%--------------------------------------------------------------------
-%% @spec 
-%% @doc
-%% @end 
-%%--------------------------------------------------------------------
 
 open(FileName) ->
   open(FileName, undefined).
 
 open(FileName, BlockSize) -> 
+  gen_server:start_link(?MODULE, {FileName,BlockSize}, []).
+
+count_trace(Pid, Key) ->
+  gen_server:call(Pid, {count_trace, Key}).
+
+count(Pid, Level) ->
+  gen_server:call(Pid, {count, Level}).
+
+leaves(Pid) ->
+  gen_server:call(Pid, leaves).
+
+update(Key, Value, Pid) ->
+  gen_server:call(Pid, {update, Key, Value}).
+
+equals(A, B) ->
+  gen_server:call(A, hash) == gen_server:call(B, hash).
+
+find(Key, Tree) ->
+  gen_server:call(Tree, {find, Key}).
+  
+visualized_find(Key, Tree) ->
+  gen_server:call(Tree, {visualized_find, Key}).
+
+delete(Key, Tree) -> 
+  gen_server:call(Tree, {delete, Key}).
+
+key_diff(TreeA, TreeB) ->
+  gen_server:call(TreeA, {key_diff, TreeB}).
+
+close(Tree) ->
+  gen_server:cast(Tree, close).
+
+scan_for_empty(Tree) ->
+  gen_server:call(Tree, scan_for_empty).
+
+get_tree(Tree) ->
+  gen_server:call(Tree, get_tree).
+
+swap_tree(OldTree, NewTree) ->
+  NewFilename = gen_server:call(NewTree, filename),
+  BlockSize = gen_server:call(OldTree, blocksize),
+  OldFilename = gen_server:call(OldTree, filename),
+  close(OldTree),
+  close(NewTree),
+  file:copy(block_server:index_name(NewFilename), block_server:index_name(OldFilename)),
+  file:copy(block_server:key_name(NewFilename), block_server:key_name(OldFilename)),
+  file:delete(block_server:index_name(NewFilename)),
+  file:delete(block_server:key_name(NewFilename)),
+  open(OldFilename, BlockSize).
+
+  %%====================================================================
+%% gen_server callbacks
+%%====================================================================
+
+%%--------------------------------------------------------------------
+%% @spec init(Args) -> {ok, State} |
+%%                         {ok, State, Timeout} |
+%%                         ignore               |
+%%                         {stop, Reason}
+%% @doc Initiates the server
+%% @end 
+%%--------------------------------------------------------------------
+init({FileName, BlockSize}) ->
   filelib:ensure_dir(FileName),
   {ok, File} = block_server:start_link(FileName, BlockSize),
   FinalBlockSize = case block_server:read_block(File, 0, 4) of
@@ -50,61 +114,123 @@ open(FileName, BlockSize) ->
       ModBlockSize
   end,
   Root = create_or_read_root(File, FinalBlockSize),
-  #dmerkle{file=File,block=FinalBlockSize,root=Root,d=D,filename=FileName}.
+  {ok, #dmerkle{file=File,block=FinalBlockSize,root=Root,d=D,filename=FileName}}.
 
-count_trace(Tree = #dmerkle{root=Root}, Key) ->
-  count_trace(Tree, Root, hash(Key)).
-
-count(Tree = #dmerkle{root=Root}, Level) ->
-  count(Tree, Root, Level).
-
-leaves(Tree = #dmerkle{root=Root}) ->
-  leaves(Root, Tree, []).
-
-update(Key, Value, Tree = #dmerkle{file=File,block=BlockSize,d=D,root=Root}) ->
+%%--------------------------------------------------------------------
+%% @spec 
+%% handle_call(Request, From, State) -> {reply, Reply, State} |
+%%                                      {reply, Reply, State, Timeout} |
+%%                                      {noreply, State} |
+%%                                      {noreply, State, Timeout} |
+%%                                      {stop, Reason, Reply, State} |
+%%                                      {stop, Reason, State}
+%% @doc Handling call messages
+%% @end 
+%%--------------------------------------------------------------------
+handle_call({count_trace, Key}, _From, Tree = #dmerkle{root=Root}) ->
+  Reply = count_trace(Tree, Root, hash(Key)),
+  {reply, Reply, Tree};
+  
+handle_call({count, Level}, _From, Tree = #dmerkle{root=Root}) ->
+  Reply = count(Tree, Root, Level),
+  {reply, Reply, Tree};
+  
+handle_call(leaves, _From, Tree = #dmerkle{root=Root}) ->
+  Reply = leaves(Root, Tree, []),
+  {reply, Reply, Tree};
+  
+handle_call({update, Key, Value}, _From, Tree = #dmerkle{file=File,block=BlockSize,d=D,root=Root}) ->
   % error_logger:info_msg("inserting ~p~n", [Key]),
   M = m(Root),
-  if
+  NewTree = if
     M >= D-1 -> %allocate new root, move old root and split
       FinalRoot = split_child(#node{}, empty, Root, Tree),
       update_root_pointer(File, FinalRoot),
       % error_logger:info_msg("found: ~p~n", [visualized_find("key60", Tree#dmerkle{root=FinalRoot})]),
       Tree#dmerkle{root=update(hash(Key), Key, Value, FinalRoot, Tree)};
     true -> Tree#dmerkle{root=update(hash(Key), Key, Value, Root, Tree)}
-  end.
-
-equals(#dmerkle{root=RootA}, #dmerkle{root=RootB}) ->
-  hash(RootA) == hash(RootB).
-
-find(Key, Tree = #dmerkle{root=Root}) ->
-  % error_logger:info_msg("looking for: ~p hash(~p)~n", [Key, hash(Key)]),
-  find(hash(Key), Key, Root, Tree).
+  end,
+  {reply, self(), NewTree};
   
-visualized_find(Key, Tree = #dmerkle{root=Root}) ->
-  visualized_find(hash(Key), Key, Root, Tree, []).
+handle_call({find, Key}, _From, Tree = #dmerkle{root=Root}) ->
+  Reply = find(hash(Key), Key, Root, Tree),
+  {reply, Reply, Tree};
+  
+handle_call(hash, _From, Tree = #dmerkle{root=Root}) ->
+  {reply, hash(Root), Tree};
+  
+handle_call({visualized_find, Key}, _From, Tree = #dmerkle{root=Root}) ->
+  Reply = visualized_find(hash(Key), Key, Root, Tree, []),
+  {reply, Reply, Tree};
+  
+handle_call({delete, Key}, _From, Tree = #dmerkle{root=Root}) ->
+  %ok seriously, this needs to get fucking implemented
+  {reply, self(), Tree};
+  
+handle_call(blocksize, _From, Tree = #dmerkle{block=BlockSize}) ->
+  {reply, BlockSize, Tree};
+  
+handle_call(get_tree, _From, Tree) ->
+  {reply, Tree, Tree};
+  
+handle_call({key_diff, PidB}, _From, TreeA = #dmerkle{root=RootA}) ->
+  Reply = if
+    self() == PidB -> {error, "Cannot do a diff on the same merkle tree."};
+    true ->
+      TreeB = gen_server:call(PidB, get_tree),
+      RootB = TreeB#dmerkle.root,
+      {KeysA, KeysB} = key_diff(RootA, RootB, TreeA, TreeB, [], []),
+      lists:usort(diff_merge(TreeA, TreeB, lists:keysort(1, KeysA), lists:keysort(1, KeysB), []))
+  end,
+  {reply, Reply, TreeA};
+  
+handle_call(filename, _From, Tree = #dmerkle{filename=Filename}) ->
+  {reply, Filename, Tree};
+  
+handle_call(scan_for_empty, _From, Tree = #dmerkle{root=Root}) ->
+  Reply = scan_for_empty(Tree, Root),
+  {reply, Reply, Tree}.
+  
 
-delete(Key, Merkle) -> Merkle.
+%%--------------------------------------------------------------------
+%% @spec handle_cast(Msg, State) -> {noreply, State} |
+%%                                      {noreply, State, Timeout} |
+%%                                      {stop, Reason, State}
+%% @doc Handling cast messages
+%% @end 
+%%--------------------------------------------------------------------
+handle_cast(close, Tree) ->
+    {stop, shutdown, Tree}.
 
-leaf_size(Merkle) -> noop.
+%%--------------------------------------------------------------------
+%% @spec handle_info(Info, State) -> {noreply, State} |
+%%                                       {noreply, State, Timeout} |
+%%                                       {stop, Reason, State}
+%% @doc Handling all non call/cast messages
+%% @end 
+%%--------------------------------------------------------------------
+handle_info(_Info, State) ->
+    {noreply, State}.
 
-key_diff(TreeA = #dmerkle{root=RootA}, TreeB = #dmerkle{root=RootB}) ->
-  {KeysA, KeysB} = key_diff(RootA, RootB, TreeA, TreeB, [], []),
-  lists:usort(diff_merge(TreeA, TreeB, lists:keysort(1, KeysA), lists:keysort(1, KeysB), [])).
+%%--------------------------------------------------------------------
+%% @spec terminate(Reason, State) -> void()
+%% @doc This function is called by a gen_server when it is about to
+%% terminate. It should be the opposite of Module:init/1 and do any necessary
+%% cleaning up. When it returns, the gen_server terminates with Reason.
+%% The return value is ignored.
+%% @end 
+%%--------------------------------------------------------------------
+terminate(_Reason, #dmerkle{file=File}) ->
+    block_server:stop(File).
 
-close(#dmerkle{file=File}) ->
-  block_server:stop(File).
+%%--------------------------------------------------------------------
+%% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
+%% @doc Convert process state when code is changed
+%% @end 
+%%--------------------------------------------------------------------
+code_change(_OldVsn, State, _Extra) ->
+    {ok, State}.
 
-scan_for_empty(Tree = #dmerkle{root=Root}) ->
-  scan_for_empty(Tree, Root).
-
-swap_tree(OldTree = #dmerkle{filename=OldFilename}, NewTree = #dmerkle{filename=NewFilename,block=BlockSize}) ->
-  close(OldTree),
-  close(NewTree),
-  file:copy(block_server:index_name(NewFilename), block_server:index_name(OldFilename)),
-  file:copy(block_server:key_name(NewFilename), block_server:key_name(OldFilename)),
-  file:delete(block_server:index_name(NewFilename)),
-  file:delete(block_server:key_name(NewFilename)),
-  open(OldFilename, BlockSize).
 
 %%====================================================================
 %% Internal functions
