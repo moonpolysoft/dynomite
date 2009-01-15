@@ -13,14 +13,20 @@
 
 -behaviour(gen_server).
 
+-define(MAX_POINTS, 300).
+
 %% API
--export([start_link/1, get_rate/2, add_datapoint/3, close/1]).
+-export([start_link/1, get_rate/2, get_datapoints/1, add_datapoint/3, close/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
 -record(rate, {period, datapoints}).
+
+-ifdef(TEST).
+-include("etest/rate_test.erl").
+-endif.
 
 %%====================================================================
 %% API
@@ -35,6 +41,9 @@ start_link(Period) ->
 
 get_rate(Pid, OverPeriod) ->
   gen_server:call(Pid, {get_rate, OverPeriod}).
+
+get_datapoints(Pid) ->
+  gen_server:call(Pid, datapoints).
 
 add_datapoint(Pid, Value, Time) ->
   gen_server:cast(Pid, {datapoint, {Value, Time}}).
@@ -84,7 +93,7 @@ handle_call(datapoints, _From, State = #rate{datapoints=DataPoints}) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_cast({datapoint, {Value, Time}}, State = #rate{datapoints=DataPoints,period=Period}) ->
-  ModifiedDP = lists:keysort(2, [{Value, lib_misc:time_to_epoch_int(Time)} | trim_datapoints(Period,DataPoints)]),
+  ModifiedDP = [{Value, lib_misc:time_to_epoch_int(Time)} | trim_datapoints(Period, DataPoints)],
   {noreply, State#rate{datapoints=ModifiedDP}};
   
 handle_cast(close, State) ->
@@ -129,8 +138,14 @@ calculate_rate(DataPoints, Period, OverPeriod) ->
 
 trim_datapoints(Period, DataPoints) ->
   Limit = epoch() - Period,
-  lists:dropwhile(fun({_,Time}) -> Time < Limit end, DataPoints).
+  error_logger:info_msg("limit ~p~n", [Limit]),
+  Reversed = lists:reverse(DataPoints),
+  N = length(Reversed) - ?MAX_POINTS + 1,
+  lists:reverse(lists:dropwhile(fun({_,Time}) -> Time < Limit end, 
+    if
+      N =< 0 -> Reversed;
+      true -> lists:nthtail(N, Reversed)
+    end)).
 
 epoch() ->
   lib_misc:time_to_epoch_int(now()).
-  
