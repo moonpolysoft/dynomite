@@ -12,7 +12,8 @@ limiting_test() ->
   lists:foreach(fun(N) ->
       rate:add_datapoint(Pid, 1, now())
     end, lists:seq(1, 350)),
-  ?assertEqual(300, length(rate:get_datapoints(Pid))),
+  ?assertEqual(1, length(rate:get_datapoints(Pid))),
+  ?assertEqual(350.0, rate:get_rate(Pid, 3000)),
   rate:close(Pid).
   
 time_limiting_test_() ->
@@ -25,6 +26,7 @@ time_limiting_test_() ->
     lists:foreach(fun(N) ->
         rate:add_datapoint(Pid, 1, now())
       end, lists:seq(1, 50)),
-    ?assertEqual(50, length(rate:get_datapoints(Pid))),
+    ?assertEqual(1, length(rate:get_datapoints(Pid))),
+    ?assertEqual(50.0, rate:get_rate(Pid, 1)),
     rate:close(Pid)
   end}]}.

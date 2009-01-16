@@ -13,8 +13,6 @@
 
 -behaviour(gen_server).
 
--define(MAX_POINTS, 300).
-
 %% API
 -export([start_link/1, get_rate/2, get_datapoints/1, add_datapoint/3, close/1]).
 
@@ -93,7 +91,9 @@ handle_call(datapoints, _From, State = #rate{datapoints=DataPoints}) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_cast({datapoint, {Value, Time}}, State = #rate{datapoints=DataPoints,period=Period}) ->
-  ModifiedDP = [{Value, lib_misc:time_to_epoch_int(Time)} | trim_datapoints(Period, DataPoints)],
+  IntTime = lib_misc:time_to_epoch_int(Time),
+  ModifiedDP = update(Value, IntTime, trim_datapoints(Period, DataPoints)),
+  % ModifiedDP = [{Value, lib_misc:time_to_epoch_int(Time)} | trim_datapoints(Period, DataPoints)],
   {noreply, State#rate{datapoints=ModifiedDP}};
   
 handle_cast(close, State) ->
@@ -132,20 +132,20 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 
+update(Value, Time, [{OldVal, Time} |DataPoints]) ->
+  [{Value + OldVal, Time} | DataPoints];
+  
+update(Value, Time, DataPoints) ->
+  [{Value,Time} | DataPoints].
+
 calculate_rate(DataPoints, Period, OverPeriod) ->
   Sum = lists:foldl(fun({V,_}, Acc) -> Acc+V end, 0, DataPoints),
   (Sum*OverPeriod/Period).
 
 trim_datapoints(Period, DataPoints) ->
   Limit = epoch() - Period,
-  error_logger:info_msg("limit ~p~n", [Limit]),
   Reversed = lists:reverse(DataPoints),
-  N = length(Reversed) - ?MAX_POINTS + 1,
-  lists:reverse(lists:dropwhile(fun({_,Time}) -> Time < Limit end, 
-    if
-      N =< 0 -> Reversed;
-      true -> lists:nthtail(N, Reversed)
-    end)).
+  lists:reverse(lists:dropwhile(fun({_,Time}) -> Time < Limit end, Reversed)).
 
 epoch() ->
   lib_misc:time_to_epoch_int(now()).
