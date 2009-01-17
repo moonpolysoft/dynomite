@@ -62,7 +62,7 @@ close(Pid) ->
 %% @end 
 %%--------------------------------------------------------------------
 init(Period) ->
-  {ok, #rate{period=Period,datapoints=[]}}.
+  {ok, #rate{period=Period,datapoints=queue:new()}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -76,12 +76,13 @@ init(Period) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_call({get_rate, OverPeriod}, _From, State = #rate{datapoints=DataPoints,period=Period}) ->
-  Trimmed = trim_datapoints(Period,DataPoints),
+  Limit = epoch() - Period,
+  Trimmed = trim_datapoints(Limit,DataPoints),
   Rate = calculate_rate(DataPoints, Period, OverPeriod),
   {reply, Rate, State#rate{datapoints=Trimmed}};
   
 handle_call(datapoints, _From, State = #rate{datapoints=DataPoints}) ->
-  {reply, DataPoints, State}.
+  {reply, queue:to_list(DataPoints), State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -92,7 +93,8 @@ handle_call(datapoints, _From, State = #rate{datapoints=DataPoints}) ->
 %%--------------------------------------------------------------------
 handle_cast({datapoint, {Value, Time}}, State = #rate{datapoints=DataPoints,period=Period}) ->
   IntTime = lib_misc:time_to_epoch_int(Time),
-  ModifiedDP = update(Value, IntTime, trim_datapoints(Period, DataPoints)),
+  Limit = epoch() - Period,
+  ModifiedDP = update(Value, IntTime, trim_datapoints(Limit, DataPoints)),
   % ModifiedDP = [{Value, lib_misc:time_to_epoch_int(Time)} | trim_datapoints(Period, DataPoints)],
   {noreply, State#rate{datapoints=ModifiedDP}};
   
@@ -132,20 +134,21 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 
-update(Value, Time, [{OldVal, Time} |DataPoints]) ->
-  [{Value + OldVal, Time} | DataPoints];
-  
 update(Value, Time, DataPoints) ->
-  [{Value,Time} | DataPoints].
+  case queue:out(DataPoints) of
+    {{value, {OldVal, Time}}, ModDP} -> queue:in_r({Value + OldVal, Time}, ModDP);
+    _ -> queue:in_r({Value, Time}, DataPoints)
+  end.
 
 calculate_rate(DataPoints, Period, OverPeriod) ->
-  Sum = lists:foldl(fun({V,_}, Acc) -> Acc+V end, 0, DataPoints),
+  Sum = lists:foldl(fun({V,_}, Acc) -> Acc+V end, 0, queue:to_list(DataPoints)),
   (Sum*OverPeriod/Period).
 
-trim_datapoints(Period, DataPoints) ->
-  Limit = epoch() - Period,
-  Reversed = lists:reverse(DataPoints),
-  lists:reverse(lists:dropwhile(fun({_,Time}) -> Time < Limit end, Reversed)).
+trim_datapoints(Limit, DataPoints) ->
+  case queue:peek_r(DataPoints) of
+    {value, {Val, Time}} when Time < Limit -> trim_datapoints(Limit, queue:drop_r(DataPoints));
+    _ -> DataPoints
+  end.
 
 epoch() ->
   lib_misc:time_to_epoch_int(now()).

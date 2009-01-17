@@ -22,6 +22,7 @@ time_limiting_test_() ->
     lists:foreach(fun(N) ->
         rate:add_datapoint(Pid, 1, now())
       end, lists:seq(1, 50)),
+    ?assertEqual(1, length(rate:get_datapoints(Pid))),
     timer:sleep(2000),
     lists:foreach(fun(N) ->
         rate:add_datapoint(Pid, 1, now())
@@ -30,3 +31,8 @@ time_limiting_test_() ->
     ?assertEqual(50.0, rate:get_rate(Pid, 1)),
     rate:close(Pid)
   end}]}.
+
+queue_test() ->
+  Q = {[],[{324,1232143984}]},
+  NQ = update(1,1232143985, Q),
+  ?assertEqual({[{324,1232143984}],[{1,1232143985}]}, NQ).
