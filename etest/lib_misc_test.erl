@@ -2,16 +2,16 @@
 
 pmap_test() ->
   L = [0, 1, 2],
-  [0,1] = pmap(fun(N) ->
+  ?assertEqual([0,1], pmap(fun(N) ->
       timer:sleep(N),
       N
-    end, L, 2).
+    end, L, 2)).
     
 pmap_1_test() ->
   L = [0],
-  [0] = pmap(fun(N) ->
+  ?assertEqual([0], pmap(fun(N) ->
       N
-    end, L, 1).
+    end, L, 1)).
     
 reverse_bits_test() ->
   3869426816 = reverse_bits(19088743),

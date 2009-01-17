@@ -48,12 +48,15 @@ pmap(Fun, List, ReturnNum) ->
       L = gather(N, length(List), Ref, []),
       SuperParent ! {SuperRef, pmap_sort(List, L)}
     end),
-  _Pids = [spawn(fun() -> 
+  Pids = [spawn(fun() -> 
       Parent ! {Ref, {Elem, (catch Fun(Elem))}} 
     end) || Elem <- List],
-  receive
+  Ret = receive
     {SuperRef, Ret} -> Ret
-  end.
+  end,
+  % i think we need to cleanup here.
+  lists:foreach(fun(P) -> exit(P, die) end, Pids),
+  Ret.
   
 pmap_sort(Original, Results) ->
   pmap_sort([], Original, lists:reverse(Results)).
