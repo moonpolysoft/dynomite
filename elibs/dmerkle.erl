@@ -110,11 +110,11 @@ init({FileName, BlockSize}) ->
   filelib:ensure_dir(FileName),
   {ok, File} = block_server:start_link(FileName, BlockSize),
   Tree = case block_server:read_block(File, 0, ?HEADER_SIZE) of
-    {ok, BinHeader} -> deserialize_header(BinHeader);
+    {ok, BinHeader} -> deserialize_header(BinHeader, #dmerkle{file=File,filename=FileName});
     eof ->
       D = d_from_blocksize(BlockSize),
       ModBlockSize = blocksize_from_d(D),
-      T = #dmerkle{block=ModBlockSize,freepointer=0,rootpointer=0},
+      T = #dmerkle{file=File,d=D,block=ModBlockSize,freepointer=0,rootpointer=0,filename=FileName},
       block_server:write_block(File, 0, serialize_header(T)),
       T
   end,
@@ -563,7 +563,7 @@ find_child_adj(_, [], [Child], LeftAdj) ->
 find_child_adj(KeyHash, [Key|Keys], [Child,RightAdj|Children], LeftAdj) ->
   if
     KeyHash =< Key -> {Key, {LeftAdj, Child, RightAdj}};
-    true -> find_child(KeyHash, Keys, [RightAdj|Children], Child)
+    true -> find_child_adj(KeyHash, Keys, [RightAdj|Children], Child)
   end.
 
 split_child(_, empty, Child = #node{m=M,keys=Keys,children=Children}, Tree=#dmerkle{file=File,block=BlockSize}) ->
@@ -649,7 +649,22 @@ create_or_read_root(Tree = #dmerkle{file=File,block=BlockSize,rootpointer=Ptr}) 
 update_root_pointer(File, Root) ->
   Offset = offset(Root),
   % error_logger:info_msg("writing root offset ~p~n", [Offset]),
-  {ok, 4} = block_server:write_block(File,4,<<Offset:64>>).
+  {ok, ?ROOT_POS} = block_server:write_block(File,?ROOT_POS,<<Offset:64>>).
+
+%this will try and match the current version, if it doesn't then we gotta punch out
+deserialize_header(<<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, _Reserved:64/binary>>, Tree) ->
+  Tree#dmerkle{block=BlockSize,d=d_from_blocksize(BlockSize),freepointer=FreePtr,rootpointer=RootPtr};
+
+%hit the canopy
+deserialize_header(BinHeader, _) ->
+  case BinHeader of
+    <<Version:8, _/binary>> -> {error, ?fmt("Mismatched version.  Cannot read version ~p", [Version])};
+    _ -> {error, "Cannot read version.  Dmerkle is corrupted."}
+  end.
+
+serialize_header(#dmerkle{file=File, block=BlockSize, freepointer=FreePtr, rootpointer=RootPtr}) ->
+  FreeSpace = 64*8,
+  <<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, 0:FreeSpace>>.
 
 %node is denoted by a 0
 deserialize(<<0:8, Binary/binary>>, Offset) ->
@@ -664,17 +679,6 @@ deserialize(<<0:8, Binary/binary>>, Offset) ->
   Keys = unpack_keys(M, KeyBin),
   Children = unpack_children(M+1, ChildBin),
   #node{m=M,children=Children,keys=Keys,offset=Offset};
-  
-%this will try and match the current version, if it doesn't then we gotta punch out
-deserialize_header(<<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, _Reserved:64/binary>>) ->
-  #dmerkle{block=BlockSize,d=d_from_blocksize(BlockSize),freepointer=FreePtr,rootpointer=RootPtr};
-  
-%hit the canopy
-deserialize_header(BinHeader) ->
-  case BinHeader of
-    <<Version:8, _/binary>> -> {error, ?fmt("Mismatched version.  Cannot read version ~p", [Version])};
-    _ -> {error, "Cannot read version.  Dmerkle is corrupted."}
-  end.
   
 deserialize(<<1:8, Bin/binary>>, Offset) ->
   D = d_from_blocksize(byte_size(Bin) + 1),

@@ -72,8 +72,8 @@ open_and_close_test() ->
   Merkle = get_tree(Pid),
   Root = Merkle#dmerkle.root,
   error_logger:info_msg("root ~p~n", [Root]),
-  12 = Root#leaf.offset,
-  0 = Root#leaf.m,
+  ?assertEqual(?HEADER_SIZE, Root#leaf.offset),
+  ?assertEqual(0, Root#leaf.m),
   close(Pid).
   
 open_and_insert_one_test() ->
