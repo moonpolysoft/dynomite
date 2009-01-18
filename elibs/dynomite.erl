@@ -8,3 +8,19 @@ start() ->
   application:load(dynomite),
   crypto:start(),
   application:start(dynomite).
+  
+collect_loop() ->
+  process_flag(trap_exit, true),
+  Filename = io_lib:format("/home/cliff/~w-dyn.dump", [lib_misc:now_int()]),
+  sys_info(Filename),
+  receive
+    nothing -> ok
+  after 15000 -> collect_loop()
+  end.
+  
+sys_info(Filename) ->
+  {ok, IO} = file:open(Filename, [write]),
+  ok = io:format(IO, "count ~p~n", [erlang:system_info(process_count)]),
+  ok = io:format(IO, "memory ~p~n", [erlang:memory()]),
+  ok = file:write(IO, erlang:system_info(procs)),
+  file:close(IO).

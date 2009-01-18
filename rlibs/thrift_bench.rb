@@ -1,10 +1,10 @@
 require 'rubygems'
 require 'inline'
 require 'thrift'
+require 'benchmark'
 require 'thrift/transport/socket'
 require 'thrift/protocol/tbinaryprotocolaccelerated'
-$:.unshift "/p/share/dynomite_rpc/gen-rb"
-require '/p/share/dynomite_rpc/gen-rb/Dynomite'
+require File.dirname(__FILE__) + "/../gen-rb/Dynomite"
 
 Kernel.inline do |builder|
   builder.c_raw <<-EOF
@@ -29,7 +29,6 @@ def new_bytes(size)
   buff
 end
 
-time = -Time.now.to_f
 
 port = ARGV.shift.to_i
 puts port
