@@ -13,11 +13,17 @@
 
 -behavior(gen_server).
 
--record(dmerkle, {file, block, root, d, filename}).
+-record(dmerkle, {file, block, root, d, filename, freepointer=0, rootpointer=0}).
 
 -record(node, {m=0, keys=[], children=[], offset=eof}).
 -record(leaf, {m=0, values=[], offset=eof}).
 
+-include("common.hrl").
+
+-define(VERSION, 1).
+-define(HEADER_SIZE, 85).
+-define(ROOT_POS, (1+4+8)).
+-define(FREE_POS, (?ROOT_POS+8)).
 
 %% API
 -export([open/1, open/2, equals/2, get_tree/1, count/2, count_trace/2, update/3, delete/2, leaves/1, find/2, visualized_find/2, key_diff/2, close/1, scan_for_empty/1, swap_tree/2]).
@@ -61,7 +67,7 @@ find(Key, Tree) ->
 visualized_find(Key, Tree) ->
   gen_server:call(Tree, {visualized_find, Key}).
 
-delete(Key, Tree) -> 
+delete(Key, Tree) ->
   gen_server:call(Tree, {delete, Key}).
 
 key_diff(TreeA, TreeB) ->
@@ -103,18 +109,19 @@ swap_tree(OldTree, NewTree) ->
 init({FileName, BlockSize}) ->
   filelib:ensure_dir(FileName),
   {ok, File} = block_server:start_link(FileName, BlockSize),
-  FinalBlockSize = case block_server:read_block(File, 0, 4) of
-    {ok, <<ReadBlockSize:32>>} -> 
-      D = d_from_blocksize(ReadBlockSize),
-      ReadBlockSize;
-    eof -> 
+  Tree = case block_server:read_block(File, 0, ?HEADER_SIZE) of
+    {ok, BinHeader} -> deserialize_header(BinHeader);
+    eof ->
       D = d_from_blocksize(BlockSize),
       ModBlockSize = blocksize_from_d(D),
-      block_server:write_block(File, 0, <<ModBlockSize:32>>),
-      ModBlockSize
+      T = #dmerkle{block=ModBlockSize,freepointer=0,rootpointer=0},
+      block_server:write_block(File, 0, serialize_header(T)),
+      T
   end,
-  Root = create_or_read_root(File, FinalBlockSize),
-  {ok, #dmerkle{file=File,block=FinalBlockSize,root=Root,d=D,filename=FileName}}.
+  case Tree of
+    {error, Msg} -> {stop, Msg};
+    #dmerkle{} -> {ok, create_or_read_root(Tree)}
+  end.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -164,8 +171,8 @@ handle_call({visualized_find, Key}, _From, Tree = #dmerkle{root=Root}) ->
   {reply, Reply, Tree};
   
 handle_call({delete, Key}, _From, Tree = #dmerkle{root=Root}) ->
-  %ok seriously, this needs to get fucking implemented
-  {reply, self(), Tree};
+  NewTree = delete(hash(Key), Key, Root, Tree),
+  {reply, self(), NewTree};
   
 handle_call(blocksize, _From, Tree = #dmerkle{block=BlockSize}) ->
   {reply, BlockSize, Tree};
@@ -189,8 +196,11 @@ handle_call(filename, _From, Tree = #dmerkle{filename=Filename}) ->
   
 handle_call(scan_for_empty, _From, Tree = #dmerkle{root=Root}) ->
   Reply = scan_for_empty(Tree, Root),
-  {reply, Reply, Tree}.
+  {reply, Reply, Tree};
   
+handle_call(Anything, _From, Tree) ->
+  error_logger:info_msg("got unhandled call ~p~n", [Anything]),
+  {reply, ok, Tree}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -235,6 +245,25 @@ code_change(_OldVsn, State, _Extra) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
+delete(KeyHash, Key, Node = #node{children=Children,keys=Keys}, Tree = #dmerkle{d=D,file=File,block=BlockSize}) ->
+  {FoundKey, {LeftAdj, Child, RightAdj}} = find_child_adj(KeyHash, Keys, Children),
+  Tree;
+
+delete(KeyHash, Key, Leaf = #leaf{values=Values}, Tree = #dmerkle{root=Root, file=File,block=BlockSize}) ->
+  error_logger:info_msg("delete keyhash ~p from ~p~n", [KeyHash, Leaf]),
+  case lists:keytake(KeyHash, 1, Values) of
+    {value, {KeyHash,Pointer,ValHash}, NewValues} ->
+      error_logger:info_msg("New values ~p~n", [NewValues]),
+      NewLeaf = Leaf#leaf{values=NewValues,m=length(NewValues)},
+      write(File, BlockSize, NewLeaf),
+      if
+        Leaf == Root -> 
+          error_logger:info_msg("replacing leaf ~p~n", [NewLeaf]),
+          Tree#dmerkle{root=NewLeaf};
+        true -> Tree
+      end;
+    false -> Tree
+  end.
 
 count_trace(#dmerkle{file=File,block=BlockSize}, #leaf{values=Values}, Hash) ->
   length(lists:filter(fun({H, _, _}) -> 
@@ -524,6 +553,18 @@ find_child(KeyHash, [Key|Keys], [Child|Children]) ->
     KeyHash =< Key -> {Key, Child};
     true -> find_child(KeyHash, Keys, Children)
   end.
+  
+find_child_adj(KeyHash, Keys, Children) ->
+  find_child_adj(KeyHash, Keys, Children, undefined).
+  
+find_child_adj(_, [], [Child], LeftAdj) ->
+  {last, {LeftAdj, Child, undefined}};
+  
+find_child_adj(KeyHash, [Key|Keys], [Child,RightAdj|Children], LeftAdj) ->
+  if
+    KeyHash =< Key -> {Key, {LeftAdj, Child, RightAdj}};
+    true -> find_child(KeyHash, Keys, [RightAdj|Children], Child)
+  end.
 
 split_child(_, empty, Child = #node{m=M,keys=Keys,children=Children}, Tree=#dmerkle{file=File,block=BlockSize}) ->
   {PreLeftKeys, RightKeys} = lists:split((M div 2), Keys),
@@ -596,19 +637,14 @@ replace(Parent = #node{keys=Keys,children=Children}, ToReplace, Left, Right, Key
       ChildTail
   }.
 
-create_or_read_root(File, BlockSize) ->
-  case block_server:read_block(File,4,8) of
-    eof -> 
-      % error_logger:info_msg("could not find offset ~n"),
-      block_server:write_block(File,4,<<0:64>>), %placeholder
-      Root = write(File, BlockSize, #leaf{}),
-      update_root_pointer(File, Root),
-      Root;
-    {ok, Bin} -> 
-      <<Offset:64>> = Bin,
-      % error_logger:info_msg("read offset ~p ~p~n", [Bin, Offset]),
-      read(File, Offset, BlockSize)
-  end.
+create_or_read_root(Tree = #dmerkle{file=File,block=BlockSize,rootpointer=0}) ->
+  Root = write(File, BlockSize, #leaf{}),
+  update_root_pointer(File, Root),
+  Tree#dmerkle{rootpointer=Root#leaf.offset,root=Root};
+  
+create_or_read_root(Tree = #dmerkle{file=File,block=BlockSize,rootpointer=Ptr}) ->
+  Root = read(File, Ptr, BlockSize),
+  Tree#dmerkle{root=Root}.
 
 update_root_pointer(File, Root) ->
   Offset = offset(Root),
@@ -628,6 +664,17 @@ deserialize(<<0:8, Binary/binary>>, Offset) ->
   Keys = unpack_keys(M, KeyBin),
   Children = unpack_children(M+1, ChildBin),
   #node{m=M,children=Children,keys=Keys,offset=Offset};
+  
+%this will try and match the current version, if it doesn't then we gotta punch out
+deserialize_header(<<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, _Reserved:64/binary>>) ->
+  #dmerkle{block=BlockSize,d=d_from_blocksize(BlockSize),freepointer=FreePtr,rootpointer=RootPtr};
+  
+%hit the canopy
+deserialize_header(BinHeader) ->
+  case BinHeader of
+    <<Version:8, _/binary>> -> {error, ?fmt("Mismatched version.  Cannot read version ~p", [Version])};
+    _ -> {error, "Cannot read version.  Dmerkle is corrupted."}
+  end.
   
 deserialize(<<1:8, Bin/binary>>, Offset) ->
   D = d_from_blocksize(byte_size(Bin) + 1),

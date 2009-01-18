@@ -246,6 +246,17 @@ live_test_() ->
     KeyDiff = LeafDiff
   end}]}.
   
+simple_deletion_test() ->
+  test_cleanup(),
+  {ok, Pid} = open(data_file(), 256),
+  update("key", "value", Pid),
+  delete("key", Pid),
+  Tree = get_tree(Pid),
+  Root = Tree#dmerkle.root,
+  error_logger:info_msg("Root ~p~n", [Root]),
+  ?assertEqual(0, Root#leaf.m),
+  close(Pid).
+  
 open_and_insert_n(N) ->
   test_cleanup(),
   {ok, Pid} = open(data_file(), 256),
