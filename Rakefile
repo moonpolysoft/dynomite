@@ -83,12 +83,13 @@ task :coverage => [:test_env] do
   priv = priv_dir()
   cmd = %Q{erl -boot start_sasl +K true -smp enable -pz etest -pa ./deps/eunit/ebin ./deps/mochiweb/ebin ./deps/rfc4627/ebin ./deps/thrift/ebin -sname local_console_#{$$} -noshell -priv_dir "#{priv}" -config test\
   -eval "\
-     cover:compile_directory(\\"elibs\\", [{i,\\"include\\"},{i, \\"deps/eunit/include\\"},{d,'TEST'}]), \
+     cover:compile_directory(\\"elibs\\", [{i,\\"include\\"},{i, \\"deps/eunit/include\\"},{d,'TEST'},{warn_format, 0}]), \
      T = fun(X) -> io:format(user, \\"~-20.s\\", [X]), X:test() end, \
      [T(X) || X <- [#{mod_directives}]], \
      F = fun(X) -> cover:analyse_to_file(X, \\"doc/\\" ++ atom_to_list(X) ++ \\"_coverage.html\\", [html]) end, \
      [F(X) || X <- [#{mod_directives}]]. \
      " -s init stop;}
+  puts cmd
   sh cmd
   puts "-> Test logs in #{priv}"
 end
@@ -107,7 +108,7 @@ task :build_deps do
 end
 
 task :build_test_deps do
-  sh "erlc +debug_info -I include #{ERLC_TEST_FLAGS} -o etest etest/t.erl"
+  sh "erlc +debug_info -I include #{ERLC_TEST_FLAGS} -o etest etest/t.erl etest/mock_genserver.erl"
 end
 
 task :test_config do
