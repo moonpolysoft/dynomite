@@ -152,11 +152,14 @@ handle_call({update, Key, Value}, _From, Tree = #dmerkle{file=File,block=BlockSi
   M = m(Root),
   NewTree = if
     M >= D-1 -> %allocate new root, move old root and split
-      FinalRoot = split_child(#node{}, empty, Root, Tree),
-      Tree2 = update_root(Tree, FinalRoot),
+      {Root2, Tree2} = split_child(#node{}, empty, Root, Tree),
+      Tree3 = update_root(Tree2, Root2),
       % error_logger:info_msg("found: ~p~n", [visualized_find("key60", Tree#dmerkle{root=FinalRoot})]),
-      Tree2#dmerkle{root=update(hash(Key), Key, Value, FinalRoot, Tree)};
-    true -> Tree#dmerkle{root=update(hash(Key), Key, Value, Root, Tree)}
+      {Root3, Tree4} = update(hash(Key), Key, Value, Root2, Tree3),
+      Tree3#dmerkle{root=Root3};
+    true -> 
+      {Root2, Tree2} = update(hash(Key), Key, Value, Root, Tree),
+      Tree2#dmerkle{root=Root2}
   end,
   {reply, self(), NewTree};
   
@@ -264,12 +267,11 @@ delete(KeyHash, Key, Parent, Node = #node{children=Children,keys=Keys}, Tree = #
   {ReturnNode, FinalTree} = delete(KeyHash, Key, Node, DeleteNode, NewTree),
   ?infoFmt("reduced from delete ~p~n", [{ReturnNode, FinalTree}]),
   Eqls = ref_equals(ReturnNode, Node),
-  FinalNode = case WhatItDo of
-    wamp_wamp -> ReturnNode;
-    _ when Eqls -> ReturnNode;
+  case WhatItDo of
+    wamp_wamp -> {ReturnNode, FinalTree};
+    _ when Eqls -> {ReturnNode, FinalTree};
     _ -> update_hash(hash(ReturnNode), offset(ReturnNode), Node, FinalTree)
-  end,
-  {FinalNode, FinalTree};
+  end;
 
 delete(KeyHash, Key, Parent, Leaf = #leaf{values=Values}, Tree = #dmerkle{root=Root, file=File,block=BlockSize}) ->
   error_logger:info_msg("delete key ~p keyhash ~p from ~p~n", [Key, KeyHash, Leaf]),
@@ -277,13 +279,13 @@ delete(KeyHash, Key, Parent, Leaf = #leaf{values=Values}, Tree = #dmerkle{root=R
     {value, {KeyHash,Pointer,ValHash}, NewValues} ->
       NewLeaf = Leaf#leaf{values=NewValues,m=length(NewValues)},
       ?infoFmt("new leaf ~p~n", [NewLeaf]),
-      write(File, BlockSize, NewLeaf),
+      {NewLeaf2, Tree2} = write(NewLeaf, Tree),
       if
         Leaf == Root -> 
-          error_logger:info_msg("replacing leaf ~p~n", [NewLeaf]),
-          {NewLeaf, Tree#dmerkle{root=NewLeaf}};
+          error_logger:info_msg("replacing leaf ~p~n", [NewLeaf2]),
+          {NewLeaf, Tree2#dmerkle{root=NewLeaf2}};
         true -> 
-          {NewLeaf, Tree}
+          {NewLeaf, Tree2}
       end;
     false -> 
       ?infoFmt("couldnt find ~p in ~p~n", [KeyHash, Leaf]),
@@ -294,7 +296,7 @@ update_hash(Hash, Pointer, Node = #node{children=Children}, Tree = #dmerkle{root
   ?infoFmt("updating hash,ptr ~p for ~p~n", [{Hash,Pointer}, Node]),
   NewNode = Node#node{children=lists:keyreplace(Pointer, 2, Children, {Hash,Pointer})},
   ?infoFmt("updated node ~p~n", [NewNode]),
-  write(File, BlockSize, NewNode).
+  write(NewNode, Tree).
 
 % delete_merge(FoundKey,
 %              Parent = #node{keys=PKeys,children=PChildren,m=M})
@@ -310,8 +312,8 @@ delete_merge(FoundKey,
                                                                   PM == 1 ->
   ?infoMsg("Replacing root merging leaves~n"),
   Tree2 = delete_cell(RightLeaf#leaf.offset, delete_cell(Root#node.offset, Tree)),
-  NewLeaf = write(File, BlockSize, LeftLeaf#leaf{m=LeftM+RightM,values=LeftValues++RightValues}),
-  {wamp_wamp, write_header(Tree2#dmerkle{root=NewLeaf}), NewLeaf};
+  {NewLeaf, Tree3} = write(LeftLeaf#leaf{m=LeftM+RightM,values=LeftValues++RightValues}, Tree2),
+  {wamp_wamp, write_header(Tree3#dmerkle{root=NewLeaf}), NewLeaf};
   
 delete_merge(FoundKey,
              SuperParent = #node{children=SPChildren},
@@ -322,10 +324,10 @@ delete_merge(FoundKey,
                                                                             length(PKeys) == 1 ->
   ?infoMsg("Replacing node merging leaves~n"),
   Tree2 = delete_cell(RightLeaf#leaf.offset, delete_cell(Parent#node.offset, Tree)),
-  NewLeaf = write(File, BlockSize, LeftLeaf#leaf{m=LeftM+RightM,values=LeftValues++RightValues}),
-  NP = write(File, BlockSize, SuperParent#node{children=lists:keyreplace(offset(Parent), 2, PChildren, {hash(NewLeaf),offset(NewLeaf)})}),
+  {NewLeaf, Tree3} = write(LeftLeaf#leaf{m=LeftM+RightM,values=LeftValues++RightValues}, Tree2),
+  {NP, Tree4} = write(SuperParent#node{children=lists:keyreplace(offset(Parent), 2, PChildren, {hash(NewLeaf),offset(NewLeaf)})}, Tree3),
   ?infoFmt("replaced ~p in super parent ~p~n", [{hash(Parent),offset(Parent)}, NP]),
-  {wamp_wamp, Tree2, NewLeaf};
+  {wamp_wamp, Tree4, NewLeaf};
   
 delete_merge(FoundKey,
              SuperParent,
@@ -340,10 +342,10 @@ delete_merge(FoundKey,
     true -> lib_misc:position(FoundKey, PKeys)
   end,
   ?infoFmt("FoundKey ~p~nPKeys ~p~nPChildren ~p~nN ~p~nLeftM ~p~nRightM ~p~nD ~p~n", [FoundKey, PKeys, PChildren, N, LeftM, RightM, D]),
-  NP = write(File, BlockSize, remove_nth(Parent, N)),
-  write(File, BlockSize, LeftLeaf#leaf{m=LeftM+RightM,values=LeftValues++RightValues}),
+  {NP, Tree2} = write(remove_nth(Parent, N), Tree),
+  {_, Tree3} = write(LeftLeaf#leaf{m=LeftM+RightM,values=LeftValues++RightValues}, Tree2),
   ?infoFmt("new parent: ~p~n", [NP]),
-  { merge, delete_cell(RightLeaf#leaf.offset, Tree), NP };
+  { merge, delete_cell(RightLeaf#leaf.offset, Tree3), NP};
   
 %merging nodes
 delete_merge(FoundKey,
@@ -354,9 +356,9 @@ delete_merge(FoundKey,
              Tree = #dmerkle{block=BlockSize,file=File,d=D}) when (LeftM+RightM) < D,
                                                                   length(PKeys) == 1 ->
   ?infoMsg("replacing root merging nodes~n"),
-  NC = write(File, BlockSize, merge_nodes(FoundKey, PKeys, LeftNode, RightNode)),
-  Tree2 = delete_cell(offset(RightNode), delete_cell(offset(Root), Tree)),
-  {wamp_wamp, write_header(Tree2#dmerkle{root=NC}), NC};
+  {NC, Tree2} = write(merge_nodes(FoundKey, PKeys, LeftNode, RightNode), Tree),
+  Tree3 = delete_cell(offset(RightNode), delete_cell(offset(Root), Tree2)),
+  {wamp_wamp, write_header(Tree3#dmerkle{root=NC}), NC};
 
   
 delete_merge(FoundKey,
@@ -371,10 +373,10 @@ delete_merge(FoundKey,
   ParentPointer = offset(Parent),
   ParentHash = hash(Parent),
   NN = merge_nodes(FoundKey, PKeys, LeftNode, RightNode),
-  NP = write(File, BlockSize, SuperParent#node{children=lists:keyreplace(offset(Parent), 2, PChildren, {hash(NN),offset(NN)})}),
+  {NP, Tree3} = write(SuperParent#node{children=lists:keyreplace(offset(Parent), 2, PChildren, {hash(NN),offset(NN)})}, Tree2),
   ?infoFmt("NN: ~p~n", [NN]),
-  NewNode = write(File, BlockSize, NN),
-  {wamp_wamp, Tree2, NewNode};
+  {NewNode, Tree4} = write(NN, Tree3),
+  {wamp_wamp, Tree4, NewNode};
 
 delete_merge(FoundKey,
              SuperParent,
@@ -388,11 +390,11 @@ delete_merge(FoundKey,
     true -> lib_misc:position(FoundKey, PKeys)
   end,
   ?infoFmt("FoundKey ~p~nPKeys ~p~nPChildren ~p~nN ~p~nLeftM ~p~nRightM ~p~nD ~p~n", [FoundKey, PKeys, PChildren, N, LM, RM, D]),
-  NP = write(File, BlockSize, remove_nth(Parent, N)),
-  NC = write(File, BlockSize, merge_nodes(FoundKey, PKeys, LeftNode, RightNode)),
+  {NP, Tree2} = write(remove_nth(Parent, N), Tree),
+  {NC, Tree3} = write(merge_nodes(FoundKey, PKeys, LeftNode, RightNode), Tree2),
   ?infoFmt("new child: ~p~n", [NC]),
   ?infoFmt("new parent: ~p~n", [NP]),
-  {merge, delete_cell(RightNode#node.offset, Tree), NP};
+  {merge, delete_cell(RightNode#node.offset, Tree3), NP};
   
 delete_merge(last, _, _, _, Right, Tree) ->
   ?infoMsg("not merging~n"),
@@ -422,8 +424,8 @@ remove_nth(Node = #node{m=M,keys=Keys,children=Children}, N) ->
   
 %needs fixin
 delete_cell(Offset, Tree = #dmerkle{file=File,block=BlockSize,freepointer=Pointer}) ->
-  write(File, BlockSize, #free{offset=Offset,pointer=Pointer}),
-  write_header(Tree#dmerkle{freepointer=Offset}).
+  {_, Tree2} = write(#free{offset=Offset,pointer=Pointer}, Tree),
+  write_header(Tree2#dmerkle{freepointer=Offset}).
 
 count_trace(#dmerkle{file=File,block=BlockSize}, #leaf{values=Values}, Hash) ->
   length(lists:filter(fun({H, _, _}) -> 
@@ -698,10 +700,12 @@ update(KeyHash, Key, Value, Node = #node{children=Children,keys=Keys}, Tree = #d
   end,
   Child = read(File,ChildPointer,BlockSize),
   case m(Child) of
-    M when M >= D -> update(KeyHash, Key, Value, split_child(Node, FoundKey, Child, Tree), Tree);
+    M when M >= D -> 
+      {Node2, Tree2} = split_child(Node, FoundKey, Child, Tree),
+      update(KeyHash, Key, Value, Node2, Tree2);
     _ -> 
-      NewChildHash = hash(update(KeyHash, Key, Value, Child, Tree)),
-      write(File, BlockSize, Node#node{m=length(Node#node.keys),children=lists:keyreplace(ChildPointer, 2, Children, {NewChildHash,ChildPointer})})
+      {Child2, Tree2} = update(KeyHash, Key, Value, Child, Tree),
+      write(Node#node{m=length(Node#node.keys),children=lists:keyreplace(ChildPointer, 2, Children, {hash(Child2),offset(Child2)})}, Tree2)
   end;
   
 update(KeyHash, Key, Value, Leaf = #leaf{values=Values}, Tree = #dmerkle{d=D,file=File,block=BlockSize}) ->
@@ -712,24 +716,17 @@ update(KeyHash, Key, Value, Leaf = #leaf{values=Values}, Tree = #dmerkle{d=D,fil
       case block_server:read_key(File, Pointer) of
         Key -> 
           % error_logger:info_msg("we found the key ~p~n", [Key]),
-          write(File, BlockSize, Leaf#leaf{
-              values=lists:keyreplace(KeyHash, 1, Values, {KeyHash,Pointer,NewValHash})
-            });
+          write(Leaf#leaf{values=lists:keyreplace(KeyHash, 1, Values, {KeyHash,Pointer,NewValHash})}, Tree);
         _ ->  %we still need to deal with collision here
           % error_logger:info_msg("hash found but no key found, inserting new ~n"),
           {ok, NewPointer} = block_server:write_key(File, eof, Key),
-          write(File, BlockSize, Leaf#leaf{
-              values=lists:keymerge(1, Values, [{KeyHash,NewPointer,NewValHash}])
-            })
+          write(Leaf#leaf{values=lists:keymerge(1, Values, [{KeyHash,NewPointer,NewValHash}])}, Tree)
       end;
     false ->
       % error_logger:info_msg("no hash or key found, inserting new ~n"),
       {ok, NewPointer} = block_server:write_key(File, eof, Key),
       NewValues = lists:keymerge(1, Values, [{KeyHash,NewPointer,NewValHash}]),
-      write(File, BlockSize, Leaf#leaf{
-          m=length(NewValues),
-          values=NewValues
-        })
+      write(Leaf#leaf{m=length(NewValues),values=NewValues}, Tree)
   end.
   
 find_child(_, [], [Child]) ->
@@ -756,13 +753,13 @@ split_child(_, empty, Child = #node{m=M,keys=Keys,children=Children}, Tree=#dmer
   [LeftKeyHash| ReversedLeftKeys] = lists:reverse(PreLeftKeys),
   LeftKeys = lists:reverse(ReversedLeftKeys),
   % error_logger:info_msg("splitchild(empty rightkeys ~p rightchildren ~p leftkeys ~p leftchildren ~p~n", [length(RightKeys), length(RightChildren), length(LeftKeys), length(LeftChildren)]),
-  Left = write(File, BlockSize, #node{m=length(LeftKeys),keys=LeftKeys,children=LeftChildren}),
-  Right = write(File, BlockSize, Child#node{m=length(RightKeys),keys=RightKeys,children=RightChildren}),
-  write(File, BlockSize, #node{m=1,
+  {Left, Tree2} = write(#node{m=length(LeftKeys),keys=LeftKeys,children=LeftChildren},Tree),
+  {Right, Tree3} = write(Child#node{m=length(RightKeys),keys=RightKeys,children=RightChildren}, Tree2),
+  write(#node{m=1,
     keys=[LeftKeyHash],
-    children=[{hash(Left),offset(Left)},{hash(Right),offset(Right)}]});
+    children=[{hash(Left),offset(Left)},{hash(Right),offset(Right)}]}, Tree3);
 
-split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #leaf{values=Values,m=M}, #dmerkle{file=File,block=BlockSize}) ->
+split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #leaf{values=Values,m=M}, Tree) ->
   % error_logger:info_msg("splitting leaf with offset~p parent with offset~p ~n", [Child#leaf.offset, Parent#node.offset]),
   {LeftValues, RightValues} = lists:split(M div 2, Values),
   % {LeftValues, RightValues} = lists:partition(fun({Hash,_,_}) ->
@@ -770,11 +767,11 @@ split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #lea
   %   end, Values),
   % error_logger:info_msg("split_child(leaf left ~p right ~p orig ~p~n", [length(LeftValues), length(RightValues), length(Values)]),
   % error_logger:info_msg("lhas ~p rhas ~p orighas ~p~n", [lists:keymember(3784569674, 1, LeftValues), lists:keymember(3784569674, 1, RightValues), lists:keymember(3784569674, 1, Values)]),
-  Left = write(File, BlockSize, #leaf{m=length(LeftValues),values=LeftValues}),
-  Right = write(File, BlockSize, Child#leaf{m=length(RightValues),values=RightValues}),
-  write(File, BlockSize, replace(Parent, ToReplace, Left, Right, last_key(Left)));
+  {Left, Tree2} = write(#leaf{m=length(LeftValues),values=LeftValues}, Tree),
+  {Right, Tree3} = write(Child#leaf{m=length(RightValues),values=RightValues}, Tree2),
+  write(replace(Parent, ToReplace, Left, Right, last_key(Left)), Tree3);
   
-split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #node{m=M,keys=ChildKeys,children=ChildChildren}, #dmerkle{file=File,block=BlockSize}) ->
+split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #node{m=M,keys=ChildKeys,children=ChildChildren}, Tree) ->
   % error_logger:info_msg("splitting node ~p~n", [Parent]),
   % KeyHash = lists:nth(M div 2, Keys),
   {PreLeftKeys, RightKeys} = lists:split(M div 2, ChildKeys),
@@ -782,9 +779,9 @@ split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #nod
   [LeftKeyHash| ReversedLeftKeys] = lists:reverse(PreLeftKeys),
   LeftKeys = lists:reverse(ReversedLeftKeys),
   % error_logger:info_msg("split_child(node rightkeys ~p rightchildren ~p leftkeys ~p leftchildren ~p~n", [length(RightKeys), length(RightChildren), length(LeftKeys), length(LeftChildren)]),
-  Left = write(File, BlockSize, #node{m=length(LeftKeys),keys=LeftKeys,children=LeftChildren}),
-  Right = write(File, BlockSize, Child#node{m=length(RightKeys),keys=RightKeys,children=RightChildren}),
-  write(File, BlockSize, replace(Parent, ToReplace, Left, Right, LeftKeyHash)).
+  {Left, Tree2} = write(#node{m=length(LeftKeys),keys=LeftKeys,children=LeftChildren}, Tree),
+  {Right, Tree3} = write(Child#node{m=length(RightKeys),keys=RightKeys,children=RightChildren}, Tree2),
+  write(replace(Parent, ToReplace, Left, Right, LeftKeyHash), Tree3).
 
 replace(Parent = #node{keys=Keys,children=Children}, empty, Left, Right, KeyHash) ->
   Parent#node{
@@ -821,8 +818,8 @@ replace(Parent = #node{keys=Keys,children=Children}, ToReplace, Left, Right, Key
   }.
 
 create_or_read_root(Tree = #dmerkle{file=File,block=BlockSize,rootpointer=0}) ->
-  Root = write(File, BlockSize, #leaf{}),
-  update_root(Tree, Root);
+  {Root, Tree2} = write(#leaf{}, Tree),
+  update_root(Tree2, Root);
   
 create_or_read_root(Tree = #dmerkle{file=File,block=BlockSize,rootpointer=Ptr}) ->
   Root = read(File, Ptr, BlockSize),
@@ -992,22 +989,20 @@ unpack_values(M, N, Bin, Values) ->
   unpack_values(M, N+1, Bin, [{KeyHash,KeyPointer,ValueHash}|Values]).
   
   
-write(File, BlockSize, Node) ->
+write(Node, Tree = #dmerkle{file=File,block=BlockSize}) ->
   Offset = offset(Node),
   Bin = serialize(Node, BlockSize),
-  if
-    Offset == 0 -> error_logger:info_msg("writing node at 0: BlockSize ~p, M ~p byte_size(Bin): ~p~n", [BlockSize, m(Node), byte_size(Bin)]);
-    true -> ok
-  end,
-  % error_logger:info_msg("writing out node ~p~n", [Node]),
+  {Offset2, Tree2} = take_free_offset(Offset, Tree),
+  {ok, NewOffset} = block_server:write_block(File,Offset2,Bin),
+  {offset(Node, NewOffset), Tree2}.
   
-  {ok, NewOffset} = block_server:write_block(File,Offset,Bin),
-  if
-    NewOffset =< 4 -> error_logger:info_msg("overwrote offset!~n");
-    true -> ok
-  end,
-  % error_logger:info_msg("new offset ~p~n", [NewOffset]),
-  offset(Node, NewOffset).
+take_free_offset(eof, Tree = #dmerkle{file=File,block=BlockSize,freepointer=FreePtr}) when FreePtr > 0 ->
+  Offset = FreePtr,
+  #free{pointer=NewFreePointer} = read(File, FreePtr, BlockSize),
+  {Offset, write_header(Tree#dmerkle{freepointer=NewFreePointer})};
+  
+take_free_offset(Offset, Tree) ->
+  {Offset, Tree}.
   
 read(File, 0, BlockSize) ->
   throw("tried to read a node from the null pointer");

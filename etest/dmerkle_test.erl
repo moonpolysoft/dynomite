@@ -110,15 +110,28 @@ open_and_insert_3000_test() ->
 insert_500_both_ways_test() ->
   test_cleanup(),
   {ok, Pid} = open(data_file(), 256),
-  TreeA = lists:foldl(fun(N, Tree) ->
+  lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
     end, Pid, lists:seq(1,500)),
   {ok, Pid2} = open(data_file(1), 256),
-  TreeB = lists:foldl(fun(N, Tree) ->
+  lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
     end, Pid2, lists:reverse(lists:seq(1,500))),
-  % error_logger:info_msg("rootA ~p~nrootB ~p~n", [TreeA#dmerkle.root, TreeB#dmerkle.root]),
-  true = equals(TreeA, TreeB).
+  TreeA = get_tree(Pid),
+  TreeB = get_tree(Pid2),
+  ?infoFmt("leaves A: ~p~n", [leaves(Pid)]),
+  ?infoFmt("leaves B: ~p~n", [leaves(Pid2)]),
+  LeafHashA = lists:foldl(fun({_,Hash}, Sum) ->
+      (Hash + Sum) rem (2 bsl 31)
+    end, 0, leaves(Pid)),
+  LeafHashB = lists:foldl(fun({_,Hash}, Sum) ->
+      (Hash + Sum) rem (2 bsl 31)
+    end, 0, leaves(Pid2)),
+  ?assertEqual(leaves(Pid), leaves(Pid2)),
+  ?infoFmt("rootA ~p~nrootB ~p~n", [TreeA#dmerkle.root, TreeB#dmerkle.root]),
+  ?infoFmt("hashA ~p~nhashB ~p~n", [hash(TreeA#dmerkle.root), hash(TreeB#dmerkle.root)]),
+  ?infoFmt("leafhashA ~p~nleafhashB ~p~n", [LeafHashA, LeafHashB]),
+  ?assertEqual(true, equals(Pid, Pid2)).
   
 insert_realistic_scenario_equality_test() ->
   test_cleanup(),
@@ -145,7 +158,9 @@ insert_realistic_scenario_diff_test() ->
   Diff = key_diff(TreeA, TreeB),
   Keys = lists:map(fun(N) -> lists:concat(["key", N]) end, lists:seq(496, 500)),
   error_logger:info_msg("realistic diff: ~p~n", [Diff]),
-  Keys = Diff.
+  ?assertEqual(Keys, Diff),
+  close(Pid),
+  close(Pid2).
 
 insert_500_both_ways_diff_test() ->
   test_cleanup(),
@@ -157,9 +172,10 @@ insert_500_both_ways_diff_test() ->
   TreeB = lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
     end, PidB, lists:reverse(lists:seq(1,500))),
-  Diff = key_diff(TreeA, TreeB),
-  error_logger:info_msg("both ways diff: ~p~n", [Diff]),
-  [] = Diff.
+  % error_logger:info_msg("both ways diff: ~p~n", [key_diff(TreeA, TreeB)]),
+  ?assertEqual([], key_diff(TreeA, TreeB)),
+  close(PidA),
+  close(PidB).
 
 insert_overwrite_test() ->
   test_cleanup(),
@@ -335,7 +351,9 @@ open_and_insert_n(N) ->
   test_cleanup(),
   {ok, Pid} = open(data_file(), 256),
   Tree = lists:foldl(fun(N, Tree) ->
-      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+      Key = lists:concat(["key", N]),
+      Value = lists:concat(["value", N]),
+      update(Key, Value, Pid)
     end, Pid, lists:seq(1,N)),
   true = lists:all(fun(N) -> 
       Hash = hash(lists:concat(["value", N])),
