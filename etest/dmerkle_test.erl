@@ -347,6 +347,25 @@ partial_deletion_with_multiple_split_test_() ->
     close(Pid2)
   end}]}.
 
+partial_deletion_and_rebuild_test() ->
+  test_cleanup(),
+  {ok, Pid} = open(data_file(), 256),
+  Keys = lists:map(fun(I) ->
+      lib_misc:rand_str(10)
+    end, lists:seq(1,300)),
+  lists:foreach(fun(Key) ->
+      update(Key, "valuuueeeee" ++ Key, Pid)
+    end, Keys),
+  Size = filelib:file_size(data_file() ++ ".idx"),
+  lists:foreach(fun(Key) ->
+      delete(Key, Pid)
+    end, lists:sublist(Keys, 100)),
+  lists:foreach(fun(Key) ->
+      update(Key, "valuuueeeee" ++ Key, Pid)
+    end, lists:sublist(Keys, 100)),
+  ?assertEqual(Size, filelib:file_size(data_file() ++ ".idx")),
+  close(Pid).
+
 open_and_insert_n(N) ->
   test_cleanup(),
   {ok, Pid} = open(data_file(), 256),
