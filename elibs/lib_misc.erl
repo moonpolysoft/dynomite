@@ -4,11 +4,26 @@
 -define(OFFSET_BASIS, 2166136261).
 -define(FNV_PRIME, 16777619).
 
--export([pmap/3, hash/1, position/2, shuffle/1, floor/1, ceiling/1, time_to_epoch_int/1, time_to_epoch_float/1, now_int/0, now_float/0, byte_size/1, listify/1, reverse_bits/1]).
+-export([pmap/3, hash/1, nthdelete/2, position/2, shuffle/1, floor/1, ceiling/1, time_to_epoch_int/1, time_to_epoch_float/1, now_int/0, now_float/0, byte_size/1, listify/1, reverse_bits/1]).
 
 -ifdef(TEST).
 -include("etest/lib_misc_test.erl").
 -endif.
+
+nthdelete(N, List) ->
+  nthdelete(N, List, []).
+  
+nthdelete(0, List, Ret) ->
+  lists:reverse(Ret) ++ List;
+  
+nthdelete(_, [], Ret) ->
+  lists:reverse(Ret);
+
+nthdelete(1, [E|L], Ret) ->
+  nthdelete(0, L, Ret);
+
+nthdelete(N, [E|L], Ret) ->
+  nthdelete(N-1, L, [E|Ret]).
 
 floor(X) ->
   T = erlang:trunc(X),

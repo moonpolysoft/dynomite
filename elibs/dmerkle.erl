@@ -17,6 +17,7 @@
 
 -record(node, {m=0, keys=[], children=[], offset=eof}).
 -record(leaf, {m=0, values=[], offset=eof}).
+-record(free, {offset,pointer=0}).
 
 -include("common.hrl").
 
@@ -152,9 +153,9 @@ handle_call({update, Key, Value}, _From, Tree = #dmerkle{file=File,block=BlockSi
   NewTree = if
     M >= D-1 -> %allocate new root, move old root and split
       FinalRoot = split_child(#node{}, empty, Root, Tree),
-      update_root_pointer(File, FinalRoot),
+      Tree2 = update_root(Tree, FinalRoot),
       % error_logger:info_msg("found: ~p~n", [visualized_find("key60", Tree#dmerkle{root=FinalRoot})]),
-      Tree#dmerkle{root=update(hash(Key), Key, Value, FinalRoot, Tree)};
+      Tree2#dmerkle{root=update(hash(Key), Key, Value, FinalRoot, Tree)};
     true -> Tree#dmerkle{root=update(hash(Key), Key, Value, Root, Tree)}
   end,
   {reply, self(), NewTree};
@@ -171,8 +172,11 @@ handle_call({visualized_find, Key}, _From, Tree = #dmerkle{root=Root}) ->
   {reply, Reply, Tree};
   
 handle_call({delete, Key}, _From, Tree = #dmerkle{root=Root}) ->
-  NewTree = delete(hash(Key), Key, Root, Tree),
-  {reply, self(), NewTree};
+  {RetNode, NewTree} = delete(hash(Key), Key, root, Root, Tree),
+  case ref_equals(RetNode, Root) of
+    true -> {reply, self(), NewTree#dmerkle{root=RetNode}};
+    false -> {reply, self(), NewTree}
+  end;
   
 handle_call(blocksize, _From, Tree = #dmerkle{block=BlockSize}) ->
   {reply, BlockSize, Tree};
@@ -245,25 +249,193 @@ code_change(_OldVsn, State, _Extra) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
-delete(KeyHash, Key, Node = #node{children=Children,keys=Keys}, Tree = #dmerkle{d=D,file=File,block=BlockSize}) ->
-  {FoundKey, {LeftAdj, Child, RightAdj}} = find_child_adj(KeyHash, Keys, Children),
-  Tree;
+delete(KeyHash, Key, Parent, Node = #node{children=Children,keys=Keys}, Tree = #dmerkle{d=D,file=File,block=BlockSize}) ->
+  error_logger:info_msg("delete key ~p keyhash ~p from node ~p~n", [Key, KeyHash, Node]),
+  {WhatItDo, NewTree, DeleteNode} = case find_child_adj(KeyHash, Keys, Children) of
+    {FoundKey, {{LeftHash, LeftPointer}, {RightHash, RightPointer}}} ->
+      LeftNode = read(File,LeftPointer,BlockSize),
+      RightNode = read(File, RightPointer, BlockSize),
+      ?infoFmt("delete_merge foundkey ~p~nLeftPointer ~p~nrightpointer ~p~nD ~p~nparent ~p~nnode ~p~nleftnode ~p~nrightnode ~p~n", [FoundKey, LeftPointer, RightPointer, D, Parent, Node, LeftNode, RightNode]),
+      delete_merge(FoundKey, Parent, Node, LeftNode, RightNode, Tree);
+    {FoundKey, {{LeftHash, LeftPointer}, undefined}} ->
+      {nothing, Tree, read(File, LeftPointer, BlockSize)}
+  end,
+  ?infoMsg("recursing into delete~n"),
+  {ReturnNode, FinalTree} = delete(KeyHash, Key, Node, DeleteNode, NewTree),
+  ?infoFmt("reduced from delete ~p~n", [{ReturnNode, FinalTree}]),
+  Eqls = ref_equals(ReturnNode, Node),
+  FinalNode = case WhatItDo of
+    wamp_wamp -> ReturnNode;
+    _ when Eqls -> ReturnNode;
+    _ -> update_hash(hash(ReturnNode), offset(ReturnNode), Node, FinalTree)
+  end,
+  {FinalNode, FinalTree};
 
-delete(KeyHash, Key, Leaf = #leaf{values=Values}, Tree = #dmerkle{root=Root, file=File,block=BlockSize}) ->
-  error_logger:info_msg("delete keyhash ~p from ~p~n", [KeyHash, Leaf]),
+delete(KeyHash, Key, Parent, Leaf = #leaf{values=Values}, Tree = #dmerkle{root=Root, file=File,block=BlockSize}) ->
+  error_logger:info_msg("delete key ~p keyhash ~p from ~p~n", [Key, KeyHash, Leaf]),
   case lists:keytake(KeyHash, 1, Values) of
     {value, {KeyHash,Pointer,ValHash}, NewValues} ->
-      error_logger:info_msg("New values ~p~n", [NewValues]),
       NewLeaf = Leaf#leaf{values=NewValues,m=length(NewValues)},
+      ?infoFmt("new leaf ~p~n", [NewLeaf]),
       write(File, BlockSize, NewLeaf),
       if
         Leaf == Root -> 
           error_logger:info_msg("replacing leaf ~p~n", [NewLeaf]),
-          Tree#dmerkle{root=NewLeaf};
-        true -> Tree
+          {NewLeaf, Tree#dmerkle{root=NewLeaf}};
+        true -> 
+          {NewLeaf, Tree}
       end;
-    false -> Tree
+    false -> 
+      ?infoFmt("couldnt find ~p in ~p~n", [KeyHash, Leaf]),
+      {Leaf, Tree}
   end.
+
+roll_the_drop_up(root, _, ReturnNode, _) ->
+  ?infoMsg("Cant roll the drop up on root~n"),
+  ReturnNode;
+  
+roll_the_drop_up(Parent = #node{children=PChildren}, #node{offset=MidOff}, ChildNode, Tree = #dmerkle{file=File,block=Block}) ->
+  ChildPointer = offset(ChildNode),
+  ChildHash = hash(ChildNode),
+  NP = Parent#node{children=lists:keyreplace(MidOff, 2, PChildren, {ChildHash,ChildPointer})},
+  ?infoFmt("roll the drop up chldptr ~p~nchldhash ~p~nnew parent ~p~n", [ChildPointer, ChildHash, NP]),
+  write(File, Block, NP).
+
+update_hash(Hash, Pointer, Node = #node{children=Children}, Tree = #dmerkle{root=Root,file=File,block=BlockSize}) ->
+  ?infoFmt("updating hash,ptr ~p for ~p~n", [{Hash,Pointer}, Node]),
+  NewNode = Node#node{children=lists:keyreplace(Pointer, 2, Children, {Hash,Pointer})},
+  ?infoFmt("updated node ~p~n", [NewNode]),
+  write(File, BlockSize, NewNode).
+
+% delete_merge(FoundKey,
+%              Parent = #node{keys=PKeys,children=PChildren,m=M})
+
+% we have to replace the parent in this case with the merged leaf
+%%merging leaves
+delete_merge(FoundKey,
+             root,
+             Root = #node{keys=PKeys,children=PChildren,m=PM},
+             LeftLeaf = #leaf{values=LeftValues,m=LeftM},
+             RightLeaf = #leaf{values=RightValues,m=RightM},
+             Tree = #dmerkle{block=BlockSize,file=File,d=D}) when (LeftM+RightM) =< D, 
+                                                                  PM == 1 ->
+  ?infoMsg("Replacing root merging leaves~n"),
+  Tree2 = delete_cell(RightLeaf#leaf.offset, delete_cell(Root#node.offset, Tree)),
+  NewLeaf = write(File, BlockSize, LeftLeaf#leaf{m=LeftM+RightM,values=LeftValues++RightValues}),
+  {wamp_wamp, write_header(Tree2#dmerkle{root=NewLeaf}), NewLeaf};
+  
+delete_merge(FoundKey,
+             SuperParent = #node{children=SPChildren},
+             Parent = #node{keys=PKeys,children=PChildren,m=PM},
+             LeftLeaf = #leaf{values=LeftValues,m=LeftM},
+             RightLeaf = #leaf{values=RightValues,m=RightM},
+             Tree = #dmerkle{block=BlockSize,file=File,d=D,root=Root}) when (LeftM+RightM) =< D, 
+                                                                            length(PKeys) == 1 ->
+  ?infoMsg("Replacing node merging leaves~n"),
+  Tree2 = delete_cell(RightLeaf#leaf.offset, delete_cell(Parent#node.offset, Tree)),
+  NewLeaf = write(File, BlockSize, LeftLeaf#leaf{m=LeftM+RightM,values=LeftValues++RightValues}),
+  NP = write(File, BlockSize, SuperParent#node{children=lists:keyreplace(offset(Parent), 2, PChildren, {hash(NewLeaf),offset(NewLeaf)})}),
+  ?infoFmt("replaced ~p in super parent ~p~n", [{hash(Parent),offset(Parent)}, NP]),
+  {wamp_wamp, Tree2, NewLeaf};
+  
+delete_merge(FoundKey,
+             SuperParent,
+             Parent = #node{keys=PKeys,children=PChildren,m=PM}, 
+             LeftLeaf = #leaf{values=LeftValues,m=LeftM}, 
+             RightLeaf = #leaf{values=RightValues,m=RightM}, 
+             Tree = #dmerkle{block=BlockSize,file=File,d=D}) when (LeftM+RightM) =< D ->
+  %we can merge within reqs gogogo
+  ?infoMsg("Merging leaves~n"),
+  N = if
+    FoundKey == last -> length(PKeys);
+    true -> lib_misc:position(FoundKey, PKeys)
+  end,
+  ?infoFmt("FoundKey ~p~nPKeys ~p~nPChildren ~p~nN ~p~nLeftM ~p~nRightM ~p~nD ~p~n", [FoundKey, PKeys, PChildren, N, LeftM, RightM, D]),
+  NP = write(File, BlockSize, remove_nth(Parent, N)),
+  write(File, BlockSize, LeftLeaf#leaf{m=LeftM+RightM,values=LeftValues++RightValues}),
+  ?infoFmt("new parent: ~p~n", [NP]),
+  { merge, delete_cell(RightLeaf#leaf.offset, Tree), NP };
+  
+%merging nodes
+delete_merge(FoundKey,
+             root,
+             Root = #node{keys=PKeys,children=PChildren,m=PM},
+             LeftNode = #node{m=LeftM},
+             RightNode = #node{m=RightM},
+             Tree = #dmerkle{block=BlockSize,file=File,d=D}) when (LeftM+RightM) < D,
+                                                                  length(PKeys) == 1 ->
+  ?infoMsg("replacing root merging nodes~n"),
+  NC = write(File, BlockSize, merge_nodes(FoundKey, PKeys, LeftNode, RightNode)),
+  Tree2 = delete_cell(offset(RightNode), delete_cell(offset(Root), Tree)),
+  {wamp_wamp, write_header(Tree2#dmerkle{root=NC}), NC};
+
+  
+delete_merge(FoundKey,
+             SuperParent = #node{children=SPChildren},
+             Parent = #node{keys=PKeys,children=PChildren,m=PM},
+             LeftNode = #node{m=LeftM,keys=LeftKeys,children=LeftChildren},
+             RightNode = #node{m=RightM,keys=RightKeys,children=RightChildren},
+             Tree = #dmerkle{block=BlockSize,file=File,d=D,root=Root}) when (LeftM+RightM) < D, 
+                                                                            length(PKeys) == 1 ->
+  ?infoMsg("Replacing node merging nodes~n"),
+  Tree2 = delete_cell(offset(RightNode), delete_cell(offset(Parent), Tree)),
+  ParentPointer = offset(Parent),
+  ParentHash = hash(Parent),
+  NN = merge_nodes(FoundKey, PKeys, LeftNode, RightNode),
+  NP = write(File, BlockSize, SuperParent#node{children=lists:keyreplace(offset(Parent), 2, PChildren, {hash(NN),offset(NN)})}),
+  ?infoFmt("NN: ~p~n", [NN]),
+  NewNode = write(File, BlockSize, NN),
+  {wamp_wamp, Tree2, NewNode};
+
+delete_merge(FoundKey,
+             SuperParent,
+             Parent = #node{keys=PKeys,children=PChildren,m=PM},
+             LeftNode = #node{keys=LeftKeys,children=LeftChildren,m=LM},
+             RightNode = #node{keys=RightKeys,children=RightChildren,m=RM},
+             Tree = #dmerkle{block=BlockSize,file=File,d=D})  when (LM+RM) < D ->
+  ?infoMsg("merging nodes~n"),
+  N = if
+    FoundKey == last -> length(PKeys) -1;
+    true -> lib_misc:position(FoundKey, PKeys)
+  end,
+  ?infoFmt("FoundKey ~p~nPKeys ~p~nPChildren ~p~nN ~p~nLeftM ~p~nRightM ~p~nD ~p~n", [FoundKey, PKeys, PChildren, N, LM, RM, D]),
+  NP = write(File, BlockSize, remove_nth(Parent, N)),
+  NC = write(File, BlockSize, merge_nodes(FoundKey, PKeys, LeftNode, RightNode)),
+  ?infoFmt("new child: ~p~n", [NC]),
+  ?infoFmt("new parent: ~p~n", [NP]),
+  {merge, delete_cell(RightNode#node.offset, Tree), NP};
+  
+delete_merge(last, _, _, _, Right, Tree) ->
+  ?infoMsg("not merging~n"),
+  {nothing, Tree, Right};
+  
+delete_merge(_, _, _, Left, _, Tree) ->
+  %merged leaf is too large, do not merge
+  ?infoMsg("not merging~n"),
+  {nothing, Tree, Left}.
+    
+merge_nodes(FoundKey, PKeys, LeftNode = #node{m=LeftM,keys=LeftKeys,children=LeftChildren}, RightNode = #node{m=RightM,keys=RightKeys,children=RightChildren}) ->
+  SplitKey = if
+    FoundKey == last -> lists:last(PKeys);
+    true -> FoundKey
+  end,
+  LeftNode#node{
+    m=LeftM+RightM+1,
+    keys=LeftKeys++[SplitKey]++RightKeys,
+    children=LeftChildren++RightChildren
+  }.
+  
+remove_nth(Node = #node{m=M,keys=Keys,children=Children}, N) ->
+  Node#node{
+    m=M-1,
+    keys = lib_misc:nthdelete(N, Keys),
+    children = lib_misc:nthdelete(N+1, Children)}.
+  
+%needs fixin
+delete_cell(Offset, Tree = #dmerkle{file=File,block=BlockSize,freepointer=Pointer}) ->
+  % write(File, BlockSize, #free{offset=Offset,pointer=Pointer}),
+  % write_header(Tree#dmerkle{freepointer=Offset}).
+  Tree.
 
 count_trace(#dmerkle{file=File,block=BlockSize}, #leaf{values=Values}, Hash) ->
   length(lists:filter(fun({H, _, _}) -> 
@@ -326,6 +498,18 @@ diff_merge(TreeA = #dmerkle{file=FileA}, TreeB = #dmerkle{file=FileB}, [{HashA,P
   KeyB = block_server:read_key(FileB, PtrB),
   diff_merge(TreeA, TreeB, [{HashA,PtrA,ValA}|KeysA], KeysB, [KeyB|Ret]).
 
+foldl(Fun, Acc, Tree = #dmerkle{root=Root}) ->
+  foldl(Fun, Acc, Root, Tree).
+  
+foldl(Fun, Acc, Node = #node{children=Children}, Tree = #dmerkle{file=File,block=BlockSize}) ->
+  Acc2 = Fun(Node, Acc),
+  lists:foldl(fun({_,Pointer}, A) ->
+      foldl(Fun, A, read(File, Pointer, BlockSize), Tree)
+    end, Acc2, Children);
+  
+foldl(Fun, Acc, Leaf = #leaf{}, Tree = #dmerkle{}) ->
+  Fun(Leaf, Acc).
+  
 scan_for_empty(Tree = #dmerkle{file=File,block=Block}, Node = #node{children=Children,keys=Keys}) ->
   if
     length(Keys) == 0 -> io:format("node was empty: ~p", [Node]);
@@ -341,6 +525,21 @@ scan_for_empty(Tree = #dmerkle{file=File,block=Block}, Leaf = #leaf{values=Value
   
 scan_for_empty(_, undefined) ->
   io:format("got an undefined!").
+  
+scan_for_nulls(Node = #node{children=Children}, Tree = #dmerkle{file=File,block=Block}) ->
+  lists:foreach(fun
+    ({_, 0}) ->
+      ?infoFmt("has a zero: ~p~n",[Node]);
+    ({_, ChldPtr}) ->
+      % timer:sleep(1),
+      scan_for_nulls(read(File,ChldPtr,Block), Tree)
+    end, Children);
+    
+scan_for_nulls(#leaf{}, _) ->
+  ok;
+  
+scan_for_nulls(_, _) ->
+  ok.
 
 key_diff(_LeafA = #leaf{values=ValuesA}, _LeafB = #leaf{values=ValuesB}, 
     #dmerkle{file=FileA}, #dmerkle{file=FileB}, KeysA, KeysB) ->
@@ -554,16 +753,13 @@ find_child(KeyHash, [Key|Keys], [Child|Children]) ->
     true -> find_child(KeyHash, Keys, Children)
   end.
   
-find_child_adj(KeyHash, Keys, Children) ->
-  find_child_adj(KeyHash, Keys, Children, undefined).
+find_child_adj(_, [], [Child]) ->
+  {last, {Child, undefined}};
   
-find_child_adj(_, [], [Child], LeftAdj) ->
-  {last, {LeftAdj, Child, undefined}};
-  
-find_child_adj(KeyHash, [Key|Keys], [Child,RightAdj|Children], LeftAdj) ->
+find_child_adj(KeyHash, [Key|Keys], [Child,RightAdj|Children]) ->
   if
-    KeyHash =< Key -> {Key, {LeftAdj, Child, RightAdj}};
-    true -> find_child_adj(KeyHash, Keys, [RightAdj|Children], Child)
+    KeyHash =< Key -> {Key, {Child, RightAdj}};
+    true -> find_child_adj(KeyHash, Keys, [RightAdj|Children])
   end.
 
 split_child(_, empty, Child = #node{m=M,keys=Keys,children=Children}, Tree=#dmerkle{file=File,block=BlockSize}) ->
@@ -571,7 +767,6 @@ split_child(_, empty, Child = #node{m=M,keys=Keys,children=Children}, Tree=#dmer
   {LeftChildren, RightChildren} = lists:split(M div 2, Children),
   [LeftKeyHash| ReversedLeftKeys] = lists:reverse(PreLeftKeys),
   LeftKeys = lists:reverse(ReversedLeftKeys),
-  % error_logger:info_msg("splitting: ~p~n", [find("key122", Tree)]),
   % error_logger:info_msg("splitchild(empty rightkeys ~p rightchildren ~p leftkeys ~p leftchildren ~p~n", [length(RightKeys), length(RightChildren), length(LeftKeys), length(LeftChildren)]),
   Left = write(File, BlockSize, #node{m=length(LeftKeys),keys=LeftKeys,children=LeftChildren}),
   Right = write(File, BlockSize, Child#node{m=length(RightKeys),keys=RightKeys,children=RightChildren}),
@@ -581,10 +776,10 @@ split_child(_, empty, Child = #node{m=M,keys=Keys,children=Children}, Tree=#dmer
 
 split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #leaf{values=Values,m=M}, #dmerkle{file=File,block=BlockSize}) ->
   % error_logger:info_msg("splitting leaf with offset~p parent with offset~p ~n", [Child#leaf.offset, Parent#node.offset]),
-  {KeyHash, _, _} = lists:nth(M div 2, Values),
-  {LeftValues, RightValues} = lists:partition(fun({Hash,_,_}) ->
-      Hash =< KeyHash
-    end, Values),
+  {LeftValues, RightValues} = lists:split(M div 2, Values),
+  % {LeftValues, RightValues} = lists:partition(fun({Hash,_,_}) ->
+  %     Hash =< KeyHash
+  %   end, Values),
   % error_logger:info_msg("split_child(leaf left ~p right ~p orig ~p~n", [length(LeftValues), length(RightValues), length(Values)]),
   % error_logger:info_msg("lhas ~p rhas ~p orighas ~p~n", [lists:keymember(3784569674, 1, LeftValues), lists:keymember(3784569674, 1, RightValues), lists:keymember(3784569674, 1, Values)]),
   Left = write(File, BlockSize, #leaf{m=length(LeftValues),values=LeftValues}),
@@ -639,17 +834,21 @@ replace(Parent = #node{keys=Keys,children=Children}, ToReplace, Left, Right, Key
 
 create_or_read_root(Tree = #dmerkle{file=File,block=BlockSize,rootpointer=0}) ->
   Root = write(File, BlockSize, #leaf{}),
-  update_root_pointer(File, Root),
-  Tree#dmerkle{rootpointer=Root#leaf.offset,root=Root};
+  update_root(Tree, Root);
   
 create_or_read_root(Tree = #dmerkle{file=File,block=BlockSize,rootpointer=Ptr}) ->
   Root = read(File, Ptr, BlockSize),
   Tree#dmerkle{root=Root}.
 
-update_root_pointer(File, Root) ->
+update_root(Tree = #dmerkle{}, Root) ->
   Offset = offset(Root),
-  % error_logger:info_msg("writing root offset ~p~n", [Offset]),
-  {ok, ?ROOT_POS} = block_server:write_block(File,?ROOT_POS,<<Offset:64>>).
+  Tree2 = Tree#dmerkle{rootpointer=Offset,root=Root},
+  write_header(Tree2),
+  Tree2.
+
+write_header(Tree = #dmerkle{file=File}) ->
+  {ok, 0} = block_server:write_block(File,0,serialize_header(Tree)),
+  Tree.
 
 %this will try and match the current version, if it doesn't then we gotta punch out
 deserialize_header(<<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, _Reserved:64/binary>>, Tree) ->
@@ -662,8 +861,13 @@ deserialize_header(BinHeader, _) ->
     _ -> {error, "Cannot read version.  Dmerkle is corrupted."}
   end.
 
-serialize_header(#dmerkle{file=File, block=BlockSize, freepointer=FreePtr, rootpointer=RootPtr}) ->
+serialize_header(#dmerkle{block=BlockSize, freepointer=FreePtr, root=undefined, rootpointer=RootPtr}) ->
   FreeSpace = 64*8,
+  <<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, 0:FreeSpace>>;
+
+serialize_header(#dmerkle{block=BlockSize, freepointer=FreePtr, root=Root}) ->
+  FreeSpace = 64*8,
+  RootPtr = offset(Root),
   <<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, 0:FreeSpace>>.
 
 %node is denoted by a 0
@@ -685,7 +889,14 @@ deserialize(<<1:8, Bin/binary>>, Offset) ->
   ValuesBinSize = D*16,
   <<M:32, ValuesBin:ValuesBinSize/binary, _/binary>> = Bin,
   Values = unpack_values(M, ValuesBin),
-  #leaf{m=M,values=Values,offset=Offset}.
+  #leaf{m=M,values=Values,offset=Offset};
+  
+deserialize(<<3:8, Pointer:64, _/binary>>, Offset) ->
+  #free{offset=Offset,pointer=Pointer}.
+  
+serialize(Free = #free{pointer=Pointer}, BlockSize) ->
+  LeftOverBits = (BlockSize - 8) * 8,
+  <<3:8,Pointer:64,0:LeftOverBits>>;
   
 serialize(Node = #node{keys=Keys,children=Children,m=M}, BlockSize) ->
   D = d_from_blocksize(BlockSize),
@@ -810,6 +1021,9 @@ write(File, BlockSize, Node) ->
   % error_logger:info_msg("new offset ~p~n", [NewOffset]),
   offset(Node, NewOffset).
   
+read(File, 0, BlockSize) ->
+  throw("tried to read a node from the null pointer");
+  
 read(File, Offset, BlockSize) ->
   case block_server:read_block(File, Offset, BlockSize) of
     {ok, Bin} -> deserialize(Bin, Offset);
@@ -819,10 +1033,16 @@ read(File, Offset, BlockSize) ->
       undefined
   end.
   
+ref_equals(#node{offset=Offset}, #node{offset=Offset}) -> true;
+ref_equals(#leaf{offset=Offset}, #leaf{offset=Offset}) -> true;
+ref_equals(_, _) -> false.
+  
 offset(#leaf{offset=Offset}) -> Offset;
+offset(#free{offset=Offset}) -> Offset;
 offset(#node{offset=Offset}) -> Offset.
 
 offset(Leaf = #leaf{}, Offset) -> Leaf#leaf{offset=Offset};
+offset(Free = #free{}, Offset) -> Free#free{offset=Offset};
 offset(Node = #node{}, Offset) -> Node#node{offset=Offset}.
 
 m(#leaf{m=M}) -> M;

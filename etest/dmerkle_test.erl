@@ -257,6 +257,60 @@ simple_deletion_test() ->
   ?assertEqual(0, Root#leaf.m),
   close(Pid).
   
+full_deletion_with_single_split_test() ->
+  test_cleanup(),
+  {ok, Pid} = open(data_file(), 256),
+  lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, Pid, lists:seq(1,20)),
+  Tree = get_tree(Pid),
+  TreeA = lists:foldl(fun(N, Tree) ->
+      Key = lists:concat(["key", N]),
+      {LF, NT} = delete(hash(Key), Key, root, Tree#dmerkle.root, Tree),
+      NT#dmerkle{root=LF}
+    end, Tree,lists:seq(1,20)),
+  Root = TreeA#dmerkle.root,
+  ?assertMatch(#leaf{}, Root),
+  ?assertEqual(0, Root#leaf.m),
+  close(Pid).
+  
+compare_trees_with_delete_test() ->
+  test_cleanup(),
+  {ok, PidA} = open(data_file(), 256),
+  {ok, PidB} = open(data_file(1), 256),
+  lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, PidA, lists:seq(1,20)),
+  lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, PidB, lists:seq(1,20)),
+  delete("key1", PidB),
+  ?assertEqual(["key1"], key_diff(PidA, PidB)),
+  close(PidA),
+  close(PidB).
+  
+full_deletion_with_multiple_split_test_() ->
+  {timeout, 120, [{?LINE, fun() ->
+    test_cleanup(),
+    {ok, Pid} = open(data_file(), 256),
+    lists:foldl(fun(N, Tree) ->
+        update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+      end, Pid, lists:seq(1,300)),
+    lists:foldl(fun(N, Tree) ->
+        Key = lists:concat(["key", N]),
+        ?infoFmt("deleting ~p~n", [Key]),
+        delete(Key, Tree),
+        ?assertEqual(300-N, length(leaves(Tree))),
+        Tree
+      end, Pid, lists:seq(1,300)),
+    Tree = get_tree(Pid),
+    Root = Tree#dmerkle.root,
+    ?infoFmt("root: ~p~n", [Tree#dmerkle.root]),
+    ?assertMatch(#leaf{}, Root),
+    ?assertEqual(0, Root#leaf.m),
+    close(Pid)
+  end}]}.
+
 open_and_insert_n(N) ->
   test_cleanup(),
   {ok, Pid} = open(data_file(), 256),
@@ -277,7 +331,6 @@ open_and_insert_n(N) ->
 
 stress() ->
   test_cleanup(),
-  process_flag(trap_exit, true),
   spawn_link(
     fun() -> lists:foldl(fun(N, Tree) ->
         update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
