@@ -290,17 +290,6 @@ delete(KeyHash, Key, Parent, Leaf = #leaf{values=Values}, Tree = #dmerkle{root=R
       {Leaf, Tree}
   end.
 
-roll_the_drop_up(root, _, ReturnNode, _) ->
-  ?infoMsg("Cant roll the drop up on root~n"),
-  ReturnNode;
-  
-roll_the_drop_up(Parent = #node{children=PChildren}, #node{offset=MidOff}, ChildNode, Tree = #dmerkle{file=File,block=Block}) ->
-  ChildPointer = offset(ChildNode),
-  ChildHash = hash(ChildNode),
-  NP = Parent#node{children=lists:keyreplace(MidOff, 2, PChildren, {ChildHash,ChildPointer})},
-  ?infoFmt("roll the drop up chldptr ~p~nchldhash ~p~nnew parent ~p~n", [ChildPointer, ChildHash, NP]),
-  write(File, Block, NP).
-
 update_hash(Hash, Pointer, Node = #node{children=Children}, Tree = #dmerkle{root=Root,file=File,block=BlockSize}) ->
   ?infoFmt("updating hash,ptr ~p for ~p~n", [{Hash,Pointer}, Node]),
   NewNode = Node#node{children=lists:keyreplace(Pointer, 2, Children, {Hash,Pointer})},
@@ -433,9 +422,8 @@ remove_nth(Node = #node{m=M,keys=Keys,children=Children}, N) ->
   
 %needs fixin
 delete_cell(Offset, Tree = #dmerkle{file=File,block=BlockSize,freepointer=Pointer}) ->
-  % write(File, BlockSize, #free{offset=Offset,pointer=Pointer}),
-  % write_header(Tree#dmerkle{freepointer=Offset}).
-  Tree.
+  write(File, BlockSize, #free{offset=Offset,pointer=Pointer}),
+  write_header(Tree#dmerkle{freepointer=Offset}).
 
 count_trace(#dmerkle{file=File,block=BlockSize}, #leaf{values=Values}, Hash) ->
   length(lists:filter(fun({H, _, _}) -> 
@@ -895,7 +883,7 @@ deserialize(<<3:8, Pointer:64, _/binary>>, Offset) ->
   #free{offset=Offset,pointer=Pointer}.
   
 serialize(Free = #free{pointer=Pointer}, BlockSize) ->
-  LeftOverBits = (BlockSize - 8) * 8,
+  LeftOverBits = (BlockSize - 9) * 8,
   <<3:8,Pointer:64,0:LeftOverBits>>;
   
 serialize(Node = #node{keys=Keys,children=Children,m=M}, BlockSize) ->
