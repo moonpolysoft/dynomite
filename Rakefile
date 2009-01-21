@@ -70,6 +70,29 @@ task :test => [:test_env, :default] do
   puts "-> Test logs in #{priv}"
 end
 
+task :coverage => [:test_env] do
+  mods = []
+  mod_directives = ""
+  env_peek = ENV['MOD'] || ENV['MODS'] || ENV['MODULE'] || ENV['MODULES']
+  if env_peek
+    mods = env_peek.split(",")
+  else 
+    mods = Dir["etest/*_test.erl"].map { |x| x.match(/etest\/(.*)_test.erl/)[1] }
+  end
+  mod_directives = mods.join(', ')#map{|m| %Q(\\"#{m}\\")}.join(", ")
+  priv = priv_dir()
+  cmd = %Q{erl -boot start_sasl +K true -smp enable -pz etest -pa ./deps/eunit/ebin ./deps/mochiweb/ebin ./deps/rfc4627/ebin ./deps/thrift/ebin -sname local_console_#{$$} -noshell -priv_dir "#{priv}" -config test\
+  -eval "\
+     cover:compile_directory(\\"elibs\\", [{i,\\"include\\"},{i, \\"deps/eunit/include\\"},{d,'TEST'}]), \
+     T = fun(X) -> io:format(user, \\"~-20.s\\", [X]), X:test() end, \
+     [T(X) || X <- [#{mod_directives}]], \
+     F = fun(X) -> cover:analyse_to_file(X, \\"doc/\\" ++ atom_to_list(X) ++ \\"_coverage.html\\", [html]) end, \
+     [F(X) || X <- [#{mod_directives}]]. \
+     " -s init stop;}
+  sh cmd
+  puts "-> Test logs in #{priv}"
+end
+
 task :docs do
   #files = (Dir["elibs/*.erl"] - ["elibs/json.erl"]).sort.map { |x| "\'../" + x + "\'"}.join(" ")
   #sh %|cd doc && erl -noshell -run edoc_run files #{files}|
