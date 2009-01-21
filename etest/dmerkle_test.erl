@@ -310,6 +310,26 @@ full_deletion_with_multiple_split_test_() ->
     ?assertEqual(0, Root#leaf.m),
     close(Pid)
   end}]}.
+  
+partial_deletion_with_multiple_split_test_() ->
+  {timeout, 120, [{?LINE, fun() ->
+    test_cleanup(),
+    {ok, Pid1} = open(data_file(), 256),
+    {ok, Pid2} = open(data_file(1), 256),
+    Keys = lists:map(fun(I) ->
+        lib_misc:rand_str(10)
+      end, lists:seq(1,300)),
+    lists:foreach(fun(Key) ->
+        update(Key, "vallllllueeee" ++ Key, Pid1),
+        update(Key, "vallllllueeee" ++ Key, Pid2)
+      end, Keys),
+    lists:foreach(fun(Key) ->
+        delete(Key, Pid2)
+      end, lists:sublist(Keys, 50)),
+    ?assertEqual(lists:sort(lists:sublist(Keys, 50)), key_diff(Pid1, Pid2)),
+    close(Pid1),
+    close(Pid2)
+  end}]}.
 
 open_and_insert_n(N) ->
   test_cleanup(),
