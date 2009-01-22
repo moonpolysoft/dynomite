@@ -18,13 +18,18 @@ task :default => [:build_deps] do
   # end
 end
 
+task :clean do
+  sh "rm -f ebin/*.beam"
+  sh "rm -f etest/*.beam"
+end
+
 task :test_env => [:build_test_deps, :test_config] do
   puts "test env"
   ENV['TEST'] = 'test'
 end
 
 task :native do
-  ERLC_FLAGS = "+native #{ERLC_FLAGS}"
+  ERLC_FLAGS = "-smp +native #{ERLC_FLAGS}"
 end
 
 task :profile do
