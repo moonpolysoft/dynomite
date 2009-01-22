@@ -356,14 +356,16 @@ partial_deletion_and_rebuild_test() ->
   lists:foreach(fun(Key) ->
       update(Key, "valuuueeeee" ++ Key, Pid)
     end, Keys),
-  Size = filelib:file_size(data_file() ++ ".idx"),
+  IdxSize = filelib:file_size(data_file() ++ ".idx"),
+  KeySize = filelib:file_size(data_file() ++ ".keys"),
   lists:foreach(fun(Key) ->
       delete(Key, Pid)
     end, lists:sublist(Keys, 100)),
   lists:foreach(fun(Key) ->
       update(Key, "valuuueeeee" ++ Key, Pid)
     end, lists:sublist(Keys, 100)),
-  ?assertEqual(Size, filelib:file_size(data_file() ++ ".idx")),
+  ?assertEqual(IdxSize, filelib:file_size(data_file() ++ ".idx")),
+  ?assertEqual(KeySize, filelib:file_size(data_file() ++ ".keys")),
   close(Pid).
 
 open_and_insert_n(N) ->

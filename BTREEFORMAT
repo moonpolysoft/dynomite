@@ -1,7 +1,9 @@
 Implementation of a btree based merkle tree.  The original merkle tree would not scale out to a large number of keys due to the limitation of keeping the tree in main memory.  Therefore we will try and store the 
 
 btree file:
-file header: version:1, blocksize:32, freepointer:64, rootpointer:64, reserved/bytes:64
+file header: version:1, blocksize:32, freepointer:64, rootpointer:64,
+freekeys1:64, freekeys2:64, freekeys3:64, freekeys4:64, freekeys5:64
+reserved/bytes:
 header size: 85
 
 node:{0,m:32,[keyhash:32],[childhash:32,child:64]}

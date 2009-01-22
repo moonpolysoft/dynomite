@@ -13,7 +13,7 @@
 
 -behavior(gen_server).
 
--record(dmerkle, {file, block, root, d, filename, freepointer=0, rootpointer=0}).
+-record(dmerkle, {file, block, root, d, filename, freepointer=0, rootpointer=0, fp1=0, fp2=0, fp3=0, fp4=0, fp5=0}).
 
 -record(node, {m=0, keys=[], children=[], offset=eof}).
 -record(leaf, {m=0, values=[], offset=eof}).
@@ -22,7 +22,7 @@
 -include("common.hrl").
 
 -define(VERSION, 1).
--define(HEADER_SIZE, 85).
+-define(HEADER_SIZE, 125).
 -define(ROOT_POS, (1+4+8)).
 -define(FREE_POS, (?ROOT_POS+8)).
 
@@ -279,7 +279,7 @@ delete(KeyHash, Key, Parent, Leaf = #leaf{values=Values}, Tree = #dmerkle{root=R
     {value, {KeyHash,Pointer,ValHash}, NewValues} ->
       NewLeaf = Leaf#leaf{values=NewValues,m=length(NewValues)},
       ?infoFmt("new leaf ~p~n", [NewLeaf]),
-      {NewLeaf2, Tree2} = write(NewLeaf, Tree),
+      {NewLeaf2, Tree2} = write(NewLeaf, free_key(Key, Pointer, Tree)),
       if
         Leaf == Root -> 
           error_logger:info_msg("replacing leaf ~p~n", [NewLeaf2]),
@@ -714,13 +714,12 @@ update(KeyHash, Key, Value, Leaf = #leaf{values=Values}, Tree = #dmerkle{d=D,fil
   case lists:keysearch(KeyHash, 1, Values) of
     {value, {KeyHash,Pointer,ValHash}} ->
       case block_server:read_key(File, Pointer) of
-        Key -> 
-          % error_logger:info_msg("we found the key ~p~n", [Key]),
+        Key ->
           write(Leaf#leaf{values=lists:keyreplace(KeyHash, 1, Values, {KeyHash,Pointer,NewValHash})}, Tree);
         _ ->  %we still need to deal with collision here
           % error_logger:info_msg("hash found but no key found, inserting new ~n"),
-          {ok, NewPointer} = block_server:write_key(File, eof, Key),
-          write(Leaf#leaf{values=lists:keymerge(1, Values, [{KeyHash,NewPointer,NewValHash}])}, Tree)
+          {NewPointer, Tree2} = allocate_key(Key, Tree),
+          write(Leaf#leaf{values=lists:keymerge(1, Values, [{KeyHash,NewPointer,NewValHash}])}, Tree2)
       end;
     false ->
       % error_logger:info_msg("no hash or key found, inserting new ~n"),
@@ -728,6 +727,24 @@ update(KeyHash, Key, Value, Leaf = #leaf{values=Values}, Tree = #dmerkle{d=D,fil
       NewValues = lists:keymerge(1, Values, [{KeyHash,NewPointer,NewValHash}]),
       write(Leaf#leaf{m=length(NewValues),values=NewValues}, Tree)
   end.
+  
+allocate_key(Key, Tree = #dmerkle{file=File}) ->
+  {ok, NewPointer} = block_server:write_key(File, eof, Key).
+  
+free_key(Key, Pointer, Tree) ->
+  Tree.
+  
+free_key_list(Size, #dmerkle{fp1=F}) when Size < 10 -> F;
+free_key_list(Size, #dmerkle{fp2=F}) when Size < 100 -> F;
+free_key_list(Size, #dmerkle{fp3=F}) when Size < 1000 -> F;
+free_key_list(Size, #dmerkle{fp4=F}) when Size < 10000 -> F;
+free_key_list(_, #dmerkle{fp5=F}) -> F.
+  
+set_pointer(Size, Pointer, Tree) when Size < 10 -> Tree#dmerkle{fp1=Pointer};
+set_pointer(Size, Pointer, Tree) when Size < 100 -> Tree#dmerkle{fp2=Pointer};
+set_pointer(Size, Pointer, Tree) when Size < 1000 -> Tree#dmerkle{fp3=Pointer};
+set_pointer(Size, Pointer, Tree) when Size < 10000 -> Tree#dmerkle{fp4=Pointer};
+set_pointer(Size, Pointer, Tree) -> Tree#dmerkle{fp5=Pointer}.
   
 find_child(_, [], [Child]) ->
   {last, Child};
@@ -836,8 +853,8 @@ write_header(Tree = #dmerkle{file=File}) ->
   Tree.
 
 %this will try and match the current version, if it doesn't then we gotta punch out
-deserialize_header(<<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, _Reserved:64/binary>>, Tree) ->
-  Tree#dmerkle{block=BlockSize,d=d_from_blocksize(BlockSize),freepointer=FreePtr,rootpointer=RootPtr};
+deserialize_header(<<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, KP1:64, KP2:64, KP3:64, KP4:64, KP5:64, _Reserved:64/binary>>, Tree) ->
+  Tree#dmerkle{block=BlockSize,d=d_from_blocksize(BlockSize),freepointer=FreePtr,rootpointer=RootPtr, fp1=KP1, fp2=KP2, fp3=KP3, fp4=KP4, fp5=KP5};
 
 %hit the canopy
 deserialize_header(BinHeader, _) ->
@@ -846,14 +863,14 @@ deserialize_header(BinHeader, _) ->
     _ -> {error, "Cannot read version.  Dmerkle is corrupted."}
   end.
 
-serialize_header(#dmerkle{block=BlockSize, freepointer=FreePtr, root=undefined, rootpointer=RootPtr}) ->
+serialize_header(#dmerkle{block=BlockSize, freepointer=FreePtr, root=undefined, rootpointer=RootPtr, fp1=KP1, fp2=KP2, fp3=KP3, fp4=KP4, fp5=KP5}) ->
   FreeSpace = 64*8,
-  <<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, 0:FreeSpace>>;
+  <<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, KP1:64, KP2:64, KP3:64, KP4:64, KP5:64, 0:FreeSpace>>;
 
-serialize_header(#dmerkle{block=BlockSize, freepointer=FreePtr, root=Root}) ->
+serialize_header(#dmerkle{block=BlockSize, freepointer=FreePtr, root=Root, fp1=KP1, fp2=KP2, fp3=KP3, fp4=KP4, fp5=KP5}) ->
   FreeSpace = 64*8,
   RootPtr = offset(Root),
-  <<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, 0:FreeSpace>>.
+  <<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, KP1:64, KP2:64, KP3:64, KP4:64, KP5:64, 0:FreeSpace>>.
 
 %node is denoted by a 0
 deserialize(<<0:8, Binary/binary>>, Offset) ->
