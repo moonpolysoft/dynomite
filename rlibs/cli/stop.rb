@@ -9,6 +9,6 @@ end.parse!
 
 cookie = Digest::MD5.hexdigest(options[:cluster] + "NomMxnLNUH8suehhFg2fkXQ4HVdL2ewXwM")
 
-str = %Q(erl -sname console_#{$$} -hidden -setcookie #{cookie} -pa #{ROOT}/ebin/ -run commands start -run erlang halt -noshell -node #{options[:name]}@#{`hostname -s`.chomp} -m init -f stop)
+str = %Q(erl -smp -sname console_#{$$} -hidden -setcookie #{cookie} -pa #{ROOT}/ebin/ -run commands start -run erlang halt -noshell -node #{options[:name]}@#{`hostname -s`.chomp} -m init -f stop)
 puts str
 exec str
