@@ -10,3 +10,4 @@ deps/thrift/ebin
 etest/log/*
 test.config
 doc/*_coverage.html
+servers.rb

@@ -1,10 +1,14 @@
-#A capfile for doing integration testing
-role :dyn, "aa0-002-6-v1.u.powerset.com", 
-          "aa0-002-6-v2.u.powerset.com",
-          "aa0-002-6-v3.u.powerset.com",
-          "aa0-002-6-v4.u.powerset.com"
+#Define your servers in servers.rb like so:
+
+
+# role :dyn, "server1", 
+#           "server2",
+#           "server3",
+#           "server4"
+#           
+# role :tester, "server5"
           
-role :tester, "aa0-009-6.u.powerset.com"
+load "servers.rb"
           
 set :storage, (ENV["STORAGE"] || "fs_storage")
 
