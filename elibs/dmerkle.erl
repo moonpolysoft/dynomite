@@ -934,12 +934,6 @@ serialize(#leaf{values=Values,m=M}, BlockSize) ->
   end,
   OutBin.
   
-d_from_blocksize(BlockSize) ->
-  trunc((BlockSize - 17)/16).
-  
-blocksize_from_d(D) ->
-  trunc(16*D + 17).
-  
 pack_values(Values) ->
   pack_values(lists:reverse(Values), <<"">>).
   

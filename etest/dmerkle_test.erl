@@ -1,6 +1,5 @@
 -include_lib("eunit.hrl").
 
-% -export([stress/0]).
 
 test_cleanup() ->
   file:delete(data_file() ++ ".idx"),
