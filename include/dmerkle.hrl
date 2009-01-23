@@ -1,0 +1,2 @@
+-record(node, {m=0, keys=[], children=[], offset=eof}).
+-record(leaf, {m=0, values=[], offset=eof}).

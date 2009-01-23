@@ -13,18 +13,11 @@
 
 -behavior(gen_server).
 
--record(dmerkle, {file, block, root, d, filename, freepointer=0, rootpointer=0, fp1=0, fp2=0, fp3=0, fp4=0, fp5=0}).
-
--record(node, {m=0, keys=[], children=[], offset=eof}).
--record(leaf, {m=0, values=[], offset=eof}).
+-record(dmerkle, {tree=Tree}).
 -record(free, {offset,pointer=0}).
 
 -include("common.hrl").
-
--define(VERSION, 1).
--define(HEADER_SIZE, 125).
--define(ROOT_POS, (1+4+8)).
--define(FREE_POS, (?ROOT_POS+8)).
+-include("dmerkle.hrl").
 
 %% API
 -export([open/1, open/2, equals/2, get_tree/1, count/2, count_trace/2, update/3, delete/2, leaves/1, find/2, visualized_find/2, key_diff/2, close/1, scan_for_empty/1, swap_tree/2]).
@@ -108,20 +101,9 @@ swap_tree(OldTree, NewTree) ->
 %% @end 
 %%--------------------------------------------------------------------
 init({FileName, BlockSize}) ->
-  filelib:ensure_dir(FileName),
-  {ok, File} = block_server:start_link(FileName, BlockSize),
-  Tree = case block_server:read_block(File, 0, ?HEADER_SIZE) of
-    {ok, BinHeader} -> deserialize_header(BinHeader, #dmerkle{file=File,filename=FileName});
-    eof ->
-      D = d_from_blocksize(BlockSize),
-      ModBlockSize = blocksize_from_d(D),
-      T = #dmerkle{file=File,d=D,block=ModBlockSize,freepointer=0,rootpointer=0,filename=FileName},
-      block_server:write_block(File, 0, serialize_header(T)),
-      T
-  end,
-  case Tree of
-    {error, Msg} -> {stop, Msg};
-    #dmerkle{} -> {ok, create_or_read_root(Tree)}
+  case dmtree:start_link(FileName, BlockSize) of
+    {ok, Tree} -> {ok, #dmerkle{tree=Tree}};
+    {error, Reason} -> {stop, Reason}
   end.
 
 %%--------------------------------------------------------------------
@@ -421,11 +403,7 @@ remove_nth(Node = #node{m=M,keys=Keys,children=Children}, N) ->
     m=M-1,
     keys = lib_misc:nthdelete(N, Keys),
     children = lib_misc:nthdelete(N+1, Children)}.
-  
-%needs fixin
-delete_cell(Offset, Tree = #dmerkle{file=File,block=BlockSize,freepointer=Pointer}) ->
-  {_, Tree2} = write(#free{offset=Offset,pointer=Pointer}, Tree),
-  write_header(Tree2#dmerkle{freepointer=Offset}).
+
 
 count_trace(#dmerkle{file=File,block=BlockSize}, #leaf{values=Values}, Hash) ->
   length(lists:filter(fun({H, _, _}) -> 
@@ -833,199 +811,6 @@ replace(Parent = #node{keys=Keys,children=Children}, ToReplace, Left, Right, Key
       [{hash(Left), offset(Left)}, {hash(Right), offset(Right)}] ++ 
       ChildTail
   }.
-
-create_or_read_root(Tree = #dmerkle{file=File,block=BlockSize,rootpointer=0}) ->
-  {Root, Tree2} = write(#leaf{}, Tree),
-  update_root(Tree2, Root);
-  
-create_or_read_root(Tree = #dmerkle{file=File,block=BlockSize,rootpointer=Ptr}) ->
-  Root = read(File, Ptr, BlockSize),
-  Tree#dmerkle{root=Root}.
-
-update_root(Tree = #dmerkle{}, Root) ->
-  Offset = offset(Root),
-  Tree2 = Tree#dmerkle{rootpointer=Offset,root=Root},
-  write_header(Tree2),
-  Tree2.
-
-write_header(Tree = #dmerkle{file=File}) ->
-  {ok, 0} = block_server:write_block(File,0,serialize_header(Tree)),
-  Tree.
-
-%this will try and match the current version, if it doesn't then we gotta punch out
-deserialize_header(<<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, KP1:64, KP2:64, KP3:64, KP4:64, KP5:64, _Reserved:64/binary>>, Tree) ->
-  Tree#dmerkle{block=BlockSize,d=d_from_blocksize(BlockSize),freepointer=FreePtr,rootpointer=RootPtr, fp1=KP1, fp2=KP2, fp3=KP3, fp4=KP4, fp5=KP5};
-
-%hit the canopy
-deserialize_header(BinHeader, _) ->
-  case BinHeader of
-    <<Version:8, _/binary>> -> {error, ?fmt("Mismatched version.  Cannot read version ~p", [Version])};
-    _ -> {error, "Cannot read version.  Dmerkle is corrupted."}
-  end.
-
-serialize_header(#dmerkle{block=BlockSize, freepointer=FreePtr, root=undefined, rootpointer=RootPtr, fp1=KP1, fp2=KP2, fp3=KP3, fp4=KP4, fp5=KP5}) ->
-  FreeSpace = 64*8,
-  <<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, KP1:64, KP2:64, KP3:64, KP4:64, KP5:64, 0:FreeSpace>>;
-
-serialize_header(#dmerkle{block=BlockSize, freepointer=FreePtr, root=Root, fp1=KP1, fp2=KP2, fp3=KP3, fp4=KP4, fp5=KP5}) ->
-  FreeSpace = 64*8,
-  RootPtr = offset(Root),
-  <<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, KP1:64, KP2:64, KP3:64, KP4:64, KP5:64, 0:FreeSpace>>.
-
-%node is denoted by a 0
-deserialize(<<0:8, Binary/binary>>, Offset) ->
-  D = d_from_blocksize(byte_size(Binary) + 1),
-  KeyBinSize = D*4,
-  ChildBinSize = (D+1)*12,
-  <<M:32, KeyBin:KeyBinSize/binary, ChildBin:ChildBinSize/binary>> = Binary,
-  if
-    M > D -> error_logger:info_msg("M is larger than D M ~p D ~p offset~p~n", [M, D, Offset]);
-    true -> ok
-  end,
-  Keys = unpack_keys(M, KeyBin),
-  Children = unpack_children(M+1, ChildBin),
-  #node{m=M,children=Children,keys=Keys,offset=Offset};
-  
-deserialize(<<1:8, Bin/binary>>, Offset) ->
-  D = d_from_blocksize(byte_size(Bin) + 1),
-  ValuesBinSize = D*16,
-  <<M:32, ValuesBin:ValuesBinSize/binary, _/binary>> = Bin,
-  Values = unpack_values(M, ValuesBin),
-  #leaf{m=M,values=Values,offset=Offset};
-  
-deserialize(<<3:8, Pointer:64, _/binary>>, Offset) ->
-  #free{offset=Offset,pointer=Pointer}.
-  
-serialize(Free = #free{pointer=Pointer}, BlockSize) ->
-  LeftOverBits = (BlockSize - 9) * 8,
-  <<3:8,Pointer:64,0:LeftOverBits>>;
-  
-serialize(Node = #node{keys=Keys,children=Children,m=M}, BlockSize) ->
-  D = d_from_blocksize(BlockSize),
-  if
-    M > D -> error_logger:info_msg("M is larger than D M ~p D ~p~n", [M, D]);
-    length(Keys) == length(Children) -> error_logger:info_msg("There are as many children as keys for ~p~n", [Node]);
-    true -> ok
-  end,
-  KeyBin = pack_keys(Keys, D),
-  ChildBin = pack_children(Children, D+1),
-  LeftOverBits = (BlockSize - byte_size(KeyBin) - byte_size(ChildBin) - 5)*8,
-  OutBin = <<0:8, M:32, KeyBin/binary, ChildBin/binary, 0:LeftOverBits>>,
-  if 
-    byte_size(OutBin) /= BlockSize ->
-      error_logger:info_msg("outbin is wrong size! keys: ~p children: ~p m: ~p outbin ~p~n", [length(Keys), length(Children), M, byte_size(OutBin)]);
-    true -> ok
-  end,
-  OutBin;
-  
-serialize(#leaf{values=Values,m=M}, BlockSize) ->
-  D = d_from_blocksize(BlockSize),
-  if
-    M > D -> error_logger:info_msg("M is larger than D M ~p D ~p~n", [M, D]);
-    true -> ok
-  end,
-  ValuesBin = pack_values(Values),
-  LeftOverBits = (BlockSize - byte_size(ValuesBin) - 5)*8,
-  OutBin = <<1:8, M:32, ValuesBin/binary, 0:LeftOverBits>>,
-  if 
-    byte_size(OutBin) /= BlockSize ->
-      error_logger:info_msg("outbin is wrong size! values: ~p m: ~p outbin ~p~n", [length(Values), M, byte_size(OutBin)]);
-    true -> ok
-  end,
-  OutBin.
-  
-pack_values(Values) ->
-  pack_values(lists:reverse(Values), <<"">>).
-  
-pack_values([], Bin) -> Bin;
-  
-pack_values([{KeyHash,KeyPointer,ValHash}|Values], Bin) ->
-  pack_values(Values, <<KeyHash:32, KeyPointer:64, ValHash:32, Bin/binary>>).
-  
-pack_keys(Keys, D) ->
-  pack_keys(lists:reverse(Keys), D, <<"">>).
-  
-pack_keys([], D, Bin) -> 
-  BinSize = byte_size(Bin),
-  LeftOverBits = D*4*8 - BinSize*8,
-  <<Bin/binary, 0:LeftOverBits>>;
-
-pack_keys([KeyHash|Keys], D, Bin) ->
-  pack_keys(Keys, D, <<KeyHash:32, Bin/binary>>).
-  
-pack_children(Children, D) ->
-  pack_children(lists:reverse(Children), D, <<"">>).
-  
-pack_children([], D, Bin) -> 
-  BinSize = byte_size(Bin),
-  LeftOverBits = D*12*8 - BinSize*8,
-  <<Bin/binary, 0:LeftOverBits>>;
-
-pack_children([{ChildHash,ChildPtr}|Children], D, Bin) ->
-  pack_children(Children, D, <<ChildHash:32, ChildPtr:64, Bin/binary>>).
-  
-unpack_keys(M, Bin) ->
-  unpack_keys(M, 0, Bin, []).
-  
-unpack_keys(M, M, Bin, Keys) -> lists:reverse(Keys);
-  
-unpack_keys(M, N, Bin, Keys) ->
-  SkipSize = N*4,
-  if
-    SkipSize+4 > byte_size(Bin) ->
-      error_logger:info_msg("Whoops, ran out of unpack space M ~p N ~p Bin ~p~n", [M, N, byte_size(Bin)]);
-    true -> noop
-  end,
-  <<_:SkipSize/binary, KeyHash:32, _/binary>> = Bin,
-  unpack_keys(M, N+1, Bin, [KeyHash|Keys]).
-  
-unpack_children(M, Bin) ->
-  unpack_children(M, 0, Bin, []).
-
-unpack_children(M, M, Bin, Children) -> lists:reverse(Children);
-  
-unpack_children(M, N, Bin, Children) ->
-  SkipSize = N*12,
-  <<_:SkipSize/binary, ChildHash:32, ChildPtr:64, _/binary>> = Bin,
-  unpack_children(M, N+1, Bin, [{ChildHash,ChildPtr}|Children]).
-  
-unpack_values(M, Bin) ->
-  unpack_values(M, 0, Bin, []).
-  
-unpack_values(M, M, Bin, Values) -> lists:reverse(Values);
-
-unpack_values(M, N, Bin, Values) ->
-  SkipSize = N*16,
-  <<_:SkipSize/binary, KeyHash:32, KeyPointer:64, ValueHash:32, _/binary>> = Bin,
-  unpack_values(M, N+1, Bin, [{KeyHash,KeyPointer,ValueHash}|Values]).
-  
-  
-write(Node, Tree = #dmerkle{file=File,block=BlockSize}) ->
-  Offset = offset(Node),
-  Bin = serialize(Node, BlockSize),
-  {Offset2, Tree2} = take_free_offset(Offset, Tree),
-  {ok, NewOffset} = block_server:write_block(File,Offset2,Bin),
-  {offset(Node, NewOffset), Tree2}.
-  
-take_free_offset(eof, Tree = #dmerkle{file=File,block=BlockSize,freepointer=FreePtr}) when FreePtr > 0 ->
-  Offset = FreePtr,
-  #free{pointer=NewFreePointer} = read(File, FreePtr, BlockSize),
-  {Offset, write_header(Tree#dmerkle{freepointer=NewFreePointer})};
-  
-take_free_offset(Offset, Tree) ->
-  {Offset, Tree}.
-  
-read(File, 0, BlockSize) ->
-  throw("tried to read a node from the null pointer");
-  
-read(File, Offset, BlockSize) ->
-  case block_server:read_block(File, Offset, BlockSize) of
-    {ok, Bin} -> deserialize(Bin, Offset);
-    eof -> error_logger:info_msg("hit an eof for offset ~p", [Offset]),
-      undefined;
-    {error, Reason} -> error_logger:info_msg("error ~p at offset", [Reason, Offset]),
-      undefined
-  end.
   
 ref_equals(#node{offset=Offset}, #node{offset=Offset}) -> true;
 ref_equals(#leaf{offset=Offset}, #leaf{offset=Offset}) -> true;
