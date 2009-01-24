@@ -37,6 +37,9 @@ open_and_reopen_test() ->
   Hash = find("mykey", NewPid),
   close(NewPid).
 
+open_and_insert_20_test() ->
+  open_and_insert_n(20).
+
 open_and_insert_260_test() ->
   open_and_insert_n(260).
   
@@ -311,11 +314,8 @@ open_and_insert_n(N) ->
   lists:foreach(fun(N) ->
       Key = lists:concat(["key", N]),
       Value = lists:concat(["value", N]),
-      update(Key, Value, Pid),
-      case find("key1", Pid) of
-        not_found -> ?infoFmt("key ~p caused the error~n", [Key]);
-        _ -> ok
-      end
+      update(Key, Value, Pid)
+      % ?infoFmt("leaves ~p~n", [leaves(Pid)])
     end, lists:seq(1,N)),
   ?assertEqual(true, lists:all(fun(N) -> 
       Hash = hash(lists:concat(["value", N])),

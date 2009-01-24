@@ -143,6 +143,7 @@ handle_call({update, Key, Value}, _From, DM = #dmerkle{tree=Tree,root=Root}) ->
   M = m(Root),
   NewTree = if
     M >= D-1 -> %allocate new root, move old root and split
+      ?infoMsg("root M is larged than D-1.  splitting.~n"),
       Root2 = split_child(#node{}, empty, Root, Tree),
       dmtree:update_root(Root2, Tree),
       % error_logger:info_msg("found: ~p~n", [visualized_find("key60", Tree#dmerkle{root=FinalRoot})]),
@@ -150,7 +151,7 @@ handle_call({update, Key, Value}, _From, DM = #dmerkle{tree=Tree,root=Root}) ->
       DM#dmerkle{root=Root3};
     true -> 
       Root2 = update(hash(Key), Key, Value, Root, Tree),
-      % ?infoFmt("updated root ~p~n", [Root2]),
+      ?infoFmt("updated root ~p~n", [Root2]),
       DM#dmerkle{root=Root2}
   end,
   dmtree:tx_commit(Tree),
@@ -710,11 +711,8 @@ split_child(_, empty, Child = #node{m=M,keys=Keys,children=Children}, Tree) ->
     children=[{hash(Left),offset(Left)},{hash(Right),offset(Right)}]}, Tree);
 
 split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #leaf{values=Values,m=M}, Tree) ->
-  % error_logger:info_msg("splitting leaf with offset~p parent with offset~p ~n", [Child#leaf.offset, Parent#node.offset]),
+  % error_logger:info_msg("splitting leaf ~p with offset~p parent with offset~p ~n", [Child, Child#leaf.offset, Parent#node.offset]),
   {LeftValues, RightValues} = lists:split(M div 2, Values),
-  % {LeftValues, RightValues} = lists:partition(fun({Hash,_,_}) ->
-  %     Hash =< KeyHash
-  %   end, Values),
   % error_logger:info_msg("split_child(leaf left ~p right ~p orig ~p~n", [length(LeftValues), length(RightValues), length(Values)]),
   % error_logger:info_msg("lhas ~p rhas ~p orighas ~p~n", [lists:keymember(3784569674, 1, LeftValues), lists:keymember(3784569674, 1, RightValues), lists:keymember(3784569674, 1, Values)]),
   Left = dmtree:write(#leaf{m=length(LeftValues),values=LeftValues}, Tree),
@@ -723,7 +721,6 @@ split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #lea
   
 split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #node{m=M,keys=ChildKeys,children=ChildChildren}, Tree) ->
   % error_logger:info_msg("splitting node ~p~n", [Parent]),
-  % KeyHash = lists:nth(M div 2, Keys),
   {PreLeftKeys, RightKeys} = lists:split(M div 2, ChildKeys),
   {LeftChildren, RightChildren} = lists:split(M div 2, ChildChildren),
   [LeftKeyHash| ReversedLeftKeys] = lists:reverse(PreLeftKeys),
@@ -750,7 +747,6 @@ replace(Parent = #node{keys=Keys,children=Children}, last, Left, Right, KeyHash)
 
 replace(Parent = #node{keys=Keys,children=Children}, ToReplace, Left, Right, KeyHash) ->
   N = lib_misc:position(ToReplace, Keys),
-  % KeyHash = last_key(Left),
   % error_logger:info_msg("replace toreplace ~p n ~p keyhash ~p keys ~p~n children ~p~n left ~p~n right ~p~n", [ToReplace, N, KeyHash, Keys, Children, Left, Right]),
   KeyTail = if
     N-1 >= length(Keys) -> [];

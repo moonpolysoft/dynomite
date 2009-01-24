@@ -24,7 +24,7 @@
 -include("common.hrl").
 -include_lib("kernel/include/file.hrl").
 
--record(dmtree, {file, d, blocksize, filename, operations=[], freepointer=0, rootpointer=0, fp1=0, fp2=0, fp3=0, fp4=0, fp5=0}).
+-record(dmtree, {file, size=0, virtsize=0, d, blocksize, filename, ops=[], freepointer=0, rootpointer=0, fp1=0, fp2=0, fp3=0, fp4=0, fp5=0}).
 
 -ifdef(TEST).
 -include("etest/dmtree_test.erl").
@@ -101,16 +101,19 @@ filename(Pid) ->
 init([FileName, BlockSize]) ->
   filelib:ensure_dir(FileName),
   {ok, File} = file:open(FileName, [read, write, binary]),
-  R = case read_header(File) of
-    {ok, Header} -> {ok, create_or_read_root(Header#dmtree{filename=FileName,file=File})};
+  {ok, FileInfo} = file:read_file_info(FileName),
+  FileSize = FileInfo#file_info.size,
+  case read_header(File) of
+    {ok, Header} -> {ok, create_or_read_root(Header#dmtree{filename=FileName,file=File,size=FileSize})};
     {error, Msg} -> {stop, Msg};
     eof ->
       D = d_from_blocksize(BlockSize),
       AlignedBlockSize = blocksize_from_d(D),
-      {ok, create_or_read_root(#dmtree{file=File,d=D,blocksize=AlignedBlockSize,filename=FileName})}
-  end,
-  ?infoFmt("init return value: ~p~n", [R]),
-  R.
+      T = create_or_read_root(#dmtree{file=File,d=D,blocksize=AlignedBlockSize,filename=FileName,size=?HEADER_SIZE}),
+      ?infoFmt("created T ~p~n", [T]),
+      flush(File, T#dmtree.ops),
+      {ok, T#dmtree{ops=[],size=?HEADER_SIZE + AlignedBlockSize}}
+  end.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -124,16 +127,17 @@ init([FileName, BlockSize]) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_call(tx_begin, _From, State = #dmtree{}) ->
-  {reply, ok, State#dmtree{operations=[]}};
+  {reply, ok, State#dmtree{ops=[]}};
   
-handle_call(tx_commit, _From, State = #dmtree{operations=Ops,file=File}) ->
-  case file:pwrite(File, lists:reverse(Ops)) of
-    ok -> {reply, ok, State#dmtree{operations=[]}};
+handle_call(tx_commit, _From, State = #dmtree{ops=Ops,file=File,size=Size,virtsize=VirtSize}) ->
+  % ?infoFmt("commiting btree changes to disk size ~p virtsize ~p~n operations~p~n", [Size, VirtSize, lists:reverse(Ops)]),
+  case flush(File, Ops) of
+    ok -> {reply, ok, State#dmtree{ops=[], size=Size+VirtSize, virtsize=0}};
     {error, Reasons} -> {stop, Reasons, State}
   end;
   
 handle_call(tx_rollback, _From, State = #dmtree{}) ->
-  {reply, ok, State#dmtree{operations=[]}};
+  {reply, ok, State#dmtree{ops=[], virtsize=0}};
   
 handle_call(d, _From, State = #dmtree{d=D}) ->
   {reply, D, State};
@@ -214,9 +218,10 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions =================READ / WRITE operations
 %%--------------------------------------------------------------------
 write_header(Tree = #dmtree{file=File}) ->
-  ok = file:pwrite(File,0,serialize_header(Tree)),
-  Tree.
-  % Tree#dmtree{operations=add_operation(0, serialize_header(Tree), Ops)}.
+  % ok = file:pwrite(File,0,serialize_header(Tree)),
+  % Tree.
+  {_, Tree2} = add_operation(0, serialize_header(Tree), Tree),
+  Tree2.
   
 read_header(File) ->
   case file:pread(File, 0, ?HEADER_SIZE) of
@@ -228,15 +233,19 @@ read_header(File) ->
 int_read(0, Tree) ->
   throw("tried to read a node from the null pointer");
 
-int_read(Offset, #dmtree{file=File,blocksize=BlockSize}) ->
-  case file:pread(File, Offset, BlockSize) of
-    {ok, Bin} -> deserialize(Bin, Offset);
-    eof -> 
-      error_logger:info_msg("hit an eof for offset ~p", [Offset]),
-      undefined;
-    {error, Reason} -> 
-      error_logger:info_msg("error ~p at offset", [Reason, Offset]),
-      undefined
+int_read(Offset, #dmtree{file=File,blocksize=BlockSize,ops=Ops}) ->
+  case lists:keysearch(Offset, 1, Ops) of
+    {value, {Offset, Bin}} -> deserialize(Bin, Offset);
+    false -> 
+      case file:pread(File, Offset, BlockSize) of
+        {ok, Bin} -> deserialize(Bin, Offset);
+        eof -> 
+          error_logger:info_msg("hit an eof for offset ~p", [Offset]),
+          undefined;
+        {error, Reason} -> 
+          error_logger:info_msg("error ~p at offset", [Reason, Offset]),
+          undefined
+      end
   end.
   
 int_write(Node, Tree = #dmtree{file=File,blocksize=BlockSize}) ->
@@ -244,9 +253,8 @@ int_write(Node, Tree = #dmtree{file=File,blocksize=BlockSize}) ->
   Offset = offset(Node),
   Bin = serialize(Node, BlockSize),
   {Offset2, Tree2} = take_free_offset(Offset, Tree),
-  {ok, NewOffset} = file:position(File,Offset2),
-  ok = file:write(File,Bin),
-  {offset(Node, NewOffset), Tree2}.
+  {Offset3, Tree3} = add_operation(Offset2, Bin, Tree2),
+  {offset(Node, Offset3), Tree3}.
   
 int_delete(Offset, Tree = #dmtree{file=File,blocksize=BlockSize,freepointer=Pointer}) ->
   {_, Tree2} = int_write(#free{offset=Offset,pointer=Pointer}, Tree),
@@ -269,9 +277,7 @@ int_read_key(Keys, Key) ->
   end.
   
 int_write_key(Offset, Key, Tree = #dmtree{file=File}) ->
-  {ok, NewOffset} = file:position(File, Offset),
-  ok = file:write(File, [Key,0]),
-  {NewOffset, Tree}.
+  add_operation(Offset, [Key,0], Tree).
   
 int_delete_key(Offset, Key, Tree = #dmtree{}) ->
   Tree.
@@ -279,9 +285,25 @@ int_delete_key(Offset, Key, Tree = #dmtree{}) ->
 %%--------------------------------
 %% ============SUPPORT FUNCTIONS
 %%--------------------------------
+flush(File, Ops) ->
+  file:pwrite(File, lists:reverse(Ops)).
 
-add_operation(Offset, Bin, Ops) ->
-  [{Offset,Bin}|Ops].
+add_operation(eof, Bin, Tree = #dmtree{size=Size,virtsize=VirtSize,ops=Ops}) ->
+  BinSize = true_size(Bin),
+  Offset = Size+VirtSize,
+  {Offset, Tree#dmtree{virtsize=VirtSize+BinSize, ops=[{Offset,Bin}|Ops]}};
+  
+add_operation(Offset, Bin, Tree = #dmtree{ops=Ops}) ->
+  %we might wanna clobber rewrites
+  {Offset, Tree#dmtree{ops=[{Offset,Bin}|Ops]}}.
+  
+true_size(List) when is_list(List) ->
+  lists:foldl(fun(E, Sum) -> true_size(E) + Sum end, 0, lists:flatten(List));
+  
+true_size(Bin) when is_binary(Bin) ->
+  byte_size(Bin);
+  
+true_size(_) -> 1.
 
 create_or_read_root(Tree = #dmtree{file=File,blocksize=BlockSize,rootpointer=0}) ->
   {Root, Tree2} = int_write(#leaf{offset=?HEADER_SIZE}, Tree),
