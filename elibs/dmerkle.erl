@@ -150,7 +150,7 @@ handle_call({update, Key, Value}, _From, DM = #dmerkle{tree=Tree,root=Root}) ->
       DM#dmerkle{root=Root3};
     true -> 
       Root2 = update(hash(Key), Key, Value, Root, Tree),
-      ?infoFmt("updated root ~p~n", [Root2]),
+      % ?infoFmt("updated root ~p~n", [Root2]),
       DM#dmerkle{root=Root2}
   end,
   dmtree:tx_commit(Tree),
@@ -171,10 +171,7 @@ handle_call({delete, Key}, _From, DM = #dmerkle{tree=Tree,root=Root}) ->
   dmtree:tx_begin(Tree),
   RetNode = delete(hash(Key), Key, root, Root, Tree),
   dmtree:tx_commit(Tree),
-  case ref_equals(RetNode, Root) of
-    true -> {reply, self(), DM#dmerkle{root=RetNode}};
-    false -> {reply, self(), DM}
-  end;
+  {reply, self(), DM#dmerkle{root=RetNode}};
   
 handle_call(blocksize, _From, DM = #dmerkle{tree=Tree}) ->
   {reply, dmtree:block_size(Tree), DM};
@@ -332,7 +329,7 @@ delete_merge(FoundKey, D,
   end,
   ?infoFmt("FoundKey ~p~nPKeys ~p~nPChildren ~p~nN ~p~nLeftM ~p~nRightM ~p~nD ~p~n", [FoundKey, PKeys, PChildren, N, LeftM, RightM, D]),
   NP = dmtree:write(remove_nth(Parent, N), Tree),
-  {_, Tree3} = dmtree:write(LeftLeaf#leaf{m=LeftM+RightM,values=LeftValues++RightValues}, Tree),
+  dmtree:write(LeftLeaf#leaf{m=LeftM+RightM,values=LeftValues++RightValues}, Tree),
   dmtree:delete(RightLeaf#leaf.offset, Tree),
   ?infoFmt("new parent: ~p~n", [NP]),
   { merge, NP};
@@ -389,12 +386,12 @@ delete_merge(FoundKey, D,
   
 delete_merge(last, _, _, _, _, Right, Tree) ->
   ?infoMsg("not merging~n"),
-  {nothing, Tree, Right};
+  {nothing, Right};
   
 delete_merge(_, _, _, _, Left, _, Tree) ->
   %merged leaf is too large, do not merge
   ?infoMsg("not merging~n"),
-  {nothing, Tree, Left}.
+  {nothing, Left}.
     
 merge_nodes(FoundKey, PKeys, LeftNode = #node{m=LeftM,keys=LeftKeys,children=LeftChildren}, RightNode = #node{m=RightM,keys=RightKeys,children=RightChildren}) ->
   SplitKey = if
@@ -521,18 +518,18 @@ key_diff(_LeafA = #leaf{values=ValuesA}, _LeafB = #leaf{values=ValuesB},
 
 key_diff(#node{children=ChildrenA}, #node{children=ChildrenB},
     TreeA, TreeB, KeysA, KeysB) ->
-  error_logger:info_msg("node differences ~n"),
+  % error_logger:info_msg("node differences ~n"),
   node_diff(ChildrenA, ChildrenB, TreeA, TreeB, KeysA, KeysB);
   
 key_diff(Leaf = #leaf{}, Node = #node{children=Children}, TreeA, TreeB, KeysA, KeysB) ->
-  error_logger:info_msg("leaf node differences ~n"),
+  % error_logger:info_msg("leaf node differences ~n"),
   lists:foldl(fun({_, Ptr}, {AccA, AccB}) ->
       Child = dmtree:read(Ptr, TreeB),
       key_diff(Leaf, Child, TreeA, TreeB, AccA, AccB)
     end, {KeysA, KeysB}, Children);
   
 key_diff(Node = #node{children=Children}, Leaf = #leaf{}, TreeA, TreeB, KeysA, KeysB) ->
-  error_logger:info_msg("node leaf differences  ~n"),
+  % error_logger:info_msg("node leaf differences  ~n"),
   lists:foldl(fun({_, Ptr}, {AccA, AccB}) ->
       Child = dmtree:read(Ptr, TreeA),
       key_diff(Child, Leaf, TreeA, TreeB, AccA, AccB)
@@ -541,26 +538,26 @@ key_diff(Node = #node{children=Children}, Leaf = #leaf{}, TreeA, TreeB, KeysA, K
 node_diff([], [], TreeA, TreeB, KeysA, KeysB) -> {KeysA, KeysB};
 
 node_diff([], ChildrenB, TreeA, TreeB, KeysA, KeysB) ->
-  error_logger:info_msg("node_diff empty children ~n"),
+  % error_logger:info_msg("node_diff empty children ~n"),
   {KeysA, lists:foldl(fun({_, Ptr}, Acc) ->
       Child = dmtree:read(Ptr, TreeB),
       hash_leaves(Child, TreeB, Acc)
     end, KeysB, ChildrenB)};
     
 node_diff(ChildrenA, [], TreeA, TreeB, KeysA, KeysB) ->
-  error_logger:info_msg("node_diff children empty ~n"),
+  % error_logger:info_msg("node_diff children empty ~n"),
   {lists:foldl(fun({_, Ptr}, Acc) ->
       Child = dmtree:read(Ptr, TreeA),
       hash_leaves(Child, TreeA, Acc)
     end, KeysA, ChildrenA), KeysB};
     
 node_diff([{Hash,PtrA}|ChildrenA], [{Hash,PtrB}|ChildrenB], TreeA, TreeB, KeysA, KeysB) ->
-  error_logger:info_msg("equal nodes ~n"),
+  % error_logger:info_msg("equal nodes ~n"),
   node_diff(ChildrenA, ChildrenB, TreeA, TreeB, KeysA, KeysB);
   
 node_diff([{HashA,PtrA}|ChildrenA], [{HashB,PtrB}|ChildrenB], 
     TreeA, TreeB, KeysA, KeysB) ->
-  error_logger:info_msg("nodes are different ~n"),
+  % error_logger:info_msg("nodes are different ~n"),
   ChildA = dmtree:read(PtrA, TreeA),
   ChildB = dmtree:read(PtrB, TreeB),
   {KeysA1, KeysB1} = key_diff(ChildA, ChildB, TreeA, TreeB, KeysA, KeysB),
@@ -569,47 +566,27 @@ node_diff([{HashA,PtrA}|ChildrenA], [{HashB,PtrB}|ChildrenB],
 leaf_diff([], [], _, _, KeysA, KeysB) -> {KeysA, KeysB};
 
 leaf_diff([], [{KeyHash, Ptr, Val}|ValuesB], TreeA, TreeB, KeysA, KeysB) ->
-  error_logger:info_msg("leaf_diff empty values ~n"),
-  % NewKeys = case lists:keytake(KeyHash, 1, KeysB) of
-  %   {value, {KeyHash, _, Val}, Taken} -> Taken;
-  %   {value, {KeyHash, _, _}, _} -> KeysB;
-  %   false -> [{KeyHash, Ptr, Val}|KeysB]
-  % end,
+  % error_logger:info_msg("leaf_diff empty values ~n"),
   leaf_diff([], ValuesB, TreeA, TreeB, KeysA, [{KeyHash, Ptr, Val}|KeysB]);
   
 leaf_diff([{KeyHash,Ptr,Val}|ValuesA], [], TreeA, TreeB, KeysA, KeysB) ->
-  error_logger:info_msg("leaf_diff values empty ~n"),
-  % NewKeys = case lists:keytake(KeyHash, 1, KeysA) of
-  %   {value, {KeyHash, _, Val}, Taken} -> Taken;
-  %   {value, {KeyHash, _, _}, _} -> KeysA;
-  %   false -> [{KeyHash, Ptr,Val}|KeysA]
-  % end,
+  % error_logger:info_msg("leaf_diff values empty ~n"),
   leaf_diff(ValuesA, [], TreeA, TreeB, [{KeyHash, Ptr,Val}|KeysA], KeysB);
   
 leaf_diff([{Hash, _, Val}|ValuesA], [{Hash, _, Val}|ValuesB], TreeA, TreeB, KeysA, KeysB) ->
-  error_logger:info_msg("leaf_diff equals ~n"),
+  % error_logger:info_msg("leaf_diff equals ~n"),
   leaf_diff(ValuesA, ValuesB, TreeA, TreeB, KeysA, KeysB);
   
 leaf_diff([{Hash, PtrA, ValA}|ValuesA], [{Hash, PtrB, ValB}|ValuesB], TreeA, TreeB, KeysA, KeysB) ->
-  error_logger:info_msg("leaf_diff equal keys, diff vals ~n"),
+  % error_logger:info_msg("leaf_diff equal keys, diff vals ~n"),
   leaf_diff(ValuesA, ValuesB, TreeA, TreeB, [{Hash,PtrA,ValA}|KeysA], KeysB);
   
 leaf_diff([{HashA, PtrA, ValA}|ValuesA], [{HashB, PtrB, ValB}|ValuesB], TreeA, TreeB, KeysA, KeysB) when HashA < HashB ->
-  error_logger:info_msg("leaf_diff complete diff ~p < ~p ~n", [HashA, HashB]),
-  % NewKeys = case lists:keytake(HashA, 1, KeysA) of
-  %   {value, {HashA, _, ValA}, Taken} -> Taken;
-  %   {value, {HashA, _, _}, _} -> KeysA;
-  %   false -> [{HashA, PtrA, ValA}|KeysA]
-  % end,
+  % error_logger:info_msg("leaf_diff complete diff ~p < ~p ~n", [HashA, HashB]),
   leaf_diff(ValuesA, [{HashB, PtrB, ValB}|ValuesB], TreeA, TreeB, [{HashA, PtrA, ValA}|KeysA], KeysB);
   
 leaf_diff([{HashA, PtrA, ValA}|ValuesA], [{HashB, PtrB, ValB}|ValuesB], TreeA, TreeB, KeysA, KeysB) when HashA > HashB ->
-  error_logger:info_msg("leaf_diff complete diff ~p > ~p ~n", [HashA, HashB]),
-  % NewKeys = case lists:keytake(HashB, 1, KeysB) of
-  %   {value, {HashB, _, ValB}, Taken} -> Taken;
-  %   {value, {HashB, _, _}, _} -> KeysB;
-  %   false -> [{HashB, PtrB, ValB}|KeysB]
-  % end,
+  % error_logger:info_msg("leaf_diff complete diff ~p > ~p ~n", [HashA, HashB]),
   leaf_diff([{HashA, PtrA, ValA}|ValuesA], ValuesB, TreeA, TreeB, KeysA, [{HashB, PtrB, ValB}|KeysB]).
 
 hash_leaves(#node{children=Children}, Tree, Keys) ->
@@ -620,11 +597,6 @@ hash_leaves(#node{children=Children}, Tree, Keys) ->
 
 hash_leaves(#leaf{values=Values}, Tree, Keys) ->
   lists:foldl(fun({KeyHash, Ptr, ValHash}, Acc) ->
-      % case lists:keytake(KeyHash, 1, Acc) of
-      %   {value, {KeyHash, _, ValHash}, Left} -> Left;
-      %   {value, {KeyHash, _, _}, _} -> Acc;
-      %   false -> [{KeyHash, Ptr, ValHash}|Acc]
-      % end
       [{KeyHash, Ptr, ValHash}|Acc]
     end, Keys, Values).
 
@@ -637,11 +609,6 @@ leaves(#node{children=Children}, Tree, Keys) ->
 leaves(#leaf{values=Values}, Tree, Keys) ->
   lists:foldl(fun({KeyHash, Ptr, ValHash}, Acc) ->
       Key = dmtree:read_key(Ptr, Tree),
-      % case lists:keytake(Key, 1, Acc) of
-      %   {value, {Key, ValHash}, Left} -> Left;
-      %   {value, {Key, _}, _} -> Acc;
-      %   false -> [{Key, ValHash}|Acc]
-      % end
       [{Key, ValHash}|Acc]
     end, Keys, Values).
 
@@ -664,18 +631,18 @@ visualized_find(KeyHash, Key, Leaf = #leaf{values=Values}, Tree, Trail) ->
 
 find(KeyHash, Key, Node = #node{keys=Keys,children=Children}, Tree) ->
   {_FoundKey, {_,ChildPointer}} = find_child(KeyHash, Keys, Children),
-  error_logger:info_msg("finding keyhash ~p in ~p got ~p~n", [KeyHash, Keys, _FoundKey]),
+  % error_logger:info_msg("finding keyhash ~p in ~p got ~p~n", [KeyHash, Keys, _FoundKey]),
   find(KeyHash, Key, dmtree:read(ChildPointer,Tree), Tree);
   
 find(KeyHash, Key, Leaf = #leaf{values=Values}, Tree) ->
-  error_logger:info_msg("looking for ~p in ~p~n", [KeyHash, Values]),
+  % error_logger:info_msg("looking for ~p in ~p~n", [KeyHash, Values]),
   case lists:keysearch(KeyHash, 1, Values) of
     {value, {KeyHash,_,ValHash}} -> ValHash;
     false -> not_found
   end.
 
 update(KeyHash, Key, Value, Node = #node{children=Children,keys=Keys}, Tree) ->
-  error_logger:info_msg("update(~p, ~p, Value, #node ~p, Tree)~n", [KeyHash, Key, offset(Node)]),
+  % error_logger:info_msg("update(~p, ~p, Value, #node ~p, Tree)~n", [KeyHash, Key, offset(Node)]),
   D = dmtree:d(Tree),
   {FoundKey, {ChildHash,ChildPointer}} = find_child(KeyHash, Keys, Children),
   if
@@ -693,7 +660,7 @@ update(KeyHash, Key, Value, Node = #node{children=Children,keys=Keys}, Tree) ->
   end;
   
 update(KeyHash, Key, Value, Leaf = #leaf{values=Values}, Tree) ->
-  error_logger:info_msg("update(~p, ~p, Value, #leaf ~p, Tree)~n", [KeyHash, Key, offset(Leaf)]),
+  % error_logger:info_msg("update(~p, ~p, Value, #leaf ~p, Tree)~n", [KeyHash, Key, offset(Leaf)]),
   NewValHash = hash(Value),
   case lists:keysearch(KeyHash, 1, Values) of
     {value, {KeyHash,Pointer,ValHash}} ->
@@ -701,12 +668,12 @@ update(KeyHash, Key, Value, Leaf = #leaf{values=Values}, Tree) ->
         Key ->
           dmtree:write(Leaf#leaf{values=lists:keyreplace(KeyHash, 1, Values, {KeyHash,Pointer,NewValHash})}, Tree);
         _ ->  %we still need to deal with collision here
-          error_logger:info_msg("hash found but no key found, inserting new ~n"),
+          % error_logger:info_msg("hash found but no key found, inserting new ~n"),
           NewPointer = dmtree:write_key(eof, Key, Tree),
           dmtree:write(Leaf#leaf{values=lists:keymerge(1, Values, [{KeyHash,NewPointer,NewValHash}])}, Tree)
       end;
     false ->
-      error_logger:info_msg("no hash or key found, inserting new ~n"),
+      % error_logger:info_msg("no hash or key found, inserting new ~n"),
       NewPointer = dmtree:write_key(eof, Key, Tree),
       NewValues = lists:keymerge(1, Values, [{KeyHash,NewPointer,NewValHash}]),
       dmtree:write(Leaf#leaf{m=length(NewValues),values=NewValues}, Tree)
@@ -735,7 +702,7 @@ split_child(_, empty, Child = #node{m=M,keys=Keys,children=Children}, Tree) ->
   {LeftChildren, RightChildren} = lists:split(M div 2, Children),
   [LeftKeyHash| ReversedLeftKeys] = lists:reverse(PreLeftKeys),
   LeftKeys = lists:reverse(ReversedLeftKeys),
-  error_logger:info_msg("splitchild(empty rightkeys ~p rightchildren ~p leftkeys ~p leftchildren ~p~n", [length(RightKeys), length(RightChildren), length(LeftKeys), length(LeftChildren)]),
+  % error_logger:info_msg("splitchild(empty rightkeys ~p rightchildren ~p leftkeys ~p leftchildren ~p~n", [length(RightKeys), length(RightChildren), length(LeftKeys), length(LeftChildren)]),
   Left = dmtree:write(#node{m=length(LeftKeys),keys=LeftKeys,children=LeftChildren},Tree),
   Right = dmtree:write(Child#node{m=length(RightKeys),keys=RightKeys,children=RightChildren}, Tree),
   dmtree:write(#node{m=1,
@@ -743,7 +710,7 @@ split_child(_, empty, Child = #node{m=M,keys=Keys,children=Children}, Tree) ->
     children=[{hash(Left),offset(Left)},{hash(Right),offset(Right)}]}, Tree);
 
 split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #leaf{values=Values,m=M}, Tree) ->
-  error_logger:info_msg("splitting leaf with offset~p parent with offset~p ~n", [Child#leaf.offset, Parent#node.offset]),
+  % error_logger:info_msg("splitting leaf with offset~p parent with offset~p ~n", [Child#leaf.offset, Parent#node.offset]),
   {LeftValues, RightValues} = lists:split(M div 2, Values),
   % {LeftValues, RightValues} = lists:partition(fun({Hash,_,_}) ->
   %     Hash =< KeyHash
@@ -755,7 +722,7 @@ split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #lea
   dmtree:write(replace(Parent, ToReplace, Left, Right, last_key(Left)), Tree);
   
 split_child(Parent = #node{keys=Keys,children=Children}, ToReplace, Child = #node{m=M,keys=ChildKeys,children=ChildChildren}, Tree) ->
-  error_logger:info_msg("splitting node ~p~n", [Parent]),
+  % error_logger:info_msg("splitting node ~p~n", [Parent]),
   % KeyHash = lists:nth(M div 2, Keys),
   {PreLeftKeys, RightKeys} = lists:split(M div 2, ChildKeys),
   {LeftChildren, RightChildren} = lists:split(M div 2, ChildChildren),

@@ -240,7 +240,7 @@ int_read(Offset, #dmtree{file=File,blocksize=BlockSize}) ->
   end.
   
 int_write(Node, Tree = #dmtree{file=File,blocksize=BlockSize}) ->
-  ?infoFmt("int_write ~p~n", [Node]),
+  % ?infoFmt("int_write ~p~n", [Node]),
   Offset = offset(Node),
   Bin = serialize(Node, BlockSize),
   {Offset2, Tree2} = take_free_offset(Offset, Tree),

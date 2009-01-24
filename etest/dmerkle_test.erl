@@ -37,14 +37,14 @@ open_and_reopen_test() ->
   Hash = find("mykey", NewPid),
   close(NewPid).
 
-% open_and_insert_260_test() ->
-%   open_and_insert_n(260).
-%   
-% open_and_insert_1000_test() ->
-%   open_and_insert_n(1000).
-%   
-% open_and_insert_3000_test() ->
-%   open_and_insert_n(3000).
+open_and_insert_260_test() ->
+  open_and_insert_n(260).
+  
+open_and_insert_1000_test() ->
+  open_and_insert_n(1000).
+  
+open_and_insert_3000_test() ->
+  open_and_insert_n(3000).
    
 insert_500_both_ways_test() ->
   test_cleanup(),
@@ -147,6 +147,8 @@ insert_overwrite2_test() ->
   % [] = Diff,
   1 = length(leaves(TreeB)).
 
+%% swapping trees may not be something we want to support nomo
+
 % swap_tree_test() ->
 %   test_cleanup(),
 %   {ok, PidA} = open(data_file(), 256),
@@ -169,142 +171,141 @@ insert_overwrite2_test() ->
 %       end
 %     end, lists:seq(1, 500)).
 %   
-% leaves_test() ->
-%   test_cleanup(),
-%   {ok, PidA} = open(data_file(), 256),
-%   Tree = lists:foldl(fun(N, Tree) ->
-%       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-%     end, PidA, lists:seq(1,500)),
-%   500 = length(leaves(Tree)).
-%   
-% empty_diff_test() ->
-%   test_cleanup(),
-%   {ok, PidA} = open(data_file(), 256),
-%   TreeA = lists:foldl(fun(N, Tree) ->
-%       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-%     end, PidA, lists:seq(1,500)),
-%   {ok, TreeB} = open(data_file(1), 256),
-%   500 = length(key_diff(TreeA, TreeB)).
-%   
-% live_test_() ->
-%   {timeout, 120, [{?LINE, fun() ->
-%     {ok, TreeA} = open(data_file(410), 4096),
-%     {ok, TreeB} = open(data_file(42), 4096),
-%     KeyDiff = key_diff(TreeA, TreeB),
-%     error_logger:info_msg("key_diff: ~p~n", [KeyDiff]),
-%     LeavesA = leaves(TreeA),
-%     LeavesB = leaves(TreeB),
-%     LeafDiff = LeavesA -- LeavesB,
-%     error_logger:info_msg("leaf_diff: ~p~n", [LeafDiff]),
-%     timer:sleep(100),
-%     KeyDiff = LeafDiff
-%   end}]}.
-%   
-% simple_deletion_test() ->
-%   test_cleanup(),
-%   {ok, Pid} = open(data_file(), 256),
-%   update("key", "value", Pid),
-%   delete("key", Pid),
-%   Tree = get_tree(Pid),
-%   Root = Tree#dmerkle.root,
-%   error_logger:info_msg("Root ~p~n", [Root]),
-%   ?assertEqual(0, Root#leaf.m),
-%   close(Pid).
-%   
-% full_deletion_with_single_split_test() ->
-%   test_cleanup(),
-%   {ok, Pid} = open(data_file(), 256),
-%   lists:foldl(fun(N, Tree) ->
-%       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-%     end, Pid, lists:seq(1,20)),
-%   Tree = get_tree(Pid),
-%   TreeA = lists:foldl(fun(N, Tree) ->
-%       Key = lists:concat(["key", N]),
-%       {LF, NT} = delete(hash(Key), Key, root, Tree#dmerkle.root, Tree),
-%       NT#dmerkle{root=LF}
-%     end, Tree,lists:seq(1,20)),
-%   Root = TreeA#dmerkle.root,
-%   ?assertMatch(#leaf{}, Root),
-%   ?assertEqual(0, Root#leaf.m),
-%   close(Pid).
-%   
-% compare_trees_with_delete_test() ->
-%   test_cleanup(),
-%   {ok, PidA} = open(data_file(), 256),
-%   {ok, PidB} = open(data_file(1), 256),
-%   lists:foldl(fun(N, Tree) ->
-%       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-%     end, PidA, lists:seq(1,20)),
-%   lists:foldl(fun(N, Tree) ->
-%       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-%     end, PidB, lists:seq(1,20)),
-%   delete("key1", PidB),
-%   ?assertEqual(["key1"], key_diff(PidA, PidB)),
-%   close(PidA),
-%   close(PidB).
-%   
-% full_deletion_with_multiple_split_test_() ->
-%   {timeout, 120, [{?LINE, fun() ->
-%     test_cleanup(),
-%     {ok, Pid} = open(data_file(), 256),
-%     lists:foldl(fun(N, Tree) ->
-%         update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-%       end, Pid, lists:seq(1,300)),
-%     lists:foldl(fun(N, Tree) ->
-%         Key = lists:concat(["key", N]),
-%         ?infoFmt("deleting ~p~n", [Key]),
-%         delete(Key, Tree),
-%         ?assertEqual(300-N, length(leaves(Tree))),
-%         Tree
-%       end, Pid, lists:seq(1,300)),
-%     Tree = get_tree(Pid),
-%     Root = Tree#dmerkle.root,
-%     ?infoFmt("root: ~p~n", [Tree#dmerkle.root]),
-%     ?assertMatch(#leaf{}, Root),
-%     ?assertEqual(0, Root#leaf.m),
-%     close(Pid)
-%   end}]}.
-%   
-% partial_deletion_with_multiple_split_test_() ->
-%   {timeout, 120, [{?LINE, fun() ->
-%     test_cleanup(),
-%     {ok, Pid1} = open(data_file(), 256),
-%     {ok, Pid2} = open(data_file(1), 256),
-%     Keys = lists:map(fun(I) ->
-%         lib_misc:rand_str(10)
-%       end, lists:seq(1,300)),
-%     lists:foreach(fun(Key) ->
-%         update(Key, "vallllllueeee" ++ Key, Pid1),
-%         update(Key, "vallllllueeee" ++ Key, Pid2)
-%       end, Keys),
-%     lists:foreach(fun(Key) ->
-%         delete(Key, Pid2)
-%       end, lists:sublist(Keys, 50)),
-%     ?assertEqual(lists:sort(lists:sublist(Keys, 50)), key_diff(Pid1, Pid2)),
-%     close(Pid1),
-%     close(Pid2)
-%   end}]}.
-% 
-% partial_deletion_and_rebuild_test() ->
-%   test_cleanup(),
-%   {ok, Pid} = open(data_file(), 256),
-%   Keys = lists:map(fun(I) ->
-%       lib_misc:rand_str(10)
-%     end, lists:seq(1,300)),
-%   lists:foreach(fun(Key) ->
-%       update(Key, "valuuueeeee" ++ Key, Pid)
-%     end, Keys),
-%   IdxSize = filelib:file_size(data_file() ++ ".idx"),
-%   KeySize = filelib:file_size(data_file() ++ ".keys"),
-%   lists:foreach(fun(Key) ->
-%       delete(Key, Pid)
-%     end, lists:sublist(Keys, 100)),
-%   lists:foreach(fun(Key) ->
-%       update(Key, "valuuueeeee" ++ Key, Pid)
-%     end, lists:sublist(Keys, 100)),
-%   ?assertEqual(IdxSize, filelib:file_size(data_file() ++ ".idx")),
-%   ?assertEqual(KeySize, filelib:file_size(data_file() ++ ".keys")),
-%   close(Pid).
+leaves_test() ->
+  test_cleanup(),
+  {ok, PidA} = open(data_file(), 256),
+  Tree = lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, PidA, lists:seq(1,500)),
+  500 = length(leaves(Tree)).
+  
+empty_diff_test() ->
+  test_cleanup(),
+  {ok, PidA} = open(data_file(), 256),
+  TreeA = lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, PidA, lists:seq(1,500)),
+  {ok, TreeB} = open(data_file(1), 256),
+  500 = length(key_diff(TreeA, TreeB)).
+  
+live_test_() ->
+  {timeout, 120, [{?LINE, fun() ->
+    {ok, TreeA} = open(data_file(410), 4096),
+    {ok, TreeB} = open(data_file(42), 4096),
+    KeyDiff = key_diff(TreeA, TreeB),
+    error_logger:info_msg("key_diff: ~p~n", [KeyDiff]),
+    LeavesA = leaves(TreeA),
+    LeavesB = leaves(TreeB),
+    LeafDiff = LeavesA -- LeavesB,
+    error_logger:info_msg("leaf_diff: ~p~n", [LeafDiff]),
+    timer:sleep(100),
+    KeyDiff = LeafDiff
+  end}]}.
+  
+simple_deletion_test() ->
+  test_cleanup(),
+  {ok, Pid} = open(data_file(), 256),
+  update("key", "value", Pid),
+  delete("key", Pid),
+  Tree = get_state(Pid),
+  Root = Tree#dmerkle.root,
+  error_logger:info_msg("Root ~p~n", [Root]),
+  ?assertEqual(0, Root#leaf.m),
+  close(Pid).
+  
+full_deletion_with_single_split_test() ->
+  test_cleanup(),
+  {ok, Pid} = open(data_file(), 256),
+  lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, Pid, lists:seq(1,20)),
+  lists:foreach(fun(N) ->
+      Key = lists:concat(["key", N]),
+      delete(Key, Pid)
+    end, lists:seq(1,20)),
+  Tree = get_state(Pid),
+  Root = Tree#dmerkle.root,
+  ?assertMatch(#leaf{}, Root),
+  ?assertEqual(0, Root#leaf.m),
+  close(Pid).
+  
+compare_trees_with_delete_test() ->
+  test_cleanup(),
+  {ok, PidA} = open(data_file(), 256),
+  {ok, PidB} = open(data_file(1), 256),
+  lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, PidA, lists:seq(1,20)),
+  lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, PidB, lists:seq(1,20)),
+  delete("key1", PidB),
+  ?assertEqual(["key1"], key_diff(PidA, PidB)),
+  close(PidA),
+  close(PidB).
+  
+full_deletion_with_multiple_split_test_() ->
+  {timeout, 120, [{?LINE, fun() ->
+    test_cleanup(),
+    {ok, Pid} = open(data_file(), 256),
+    lists:foldl(fun(N, Tree) ->
+        update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+      end, Pid, lists:seq(1,300)),
+    lists:foldl(fun(N, Tree) ->
+        Key = lists:concat(["key", N]),
+        ?infoFmt("deleting ~p~n", [Key]),
+        delete(Key, Tree),
+        ?assertEqual(300-N, length(leaves(Tree))),
+        Tree
+      end, Pid, lists:seq(1,300)),
+    Tree = get_state(Pid),
+    Root = Tree#dmerkle.root,
+    ?infoFmt("root: ~p~n", [Tree#dmerkle.root]),
+    ?assertMatch(#leaf{}, Root),
+    ?assertEqual(0, Root#leaf.m),
+    close(Pid)
+  end}]}.
+  
+partial_deletion_with_multiple_split_test_() ->
+  {timeout, 120, [{?LINE, fun() ->
+    test_cleanup(),
+    {ok, Pid1} = open(data_file(), 256),
+    {ok, Pid2} = open(data_file(1), 256),
+    Keys = lists:map(fun(I) ->
+        lib_misc:rand_str(10)
+      end, lists:seq(1,300)),
+    lists:foreach(fun(Key) ->
+        update(Key, "vallllllueeee" ++ Key, Pid1),
+        update(Key, "vallllllueeee" ++ Key, Pid2)
+      end, Keys),
+    lists:foreach(fun(Key) ->
+        delete(Key, Pid2)
+      end, lists:sublist(Keys, 50)),
+    ?assertEqual(lists:sort(lists:sublist(Keys, 50)), key_diff(Pid1, Pid2)),
+    close(Pid1),
+    close(Pid2)
+  end}]}.
+
+partial_deletion_and_rebuild_test() ->
+  test_cleanup(),
+  {ok, Pid} = open(data_file(), 256),
+  Keys = lists:map(fun(I) ->
+      lib_misc:rand_str(10)
+    end, lists:seq(1,300)),
+  lists:foreach(fun(Key) ->
+      update(Key, "valuuueeeee" ++ Key, Pid)
+    end, Keys),
+  IdxSize = filelib:file_size(data_file() ++ ".idx"),
+  KeySize = filelib:file_size(data_file() ++ ".keys"),
+  lists:foreach(fun(Key) ->
+      delete(Key, Pid)
+    end, lists:sublist(Keys, 100)),
+  lists:foreach(fun(Key) ->
+      update(Key, "valuuueeeee" ++ Key, Pid)
+    end, lists:sublist(Keys, 100)),
+  ?assertEqual(IdxSize, filelib:file_size(data_file() ++ ".idx")),
+  ?assertEqual(KeySize, filelib:file_size(data_file() ++ ".keys")),
+  close(Pid).
 
 open_and_insert_n(N) ->
   test_cleanup(),
