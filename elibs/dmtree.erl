@@ -14,20 +14,21 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/2, stop/1, read_block/3, write_block/3, read_key/2, write_key/3, index_name/1, key_name/1]).
+-export([start_link/2, stop/1, tx_begin/1, tx_commit/1, tx_rollback/1, d/1, root/1, block_size/1, update_root/2, write/2, delete/2, read/2, read_key/2, delete_key/3, write_key/3, filename/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
 -include("dmerkle.hrl").
+-include("common.hrl").
+-include_lib("kernel/include/file.hrl").
 
--define(VERSION, 1).
--define(HEADER_SIZE, 125).
--define(ROOT_POS, (1+4+8)).
--define(FREE_POS, (?ROOT_POS+8)).
+-record(dmtree, {file, d, blocksize, filename, operations=[], freepointer=0, rootpointer=0, fp1=0, fp2=0, fp3=0, fp4=0, fp5=0}).
 
--record(dmtree, {file, blocksize, filename, freepointer=0, rootpointer=0, fp1=0, fp2=0, fp3=0, fp4=0, fp5=0}).
+-ifdef(TEST).
+-include("etest/dmtree_test.erl").
+-endif.
 
 %%====================================================================
 %% API
@@ -52,6 +53,12 @@ tx_rollback(Pid) ->
 root(Pid) ->
   gen_server:call(Pid, root).
   
+d(Pid) ->
+  gen_server:call(Pid, d).
+  
+block_size(Pid) ->
+  gen_server:call(Pid, block_size).
+  
 update_root(Node, Pid) ->
   gen_server:call(Pid, {update_root, Node}).
     
@@ -61,14 +68,23 @@ stop(Pid) ->
 write(Node, Pid) ->
   gen_server:call(Pid, {write, Node}).
   
-read(Pid) ->
-  gen_server:call(Pid, read).
+delete(Offset, Pid) ->
+  gen_server:call(Pid, {delete, Offset}).
   
-read_key(Pid, Offset) ->
+read(Offset, Pid) ->
+  gen_server:call(Pid, {read, Offset}).
+  
+read_key(Offset, Pid) ->
   gen_server:call(Pid, {read_key, Offset}).
   
-write_key(Pid, Offset, Key) ->
+delete_key(Offset, Key, Pid) ->
+  gen_server:call(Pid, {delete_key, Offset, Key}).
+  
+write_key(Offset, Key, Pid) ->
   gen_server:call(Pid, {write_key, Offset, Key}).
+  
+filename(Pid) ->
+  gen_server:call(Pid, filename).
 
 %%====================================================================
 %% gen_server callbacks
@@ -84,18 +100,17 @@ write_key(Pid, Offset, Key) ->
 %%--------------------------------------------------------------------
 init([FileName, BlockSize]) ->
   filelib:ensure_dir(FileName),
-  {ok, File} = file:open(index_name(FileName), [read, write, binary]),
-  Tree = case read_header(File) of
-    {ok, Header} -> Header;
+  {ok, File} = file:open(FileName, [read, write, binary]),
+  R = case read_header(File) of
+    {ok, Header} -> {ok, create_or_read_root(Header#dmtree{filename=FileName,file=File})};
+    {error, Msg} -> {stop, Msg};
     eof ->
       D = d_from_blocksize(BlockSize),
       AlignedBlockSize = blocksize_from_d(D),
-      T = #dmtree{file=File,d=D,blocksize=AlignedBlockSize,filename=FileName}
+      {ok, create_or_read_root(#dmtree{file=File,d=D,blocksize=AlignedBlockSize,filename=FileName})}
   end,
-  case Tree of
-    {error, Msg} = {stop, Msg};
-    #dmtree{} -> {ok, create_or_read_root(Tree)}
-  end.
+  ?infoFmt("init return value: ~p~n", [R]),
+  R.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -108,26 +123,52 @@ init([FileName, BlockSize]) ->
 %% @doc Handling call messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_call({read_block, Offset, Size}, _From, State = #state{index=Index}) ->
-  {reply, file:pread(Index, Offset, Size), State};
+handle_call(tx_begin, _From, State = #dmtree{}) ->
+  {reply, ok, State#dmtree{operations=[]}};
   
-handle_call({write_block, Offset, Data}, _From, State = #state{index=Index}) ->
-  {ok, Position} = file:position(Index, Offset),
-  % error_logger:info_msg("writing ~p bytes at ~p~n", [byte_size(Data), Position]),
-  Reply = file:write(Index, Data),
-  {reply, {Reply, Position}, State};
+handle_call(tx_commit, _From, State = #dmtree{operations=Ops,file=File}) ->
+  case file:pwrite(File, lists:reverse(Ops)) of
+    ok -> {reply, ok, State#dmtree{operations=[]}};
+    {error, Reasons} -> {stop, Reasons, State}
+  end;
   
-handle_call({read_key, Offset}, _From, State = #state{keys=Keys}) ->
-  file:position(Keys, Offset),
-  {reply, int_read_key(Keys, []), State};
+handle_call(tx_rollback, _From, State = #dmtree{}) ->
+  {reply, ok, State#dmtree{operations=[]}};
   
-handle_call({read_free, Offset}, _From, State = #state{keys=Keys}) ->
-  file:position(Keys, Offset),
-  {reply, int_read_free(Keys, []), State};
+handle_call(d, _From, State = #dmtree{d=D}) ->
+  {reply, D, State};
   
-handle_call({write_key, Offset, Key}, _From, State = #state{keys=Keys}) ->
-  {ok, Position} = file:position(Keys, Offset),
-  {reply, {file:write(Keys, Key ++ [0]), Position}, State}.
+handle_call(root, _From, State = #dmtree{rootpointer=Ptr}) ->
+  {reply, int_read(Ptr, State), State};
+  
+handle_call(block_size, _From, State = #dmtree{blocksize=BlockSize}) ->
+  {reply, BlockSize, State};
+  
+handle_call({update_root, Node}, _From, State = #dmtree{}) ->
+  {reply, self(), write_header(State#dmtree{rootpointer=offset(Node)})};
+  
+handle_call({write, Node}, _From, State = #dmtree{}) ->
+  {N, T} = int_write(Node, State),
+  {reply, N, T};
+  
+handle_call({delete, Offset}, _From, State = #dmtree{}) ->
+  {reply, self(), int_delete(Offset, State)};
+  
+handle_call({read, Offset}, _From, State = #dmtree{}) ->
+  {reply, int_read(Offset, State), State};
+  
+handle_call({read_key, Offset}, _From, State = #dmtree{}) ->
+  {reply, int_read_key(Offset, State), State};
+  
+handle_call({delete_key, Offset, Key}, _From, State = #dmtree{}) ->
+  {reply, self(), int_delete_key(Offset, Key, State)};
+  
+handle_call({write_key, Offset, Key}, _From, State = #dmtree{}) ->
+  {Offset2, State2} = int_write_key(Offset, Key, State),
+  {reply, Offset2, State2};
+  
+handle_call(filename, _From, State = #dmtree{filename=Filename}) ->
+  {reply, Filename, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -157,10 +198,9 @@ handle_info(_Info, State) ->
 %% The return value is ignored.
 %% @end 
 %%--------------------------------------------------------------------
-terminate(_Reason, #state{index=Index,keys=Keys}) ->
-  % error_logger:info_msg("shutting down and closing~n"),
-  ok = file:close(Index),
-  ok = file:close(Keys).
+terminate(_Reason, #dmtree{file=File}) ->
+  error_logger:info_msg("shutting down and closing~n"),
+  ok = file:close(File).
 
 %%--------------------------------------------------------------------
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
@@ -171,72 +211,103 @@ code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
 
 %%--------------------------------------------------------------------
-%%% Internal functions
+%%% Internal functions =================READ / WRITE operations
 %%--------------------------------------------------------------------
-create_or_read_root(Tree = #dtree{file=File,block=BlockSize,rootpointer=0}) ->
-  {Root, Tree2} = write(#leaf{}, Tree),
-  update_root(Tree2, Root);
+write_header(Tree = #dmtree{file=File}) ->
+  ok = file:pwrite(File,0,serialize_header(Tree)),
+  Tree.
+  % Tree#dmtree{operations=add_operation(0, serialize_header(Tree), Ops)}.
   
-create_or_read_root(Tree = #dmtree{file=File,block=BlockSize,rootpointer=Ptr}) ->
-  Root = read(File, Ptr, BlockSize),
-  Tree#dmerkle{root=Root}.
+read_header(File) ->
+  case file:pread(File, 0, ?HEADER_SIZE) of
+    {ok, Bin} -> deserialize_header(Bin);
+    eof -> eof;
+    {error, Msg} -> {error, Msg}
+  end.
+  
+int_read(0, Tree) ->
+  throw("tried to read a node from the null pointer");
 
-write(Node, Tree = #dmerkle{file=File,block=BlockSize}) ->
+int_read(Offset, #dmtree{file=File,blocksize=BlockSize}) ->
+  case file:pread(File, Offset, BlockSize) of
+    {ok, Bin} -> deserialize(Bin, Offset);
+    eof -> 
+      error_logger:info_msg("hit an eof for offset ~p", [Offset]),
+      undefined;
+    {error, Reason} -> 
+      error_logger:info_msg("error ~p at offset", [Reason, Offset]),
+      undefined
+  end.
+  
+int_write(Node, Tree = #dmtree{file=File,blocksize=BlockSize}) ->
+  ?infoFmt("int_write ~p~n", [Node]),
   Offset = offset(Node),
   Bin = serialize(Node, BlockSize),
   {Offset2, Tree2} = take_free_offset(Offset, Tree),
-  {ok, NewOffset} = block_server:write_block(File,Offset2,Bin),
+  {ok, NewOffset} = file:position(File,Offset2),
+  ok = file:write(File,Bin),
   {offset(Node, NewOffset), Tree2}.
+  
+int_delete(Offset, Tree = #dmtree{file=File,blocksize=BlockSize,freepointer=Pointer}) ->
+  {_, Tree2} = int_write(#free{offset=Offset,pointer=Pointer}, Tree),
+  write_header(Tree2#dmtree{freepointer=Offset}).
+  
+%this gotta change at some point
+int_read_key(Offset, #dmtree{file=File}) ->
+  file:position(File, Offset),
+  int_read_key(File, []);
+  
+int_read_key(Keys, [0 | Key]) ->
+  K = lists:reverse(Key),
+  % ?infoFmt("int_read_key ~p~n", [K]),
+  K;
 
-read(File, 0, BlockSize) ->
-  throw("tried to read a node from the null pointer");
-
-read(File, Offset, BlockSize) ->
-  case block_server:read_block(File, Offset, BlockSize) of
-    {ok, Bin} -> deserialize(Bin, Offset);
-    eof -> error_logger:info_msg("hit an eof for offset ~p", [Offset]),
-      undefined;
-    {error, Reason} -> error_logger:info_msg("error ~p at offset", [Reason, Offset]),
-      undefined
+int_read_key(Keys, Key) ->
+  case file:read(Keys, 1) of
+    {ok, <<Char:8>>} -> int_read_key(Keys, [Char|Key]);
+    Other -> Other
   end.
+  
+int_write_key(Offset, Key, Tree = #dmtree{file=File}) ->
+  {ok, NewOffset} = file:position(File, Offset),
+  ok = file:write(File, [Key,0]),
+  {NewOffset, Tree}.
+  
+int_delete_key(Offset, Key, Tree = #dmtree{}) ->
+  Tree.
+  
+%%--------------------------------
+%% ============SUPPORT FUNCTIONS
+%%--------------------------------
 
-delete_cell(Offset, Tree = #dmerkle{file=File,block=BlockSize,freepointer=Pointer}) ->
-  {_, Tree2} = write(#free{offset=Offset,pointer=Pointer}, Tree),
-  write_header(Tree2#dmerkle{freepointer=Offset}).
+add_operation(Offset, Bin, Ops) ->
+  [{Offset,Bin}|Ops].
 
-update_root(Tree = #dmerkle{}, Root) ->
-  Offset = offset(Root),
-  Tree2 = Tree#dmerkle{rootpointer=Offset,root=Root},
-  write_header(Tree2),
-  Tree2.
-
-write_header(Tree = #dmerkle{file=File}) ->
-  {ok, 0} = block_server:write_block(File,0,serialize_header(Tree)),
+create_or_read_root(Tree = #dmtree{file=File,blocksize=BlockSize,rootpointer=0}) ->
+  {Root, Tree2} = int_write(#leaf{offset=?HEADER_SIZE}, Tree),
+  write_header(Tree2#dmtree{rootpointer=offset(Root)});
+  
+create_or_read_root(Tree = #dmtree{file=File,blocksize=BlockSize,rootpointer=Ptr}) ->
   Tree.
 
-take_free_offset(eof, Tree = #dmerkle{file=File,block=BlockSize,freepointer=FreePtr}) when FreePtr > 0 ->
+take_free_offset(eof, Tree = #dmtree{file=File,blocksize=BlockSize,freepointer=FreePtr}) when FreePtr > 0 ->
   Offset = FreePtr,
-  #free{pointer=NewFreePointer} = read(File, FreePtr, BlockSize),
-  {Offset, write_header(Tree#dmerkle{freepointer=NewFreePointer})};
+  #free{pointer=NewFreePointer} = int_read(FreePtr, Tree),
+  {Offset, write_header(Tree#dmtree{freepointer=NewFreePointer})};
 
 take_free_offset(Offset, Tree) ->
   {Offset, Tree}.
 
-serialize_header(#dmerkle{block=BlockSize, freepointer=FreePtr, root=undefined, rootpointer=RootPtr, fp1=KP1, fp2=KP2, fp3=KP3, fp4=KP4, fp5=KP5}) ->
+serialize_header(#dmtree{blocksize=BlockSize, freepointer=FreePtr, rootpointer=RootPtr, fp1=KP1, fp2=KP2, fp3=KP3, fp4=KP4, fp5=KP5}) ->
   FreeSpace = 64*8,
-  <<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, KP1:64, KP2:64, KP3:64, KP4:64, KP5:64, 0:FreeSpace>>;
-
-serialize_header(#dmerkle{block=BlockSize, freepointer=FreePtr, root=Root, fp1=KP1, fp2=KP2, fp3=KP3, fp4=KP4, fp5=KP5}) ->
-  FreeSpace = 64*8,
-  RootPtr = offset(Root),
   <<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, KP1:64, KP2:64, KP3:64, KP4:64, KP5:64, 0:FreeSpace>>.
 
 %this will try and match the current version, if it doesn't then we gotta punch out
-deserialize_header(<<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, KP1:64, KP2:64, KP3:64, KP4:64, KP5:64, _Reserved:64/binary>>, Tree) ->
-  Tree#dmerkle{block=BlockSize,d=d_from_blocksize(BlockSize),freepointer=FreePtr,rootpointer=RootPtr, fp1=KP1, fp2=KP2, fp3=KP3, fp4=KP4, fp5=KP5};
+deserialize_header(<<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, KP1:64, KP2:64, KP3:64, KP4:64, KP5:64, _Reserved:64/binary>>) ->
+  {ok, #dmtree{blocksize=BlockSize,d=d_from_blocksize(BlockSize),freepointer=FreePtr,rootpointer=RootPtr, fp1=KP1, fp2=KP2, fp3=KP3, fp4=KP4, fp5=KP5}};
 
 %hit the canopy
-deserialize_header(BinHeader, _) ->
+deserialize_header(BinHeader) ->
   case BinHeader of
     <<Version:8, _/binary>> -> {error, ?fmt("Mismatched version.  Cannot read version ~p", [Version])};
     _ -> {error, "Cannot read version.  Dmerkle is corrupted."}
@@ -371,31 +442,6 @@ unpack_values(M, N, Bin, Values) ->
 
 
 
-
-
-
-
-
-
-
-int_read_key(Keys, [0 | Key]) ->
-  lists:reverse(Key);
-
-int_read_key(Keys, Key) ->
-  case file:read(Keys, 1) of
-    {ok, [Char]} -> int_read_key(Keys, [Char|Key]);
-    Other -> Other
-  end.
-
-int_read_free(Keys, [0|Bytes]) ->
-  Bin = list_to_binary(lists:reverse(Bytes)),
-  deserialize(Bin);
-  
-int_read_free(Keys, Key) ->
-  case file:read(Keys, 1) of
-    {ok, [Char]} -> int_read_key(Keys, [Char|Key]);
-    Other -> Other
-  end.
   
 deserialize(Bin) when byte_size(Bin) < 8 ->
   {byte_size(Bin), eos};
@@ -408,3 +454,11 @@ d_from_blocksize(BlockSize) ->
 
 blocksize_from_d(D) ->
   trunc(16*D + 17).
+  
+offset(#leaf{offset=Offset}) -> Offset;
+offset(#free{offset=Offset}) -> Offset;
+offset(#node{offset=Offset}) -> Offset.
+
+offset(Leaf = #leaf{}, Offset) -> Leaf#leaf{offset=Offset};
+offset(Free = #free{}, Offset) -> Free#free{offset=Offset};
+offset(Node = #node{}, Offset) -> Node#node{offset=Offset}.
