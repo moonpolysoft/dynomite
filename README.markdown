@@ -8,9 +8,9 @@ This is dynomite.  It is a clone of the amazon dynamo key value store written in
 Documentation
 ---
 
-[Introduction](http://wiki.github.com/cliffmoon/dynomite/home)
-[Getting Started](http://wiki.github.com/cliffmoon/dynomite/getting-started)
-[Clustering Guide](http://wiki.github.com/cliffmoon/dynomite/clustering-guide)
+* [Introduction](http://wiki.github.com/cliffmoon/dynomite/home)
+* [Getting Started](http://wiki.github.com/cliffmoon/dynomite/getting-started)
+* [Clustering Guide](http://wiki.github.com/cliffmoon/dynomite/clustering-guide)
 
 Mailing List
 ---
