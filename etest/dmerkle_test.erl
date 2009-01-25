@@ -256,7 +256,7 @@ full_deletion_with_multiple_split_test_() ->
       end, Pid, lists:seq(1,300)),
     lists:foldl(fun(N, Tree) ->
         Key = lists:concat(["key", N]),
-        ?infoFmt("deleting ~p~n", [Key]),
+        % ?infoFmt("deleting ~p~n", [Key]),
         delete(Key, Tree),
         ?assertEqual(300-N, length(leaves(Tree))),
         Tree

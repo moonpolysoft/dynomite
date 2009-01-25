@@ -10,7 +10,7 @@
           
 load "servers.rb"
           
-set :storage, (ENV["STORAGE"] || "fs_storage")
+set :storage, (ENV["STORAGE"] || "dets_storage")
 
 namespace :dynomite do
   desc <<-EOF

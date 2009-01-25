@@ -24,7 +24,7 @@
 -include("common.hrl").
 -include_lib("kernel/include/file.hrl").
 
--record(dmtree, {file, size=0, virtsize=0, d, blocksize, filename, ops=[], freepointer=0, rootpointer=0, fp1=0, fp2=0, fp3=0, fp4=0, fp5=0}).
+-record(dmtree, {file, size=0, virtsize=0, d, blocksize, filename, ops=[], freepointer=0, rootpointer=0}).
 
 -ifdef(TEST).
 -include("etest/dmtree_test.erl").
@@ -110,7 +110,7 @@ init([FileName, BlockSize]) ->
       D = d_from_blocksize(BlockSize),
       AlignedBlockSize = blocksize_from_d(D),
       T = create_or_read_root(#dmtree{file=File,d=D,blocksize=AlignedBlockSize,filename=FileName,size=?HEADER_SIZE}),
-      ?infoFmt("created T ~p~n", [T]),
+      % ?infoFmt("created T ~p~n", [T]),
       flush(File, T#dmtree.ops),
       {ok, T#dmtree{ops=[],size=?HEADER_SIZE + AlignedBlockSize}}
   end.
@@ -203,7 +203,7 @@ handle_info(_Info, State) ->
 %% @end 
 %%--------------------------------------------------------------------
 terminate(_Reason, #dmtree{file=File}) ->
-  error_logger:info_msg("shutting down and closing~n"),
+  % error_logger:info_msg("shutting down and closing~n"),
   ok = file:close(File).
 
 %%--------------------------------------------------------------------
@@ -276,10 +276,14 @@ int_read_key(Keys, Key) ->
     Other -> Other
   end.
   
-int_write_key(Offset, Key, Tree = #dmtree{file=File}) ->
+% int_write_key(eof, Key, Tree = #dmtree{blocksize=BlockSize}) when length(Key) < BlockSize ->
+%   
+  
+int_write_key(Offset, Key, Tree) ->
   add_operation(Offset, [Key,0], Tree).
   
 int_delete_key(Offset, Key, Tree = #dmtree{}) ->
+  
   Tree.
   
 %%--------------------------------
@@ -295,7 +299,10 @@ add_operation(eof, Bin, Tree = #dmtree{size=Size,virtsize=VirtSize,ops=Ops}) ->
   
 add_operation(Offset, Bin, Tree = #dmtree{ops=Ops}) ->
   %we might wanna clobber rewrites
-  {Offset, Tree#dmtree{ops=[{Offset,Bin}|Ops]}}.
+  case lists:keytake(Offset, 1, Ops) of
+    {value, {Offset, _}, Ops2} -> {Offset, Tree#dmtree{ops=[{Offset,Bin}|Ops2]}};
+    false -> {Offset, Tree#dmtree{ops=[{Offset,Bin}|Ops]}}
+  end.
   
 true_size(List) when is_list(List) ->
   lists:foldl(fun(E, Sum) -> true_size(E) + Sum end, 0, lists:flatten(List));
@@ -320,13 +327,13 @@ take_free_offset(eof, Tree = #dmtree{file=File,blocksize=BlockSize,freepointer=F
 take_free_offset(Offset, Tree) ->
   {Offset, Tree}.
 
-serialize_header(#dmtree{blocksize=BlockSize, freepointer=FreePtr, rootpointer=RootPtr, fp1=KP1, fp2=KP2, fp3=KP3, fp4=KP4, fp5=KP5}) ->
+serialize_header(#dmtree{blocksize=BlockSize, freepointer=FreePtr, rootpointer=RootPtr}) ->
   FreeSpace = 64*8,
-  <<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, KP1:64, KP2:64, KP3:64, KP4:64, KP5:64, 0:FreeSpace>>.
+  <<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, 0:FreeSpace>>.
 
 %this will try and match the current version, if it doesn't then we gotta punch out
-deserialize_header(<<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, KP1:64, KP2:64, KP3:64, KP4:64, KP5:64, _Reserved:64/binary>>) ->
-  {ok, #dmtree{blocksize=BlockSize,d=d_from_blocksize(BlockSize),freepointer=FreePtr,rootpointer=RootPtr, fp1=KP1, fp2=KP2, fp3=KP3, fp4=KP4, fp5=KP5}};
+deserialize_header(<<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, _Reserved:64/binary>>) ->
+  {ok, #dmtree{blocksize=BlockSize,d=d_from_blocksize(BlockSize),freepointer=FreePtr,rootpointer=RootPtr}};
 
 %hit the canopy
 deserialize_header(BinHeader) ->
@@ -398,72 +405,32 @@ serialize(#leaf{values=Values,m=M}, BlockSize) ->
   OutBin.
 
 pack_values(Values) ->
-  pack_values(lists:reverse(Values), <<"">>).
-
-pack_values([], Bin) -> Bin;
-
-pack_values([{KeyHash,KeyPointer,ValHash}|Values], Bin) ->
-  pack_values(Values, <<KeyHash:32, KeyPointer:64, ValHash:32, Bin/binary>>).
+  << <<KeyHash:32, KeyPointer:64, ValHash:32>> || {KeyHash,KeyPointer,ValHash} <- Values >>.
 
 pack_keys(Keys, D) ->
-  pack_keys(lists:reverse(Keys), D, <<"">>).
-
-pack_keys([], D, Bin) -> 
+  Bin = << <<KeyHash:32>> || KeyHash <- Keys >>,
   BinSize = byte_size(Bin),
   LeftOverBits = D*4*8 - BinSize*8,
-  <<Bin/binary, 0:LeftOverBits>>;
-
-pack_keys([KeyHash|Keys], D, Bin) ->
-  pack_keys(Keys, D, <<KeyHash:32, Bin/binary>>).
+  <<Bin/binary, 0:LeftOverBits>>.
 
 pack_children(Children, D) ->
-  pack_children(lists:reverse(Children), D, <<"">>).
-
-pack_children([], D, Bin) -> 
+  Bin = << <<ChildHash:32, ChildPtr:64>> || {ChildHash,ChildPtr} <- Children >>,
   BinSize = byte_size(Bin),
   LeftOverBits = D*12*8 - BinSize*8,
-  <<Bin/binary, 0:LeftOverBits>>;
-
-pack_children([{ChildHash,ChildPtr}|Children], D, Bin) ->
-  pack_children(Children, D, <<ChildHash:32, ChildPtr:64, Bin/binary>>).
+  <<Bin/binary, 0:LeftOverBits>>.
 
 unpack_keys(M, Bin) ->
-  unpack_keys(M, 0, Bin, []).
-
-unpack_keys(M, M, Bin, Keys) -> lists:reverse(Keys);
-
-unpack_keys(M, N, Bin, Keys) ->
-  SkipSize = N*4,
-  if
-    SkipSize+4 > byte_size(Bin) ->
-      error_logger:info_msg("Whoops, ran out of unpack space M ~p N ~p Bin ~p~n", [M, N, byte_size(Bin)]);
-    true -> noop
-  end,
-  <<_:SkipSize/binary, KeyHash:32, _/binary>> = Bin,
-  unpack_keys(M, N+1, Bin, [KeyHash|Keys]).
+  [ KeyHash || <<KeyHash:32>> <= truncate(M*4, Bin) ].
 
 unpack_children(M, Bin) ->
-  unpack_children(M, 0, Bin, []).
-
-unpack_children(M, M, Bin, Children) -> lists:reverse(Children);
-
-unpack_children(M, N, Bin, Children) ->
-  SkipSize = N*12,
-  <<_:SkipSize/binary, ChildHash:32, ChildPtr:64, _/binary>> = Bin,
-  unpack_children(M, N+1, Bin, [{ChildHash,ChildPtr}|Children]).
+  [{ChildHash,ChildPtr} || <<ChildHash:32, ChildPtr:64>> <= truncate(M*12, Bin)].
 
 unpack_values(M, Bin) ->
-  unpack_values(M, 0, Bin, []).
-
-unpack_values(M, M, Bin, Values) -> lists:reverse(Values);
-
-unpack_values(M, N, Bin, Values) ->
-  SkipSize = N*16,
-  <<_:SkipSize/binary, KeyHash:32, KeyPointer:64, ValueHash:32, _/binary>> = Bin,
-  unpack_values(M, N+1, Bin, [{KeyHash,KeyPointer,ValueHash}|Values]).
-
-
-
+  [{KeyHash,KeyPointer,ValueHash} || <<KeyHash:32,KeyPointer:64,ValueHash:32>> <= truncate(M*16, Bin)].
+  
+truncate(Size, Bin) ->
+  <<TruncBin:Size/binary, _/binary>> = Bin,
+  TruncBin.
   
 deserialize(Bin) when byte_size(Bin) < 8 ->
   {byte_size(Bin), eos};
