@@ -24,7 +24,7 @@
 -include("common.hrl").
 -include_lib("kernel/include/file.hrl").
 
--record(dmtree, {file, size=0, virtsize=0, d, blocksize, filename, ops=[], opdict=dict:new(), freepointer=0, rootpointer=0}).
+-record(dmtree, {file, size=0, virtsize=0, d, blocksize, headersize=0, filename, ops=[], opdict=dict:new(), freepointer=0, rootpointer=0, kfpointers=[]}).
 
 -ifdef(TEST).
 -include("etest/dmtree_test.erl").
@@ -107,12 +107,13 @@ init([FileName, BlockSize]) ->
     {ok, Header} -> {ok, create_or_read_root(Header#dmtree{filename=FileName,file=File,size=FileSize})};
     {error, Msg} -> {stop, Msg};
     eof ->
-      D = d_from_blocksize(BlockSize),
-      AlignedBlockSize = blocksize_from_d(D),
-      T = create_or_read_root(#dmtree{file=File,d=D,blocksize=AlignedBlockSize,filename=FileName,size=?HEADER_SIZE}),
-      % ?infoFmt("created T ~p~n", [T]),
+      D = ?d_from_blocksize(BlockSize),
+      HeaderSize = ?headersize_from_blocksize(BlockSize),
+      Pointers = lists:map(fun(_) -> 0 end, lists:seq(1,?pointers_from_blocksize(BlockSize))),
+      % we want to retain passed in blocksize, internal fragmentation don't matter
+      T = create_or_read_root(#dmtree{file=File,d=D,blocksize=BlockSize,filename=FileName,headersize=HeaderSize,size=HeaderSize,kfpointers=Pointers}),
       flush(File, T#dmtree.ops),
-      {ok, T#dmtree{ops=[],size=?HEADER_SIZE + AlignedBlockSize}}
+      {ok, T#dmtree{ops=[],size=HeaderSize + BlockSize}}
   end.
 
 %%--------------------------------------------------------------------
@@ -224,18 +225,24 @@ write_header(Tree = #dmtree{file=File}) ->
   Tree2.
   
 read_header(File) ->
-  case file:pread(File, 0, ?HEADER_SIZE) of
-    {ok, Bin} -> deserialize_header(Bin);
+  %gotta get the blocksize first
+  case file:pread(File, 1, 4) of
+    {ok, <<BlockSize:32>>} -> 
+      case file:pread(File, 0, ?headersize_from_blocksize(BlockSize)) of
+        {ok, Bin} -> deserialize_header(Bin);
+        eof -> eof;
+        {error, Msg} -> {error, Msg}
+      end;
     eof -> eof;
     {error, Msg} -> {error, Msg}
   end.
   
 int_read(0, Tree) ->
-  throw("tried to read a node from the null pointer");
+  {error, "tried to read a node from the null pointer"};
 
-int_read(Offset, #dmtree{file=File,blocksize=BlockSize}) ->
+int_read(Offset, #dmtree{file=File,d=D,blocksize=BlockSize}) ->
     case file:pread(File, Offset, BlockSize) of
-      {ok, Bin} -> deserialize(Bin, Offset);
+      {ok, Bin} -> deserialize(Bin, D, Offset);
       eof -> 
         error_logger:info_msg("hit an eof for offset ~p", [Offset]),
         undefined;
@@ -313,8 +320,9 @@ true_size(Bin) when is_binary(Bin) ->
   
 true_size(_) -> 1.
 
-create_or_read_root(Tree = #dmtree{file=File,blocksize=BlockSize,rootpointer=0}) ->
-  {Root, Tree2} = int_write(#leaf{offset=?HEADER_SIZE}, Tree),
+create_or_read_root(Tree = #dmtree{file=File,blocksize=BlockSize,headersize=HeaderSize,rootpointer=0}) ->
+  {Root, Tree2} = int_write(#leaf{offset=HeaderSize}, Tree),
+  % ?infoFmt("wrote root ~p~n", [Root]),
   write_header(Tree2#dmtree{rootpointer=offset(Root)});
   
 create_or_read_root(Tree = #dmtree{file=File,blocksize=BlockSize,rootpointer=Ptr}) ->
@@ -328,13 +336,21 @@ take_free_offset(eof, Tree = #dmtree{file=File,blocksize=BlockSize,freepointer=F
 take_free_offset(Offset, Tree) ->
   {Offset, Tree}.
 
-serialize_header(#dmtree{blocksize=BlockSize, freepointer=FreePtr, rootpointer=RootPtr}) ->
-  FreeSpace = 64*8,
-  <<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, 0:FreeSpace>>.
+serialize_header(#dmtree{blocksize=BlockSize, freepointer=FreePtr, rootpointer=RootPtr, kfpointers=Pointers}) ->
+  Preamble = <<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64>>,
+  FreeSpace = (?STATIC_HEADER - byte_size(Preamble))*8,
+  PtrBin = << <<Ptr:64>> || Ptr <- Pointers >>,
+  % ?infoFmt("pointers: ~p~nptrbin~p~nfreespace~p~n", [Pointers, PtrBin, FreeSpace]),
+  <<Preamble/binary, PtrBin/binary, 0:FreeSpace>>.
 
 %this will try and match the current version, if it doesn't then we gotta punch out
-deserialize_header(<<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, _Reserved:64/binary>>) ->
-  {ok, #dmtree{blocksize=BlockSize,d=d_from_blocksize(BlockSize),freepointer=FreePtr,rootpointer=RootPtr}};
+deserialize_header(<<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, Rest/binary>>) ->
+  PointerSize = ?pointers_from_blocksize(BlockSize),
+  <<PBin:PointerSize/binary, _/binary>> = Rest,
+  Pointers = [Ptr || <<Ptr:64>> <= PBin],
+  HeaderSize = ?headersize_from_blocksize(BlockSize),
+  D = ?d_from_blocksize(BlockSize),
+  {ok, #dmtree{blocksize=BlockSize,d=D,headersize=HeaderSize,freepointer=FreePtr,rootpointer=RootPtr,kfpointers=Pointers}};
 
 %hit the canopy
 deserialize_header(BinHeader) ->
@@ -344,11 +360,10 @@ deserialize_header(BinHeader) ->
   end.
 
 %node is denoted by a 0
-deserialize(<<0:8, Binary/binary>>, Offset) ->
-  D = d_from_blocksize(byte_size(Binary) + 1),
+deserialize(<<0:8, Binary/binary>>, D, Offset) ->
   KeyBinSize = D*4,
   ChildBinSize = (D+1)*12,
-  <<M:32, KeyBin:KeyBinSize/binary, ChildBin:ChildBinSize/binary>> = Binary,
+  <<M:32, KeyBin:KeyBinSize/binary, ChildBin:ChildBinSize/binary, _/binary>> = Binary,
   if
     M > D -> error_logger:info_msg("M is larger than D M ~p D ~p offset~p~n", [M, D, Offset]);
     true -> ok
@@ -357,14 +372,13 @@ deserialize(<<0:8, Binary/binary>>, Offset) ->
   Children = unpack_children(M+1, ChildBin),
   #node{m=M,children=Children,keys=Keys,offset=Offset};
 
-deserialize(<<1:8, Bin/binary>>, Offset) ->
-  D = d_from_blocksize(byte_size(Bin) + 1),
+deserialize(<<1:8, Bin/binary>>, D, Offset) ->
   ValuesBinSize = D*16,
   <<M:32, ValuesBin:ValuesBinSize/binary, _/binary>> = Bin,
   Values = unpack_values(M, ValuesBin),
   #leaf{m=M,values=Values,offset=Offset};
 
-deserialize(<<3:8, Pointer:64, _/binary>>, Offset) ->
+deserialize(<<3:8, Pointer:64, _/binary>>, D, Offset) ->
   #free{offset=Offset,pointer=Pointer}.
 
 serialize(Free = #free{pointer=Pointer}, BlockSize) ->
@@ -372,7 +386,7 @@ serialize(Free = #free{pointer=Pointer}, BlockSize) ->
   <<3:8,Pointer:64,0:LeftOverBits>>;
 
 serialize(Node = #node{keys=Keys,children=Children,m=M}, BlockSize) ->
-  D = d_from_blocksize(BlockSize),
+  D = ?d_from_blocksize(BlockSize),
   if
     M > D -> error_logger:info_msg("M is larger than D M ~p D ~p~n", [M, D]);
     length(Keys) == length(Children) -> error_logger:info_msg("There are as many children as keys for ~p~n", [Node]);
@@ -390,7 +404,7 @@ serialize(Node = #node{keys=Keys,children=Children,m=M}, BlockSize) ->
   OutBin;
 
 serialize(#leaf{values=Values,m=M}, BlockSize) ->
-  D = d_from_blocksize(BlockSize),
+  D = ?d_from_blocksize(BlockSize),
   if
     M > D -> error_logger:info_msg("M is larger than D M ~p D ~p~n", [M, D]);
     true -> ok
@@ -438,12 +452,6 @@ deserialize(Bin) when byte_size(Bin) < 8 ->
   
 deserialize(<<NextPtr:64, Rest/binary>>) ->
   {byte_size(Rest) + 8, NextPtr}.
-  
-d_from_blocksize(BlockSize) ->
-  trunc((BlockSize - 17)/16).
-
-blocksize_from_d(D) ->
-  trunc(16*D + 17).
   
 offset(#leaf{offset=Offset}) -> Offset;
 offset(#free{offset=Offset}) -> Offset;

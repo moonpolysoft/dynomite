@@ -11,7 +11,7 @@ open_and_close_test() ->
   Merkle = get_state(Pid),
   Root = Merkle#dmerkle.root,
   error_logger:info_msg("root ~p~n", [Root]),
-  ?assertEqual(?HEADER_SIZE, Root#leaf.offset),
+  ?assertEqual(?headersize_from_blocksize(256), Root#leaf.offset),
   ?assertEqual(0, Root#leaf.m),
   close(Pid).
   
