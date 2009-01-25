@@ -24,7 +24,7 @@
 -include("common.hrl").
 -include_lib("kernel/include/file.hrl").
 
--record(dmtree, {file, size=0, virtsize=0, d, blocksize, filename, ops=[], freepointer=0, rootpointer=0}).
+-record(dmtree, {file, size=0, virtsize=0, d, blocksize, filename, ops=[], opdict=dict:new(), freepointer=0, rootpointer=0}).
 
 -ifdef(TEST).
 -include("etest/dmtree_test.erl").
@@ -100,7 +100,7 @@ filename(Pid) ->
 %%--------------------------------------------------------------------
 init([FileName, BlockSize]) ->
   filelib:ensure_dir(FileName),
-  {ok, File} = file:open(FileName, [read, write, binary]),
+  {ok, File} = file:open(FileName, [raw, read, write, binary]),
   {ok, FileInfo} = file:read_file_info(FileName),
   FileSize = FileInfo#file_info.size,
   case read_header(File) of
@@ -132,12 +132,12 @@ handle_call(tx_begin, _From, State = #dmtree{}) ->
 handle_call(tx_commit, _From, State = #dmtree{ops=Ops,file=File,size=Size,virtsize=VirtSize}) ->
   % ?infoFmt("commiting btree changes to disk size ~p virtsize ~p~n operations~p~n", [Size, VirtSize, lists:reverse(Ops)]),
   case flush(File, Ops) of
-    ok -> {reply, ok, State#dmtree{ops=[], size=Size+VirtSize, virtsize=0}};
+    ok -> {reply, ok, State#dmtree{ops=[], opdict=dict:new(), size=Size+VirtSize, virtsize=0}};
     {error, Reasons} -> {stop, Reasons, State}
   end;
   
 handle_call(tx_rollback, _From, State = #dmtree{}) ->
-  {reply, ok, State#dmtree{ops=[], virtsize=0}};
+  {reply, ok, State#dmtree{ops=[], opdict=dict:new(), virtsize=0}};
   
 handle_call(d, _From, State = #dmtree{d=D}) ->
   {reply, D, State};
@@ -233,20 +233,16 @@ read_header(File) ->
 int_read(0, Tree) ->
   throw("tried to read a node from the null pointer");
 
-int_read(Offset, #dmtree{file=File,blocksize=BlockSize,ops=Ops}) ->
-  case lists:keysearch(Offset, 1, Ops) of
-    {value, {Offset, Bin}} -> deserialize(Bin, Offset);
-    false -> 
-      case file:pread(File, Offset, BlockSize) of
-        {ok, Bin} -> deserialize(Bin, Offset);
-        eof -> 
-          error_logger:info_msg("hit an eof for offset ~p", [Offset]),
-          undefined;
-        {error, Reason} -> 
-          error_logger:info_msg("error ~p at offset", [Reason, Offset]),
-          undefined
-      end
-  end.
+int_read(Offset, #dmtree{file=File,blocksize=BlockSize}) ->
+    case file:pread(File, Offset, BlockSize) of
+      {ok, Bin} -> deserialize(Bin, Offset);
+      eof -> 
+        error_logger:info_msg("hit an eof for offset ~p", [Offset]),
+        undefined;
+      {error, Reason} -> 
+        error_logger:info_msg("error ~p at offset", [Reason, Offset]),
+        undefined
+    end.
   
 int_write(Node, Tree = #dmtree{file=File,blocksize=BlockSize}) ->
   % ?infoFmt("int_write ~p~n", [Node]),
@@ -292,17 +288,22 @@ int_delete_key(Offset, Key, Tree = #dmtree{}) ->
 flush(File, Ops) ->
   file:pwrite(File, lists:reverse(Ops)).
 
-add_operation(eof, Bin, Tree = #dmtree{size=Size,virtsize=VirtSize,ops=Ops}) ->
-  BinSize = true_size(Bin),
-  Offset = Size+VirtSize,
-  {Offset, Tree#dmtree{virtsize=VirtSize+BinSize, ops=[{Offset,Bin}|Ops]}};
-  
-add_operation(Offset, Bin, Tree = #dmtree{ops=Ops}) ->
-  %we might wanna clobber rewrites
-  case lists:keytake(Offset, 1, Ops) of
-    {value, {Offset, _}, Ops2} -> {Offset, Tree#dmtree{ops=[{Offset,Bin}|Ops2]}};
-    false -> {Offset, Tree#dmtree{ops=[{Offset,Bin}|Ops]}}
-  end.
+add_operation(eof, Bin, Tree = #dmtree{file=File,size=Size}) ->
+  BinSize = iolist_size(Bin),
+  ok = file:pwrite(File, Size, Bin),
+  {Size, Tree#dmtree{size=Size+BinSize}};
+
+add_operation(Offset, Bin, Tree = #dmtree{file=File}) ->
+  ok = file:pwrite(File, Offset, Bin),
+  {Offset, Tree}.
+
+% add_operation(eof, Bin, Tree = #dmtree{size=Size,virtsize=VirtSize,ops=Ops,opdict=Dict}) ->
+%   BinSize = true_size(Bin),
+%   Offset = Size+VirtSize,
+%   {Offset, Tree#dmtree{virtsize=VirtSize+BinSize, ops=[{Offset,Bin}|Ops],opdict=dict:store(Offset,Bin,Dict)}};
+%   
+% add_operation(Offset, Bin, Tree = #dmtree{ops=Ops,opdict=Dict}) ->
+%   {Offset, Tree#dmtree{ops=[{Offset,Bin}|Ops],opdict=dict:store(Offset,Bin,Dict)}}.
   
 true_size(List) when is_list(List) ->
   lists:foldl(fun(E, Sum) -> true_size(E) + Sum end, 0, lists:flatten(List));

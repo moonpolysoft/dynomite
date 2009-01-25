@@ -138,7 +138,7 @@ handle_call(leaves, _From, DM = #dmerkle{root=Root,tree=Tree}) ->
   
 handle_call({update, Key, Value}, _From, DM = #dmerkle{tree=Tree,root=Root}) ->
   % error_logger:info_msg("inserting ~p~n", [Key]),
-  dmtree:tx_begin(Tree),
+  % dmtree:tx_begin(Tree),
   D = dmtree:d(Tree),
   M = m(Root),
   NewTree = if
@@ -154,7 +154,7 @@ handle_call({update, Key, Value}, _From, DM = #dmerkle{tree=Tree,root=Root}) ->
       % ?infoFmt("updated root ~p~n", [Root2]),
       DM#dmerkle{root=Root2}
   end,
-  dmtree:tx_commit(Tree),
+  % dmtree:tx_commit(Tree),
   {reply, self(), NewTree};
   
 handle_call({find, Key}, _From, DM = #dmerkle{root=Root,tree=Tree}) ->
@@ -169,9 +169,9 @@ handle_call({visualized_find, Key}, _From, DM = #dmerkle{root=Root,tree=Tree}) -
   {reply, Reply, DM};
   
 handle_call({delete, Key}, _From, DM = #dmerkle{tree=Tree,root=Root}) ->
-  dmtree:tx_begin(Tree),
+  % dmtree:tx_begin(Tree),
   RetNode = delete(hash(Key), Key, root, Root, Tree),
-  dmtree:tx_commit(Tree),
+  % dmtree:tx_commit(Tree),
   {reply, self(), DM#dmerkle{root=RetNode}};
   
 handle_call(blocksize, _From, DM = #dmerkle{tree=Tree}) ->

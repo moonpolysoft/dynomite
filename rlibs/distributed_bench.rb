@@ -103,6 +103,12 @@ worker = lambda do |host|
       log.puts "#{Time.now.to_f}\t#{t}\t#{time}\t#{key}\t#{host}"
     rescue => boom
       log.puts "#{Time.now.to_f}\terror\t#{boom.message}\t#{key}\t#{host}"
+      #reset socket
+      socket = Thrift::Socket.new(*host.split(":"))
+      socket.open
+      protocol = Thrift::BinaryProtocolAccelerated.new(
+        Thrift::BufferedTransport.new(socket))
+      dyn = Dynomite::Client.new(protocol)
     end
   end
 end
