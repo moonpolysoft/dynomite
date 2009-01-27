@@ -4,11 +4,45 @@
 -define(OFFSET_BASIS, 2166136261).
 -define(FNV_PRIME, 16777619).
 
--export([pmap/3, hash/1, position/2, shuffle/1, floor/1, ceiling/1, time_to_epoch_int/1, time_to_epoch_float/1, now_int/0, now_float/0, byte_size/1, listify/1, reverse_bits/1]).
+-export([pmap/3, hash/1, nthdelete/2, zero_split/1, nthreplace/3, rand_str/1, position/2, shuffle/1, floor/1, ceiling/1, time_to_epoch_int/1, time_to_epoch_float/1, now_int/0, now_float/0, byte_size/1, listify/1, reverse_bits/1]).
 
 -ifdef(TEST).
 -include("etest/lib_misc_test.erl").
 -endif.
+
+zero_split(Bin) ->
+  zero_split(0, Bin).
+
+zero_split(N, Bin) when N > byte_size(Bin) -> Bin;
+  
+zero_split(N, Bin) ->
+  case Bin of
+    <<_:N/binary, 0:8, _/binary>> -> split_binary(Bin, N);
+    _ -> zero_split(N+1, Bin)
+  end.
+
+rand_str(N) ->
+  lists:map(fun(I) ->
+      random:uniform(26) + $a - 1
+    end, lists:seq(1,N)).
+
+nthreplace(N, E, List) ->
+  lists:sublist(List, N-1) ++ [E] ++ lists:nthtail(N, List).
+
+nthdelete(N, List) ->
+  nthdelete(N, List, []).
+  
+nthdelete(0, List, Ret) ->
+  lists:reverse(Ret) ++ List;
+  
+nthdelete(_, [], Ret) ->
+  lists:reverse(Ret);
+
+nthdelete(1, [E|L], Ret) ->
+  nthdelete(0, L, Ret);
+
+nthdelete(N, [E|L], Ret) ->
+  nthdelete(N-1, L, [E|Ret]).
 
 floor(X) ->
   T = erlang:trunc(X),

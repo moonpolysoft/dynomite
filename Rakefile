@@ -18,13 +18,22 @@ task :default => [:build_deps] do
   # end
 end
 
+task :clean_test do
+  sh "rm -rf etest/log/*"
+end
+
+task :clean => [:clean_test] do
+  sh "rm -f ebin/*.beam"
+  sh "rm -f etest/*.beam"
+end
+
 task :test_env => [:build_test_deps, :test_config] do
   puts "test env"
   ENV['TEST'] = 'test'
 end
 
 task :native do
-  ERLC_FLAGS = "+native #{ERLC_FLAGS}"
+  ERLC_FLAGS = "-smp +native #{ERLC_FLAGS}"
 end
 
 task :profile do
@@ -70,6 +79,30 @@ task :test => [:test_env, :default] do
   puts "-> Test logs in #{priv}"
 end
 
+task :coverage => [:test_env] do
+  mods = []
+  mod_directives = ""
+  env_peek = ENV['MOD'] || ENV['MODS'] || ENV['MODULE'] || ENV['MODULES']
+  if env_peek
+    mods = env_peek.split(",")
+  else 
+    mods = Dir["etest/*_test.erl"].map { |x| x.match(/etest\/(.*)_test.erl/)[1] }
+  end
+  mod_directives = mods.join(', ')#map{|m| %Q(\\"#{m}\\")}.join(", ")
+  priv = priv_dir()
+  cmd = %Q{erl -boot start_sasl +K true -smp enable -pz etest -pa ./deps/eunit/ebin ./deps/mochiweb/ebin ./deps/rfc4627/ebin ./deps/thrift/ebin -sname local_console_#{$$} -noshell -priv_dir "#{priv}" -config test\
+  -eval "\
+     cover:compile_directory(\\"elibs\\", [{i,\\"include\\"},{i, \\"deps/eunit/include\\"},{d,'TEST'},{warn_format, 0}]), \
+     T = fun(X) -> io:format(user, \\"~-20.s\\", [X]), X:test() end, \
+     [T(X) || X <- [#{mod_directives}]], \
+     F = fun(X) -> cover:analyse_to_file(X, \\"doc/\\" ++ atom_to_list(X) ++ \\"_coverage.html\\", [html]) end, \
+     [F(X) || X <- [#{mod_directives}]]. \
+     " -s init stop;}
+  puts cmd
+  sh cmd
+  puts "-> Test logs in #{priv}"
+end
+
 task :docs do
   #files = (Dir["elibs/*.erl"] - ["elibs/json.erl"]).sort.map { |x| "\'../" + x + "\'"}.join(" ")
   #sh %|cd doc && erl -noshell -run edoc_run files #{files}|
@@ -84,7 +117,7 @@ task :build_deps do
 end
 
 task :build_test_deps do
-  sh "erlc +debug_info -I include #{ERLC_TEST_FLAGS} -o etest etest/t.erl"
+  sh "erlc +debug_info -I include #{ERLC_TEST_FLAGS} -o etest etest/t.erl etest/mock_genserver.erl"
 end
 
 task :test_config do

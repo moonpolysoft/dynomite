@@ -45,6 +45,9 @@ write_block(Pid, Offset, Data) ->
 read_key(Pid, Offset) ->
   gen_server:call(Pid, {read_key, Offset}).
   
+read_free(Pid, Offset) ->
+  gen_server:call(Pid, {read_free, Offset}).
+  
 write_key(Pid, Offset, Key) ->
   gen_server:call(Pid, {write_key, Offset, Key}).
 
@@ -95,6 +98,10 @@ handle_call({write_block, Offset, Data}, _From, State = #state{index=Index}) ->
 handle_call({read_key, Offset}, _From, State = #state{keys=Keys}) ->
   file:position(Keys, Offset),
   {reply, int_read_key(Keys, []), State};
+  
+handle_call({read_free, Offset}, _From, State = #state{keys=Keys}) ->
+  file:position(Keys, Offset),
+  {reply, int_read_free(Keys, []), State};
   
 handle_call({write_key, Offset, Key}, _From, State = #state{keys=Keys}) ->
   {ok, Position} = file:position(Keys, Offset),
@@ -156,3 +163,20 @@ int_read_key(Keys, Key) ->
     {ok, [Char]} -> int_read_key(Keys, [Char|Key]);
     Other -> Other
   end.
+
+int_read_free(Keys, [0|Bytes]) ->
+  Bin = list_to_binary(lists:reverse(Bytes)),
+  deserialize(Bin);
+  
+int_read_free(Keys, Key) ->
+  case file:read(Keys, 1) of
+    {ok, [Char]} -> int_read_key(Keys, [Char|Key]);
+    Other -> Other
+  end.
+  
+deserialize(Bin) when byte_size(Bin) < 8 ->
+  {byte_size(Bin), eos};
+  
+deserialize(<<NextPtr:64, Rest/binary>>) ->
+  {byte_size(Rest) + 8, NextPtr}.
+  

@@ -1,89 +1,28 @@
--include_lib("eunit.hrl").
-
-% -export([stress/0]).
+-include_lib("eunit/include/eunit.hrl").
 
 test_cleanup() ->
-  file:delete(data_file() ++ ".idx"),
-  file:delete(data_file() ++ ".keys"),
-  file:delete(data_file() ++ "1.idx"),
-  file:delete(data_file() ++ "1.keys").
+  file:delete(data_file()),
+  file:delete(data_file(1)).
 
-deserialize_node_test() ->
-  NodeBin = <<0:8, 2:32, 
-    1:32, 2:32, 0:32, 0:32,
-    3:32, 4:64, 5:32, 6:64, 7:32, 8:64, 0:32, 0:64, 0:32, 0:64>>,
-  Node = deserialize(NodeBin, 20),
-  #node{m=2,children=Children,keys=Keys,offset=20} = Node,
-  [{3, 4}, {5, 6}, {7, 8}] = Children,
-  [1, 2] = Keys.
-  
-deserialize_leaf_test() ->
-  LeafBin = <<1:8, 2:32,
-    1:32, 2:64, 3:32,
-    4:32, 5:64, 6:32,
-    0:352>>,
-  Leaf = deserialize(LeafBin, 20),
-  #leaf{m=2,values=Values,offset=20} = Leaf,
-  [{1, 2, 3}, {4, 5, 6}] = Values.
-  
-serialize_node_test() ->
-  Bin = serialize(#node{
-    m=2,
-    keys=[1, 2],
-    children=[{3, 4}, {5, 6}, {7, 8}]
-  }, 81),
-  error_logger:info_msg("node bin ~p~n", [Bin]),
-  Bin = <<0:8, 2:32, 
-    1:32, 2:32, 0:32, 0:32,
-    3:32, 4:64, 5:32, 6:64, 7:32, 8:64, 0:192>>.
-    
-serialize_leaf_test() ->
-  Bin = serialize(#leaf{
-    m=2,
-    values=[{1, 2, 3}, {4, 5, 6}, {7, 8, 9}]
-  }, 81),
-  error_logger:info_msg("leaf bin ~p~n", [Bin]),
-  Bin = <<1:8, 2:32,
-    1:32, 2:64, 3:32,
-    4:32, 5:64, 6:32,
-    7:32, 8:64, 9:32,
-    0:224>>.
-    
-node_round_trip_test() ->
-  Node = #node{
-    m=2,
-    keys=[1, 2],
-    children=[{4, 5}, {6, 7}, {8, 9}],
-    offset = 0
-  },
-  Node = deserialize(serialize(Node, 81), 0).
-  
-leaf_round_trip_test() ->
-  Leaf = #leaf{
-    m=2,
-    values=[{1, 2, 3}, {4, 5, 6}],
-    offset=0
-  },
-  Leaf = deserialize(serialize(Leaf, 81), 0).
-  
+      
 open_and_close_test() ->
   test_cleanup(),
   {ok, Pid} = open(data_file(), 256),
-  Merkle = get_tree(Pid),
+  Merkle = get_state(Pid),
   Root = Merkle#dmerkle.root,
   error_logger:info_msg("root ~p~n", [Root]),
-  12 = Root#leaf.offset,
-  0 = Root#leaf.m,
+  ?assertEqual(?headersize_from_blocksize(256), Root#leaf.offset),
+  ?assertEqual(0, Root#leaf.m),
   close(Pid).
   
 open_and_insert_one_test() ->
   test_cleanup(),
   {ok, Pid} = open(data_file(), 256),
   update("mykey", <<"myvalue">>, Pid),
-  Tree = get_tree(Pid),
+  Tree = get_state(Pid),
   Root = Tree#dmerkle.root,
   error_logger:info_msg("root w/ one ~p merkle~p~n", [Root, Tree]),
-  1 = Root#leaf.m,
+  ?assertEqual(1, Root#leaf.m),
   Hash = hash(<<"myvalue">>),
   Hash = find("mykey", Pid),
   close(Pid).
@@ -98,6 +37,9 @@ open_and_reopen_test() ->
   Hash = find("mykey", NewPid),
   close(NewPid).
 
+open_and_insert_20_test() ->
+  open_and_insert_n(20).
+
 open_and_insert_260_test() ->
   open_and_insert_n(260).
   
@@ -110,15 +52,27 @@ open_and_insert_3000_test() ->
 insert_500_both_ways_test() ->
   test_cleanup(),
   {ok, Pid} = open(data_file(), 256),
-  TreeA = lists:foldl(fun(N, Tree) ->
+  lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
     end, Pid, lists:seq(1,500)),
   {ok, Pid2} = open(data_file(1), 256),
-  TreeB = lists:foldl(fun(N, Tree) ->
+  lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
     end, Pid2, lists:reverse(lists:seq(1,500))),
-  % error_logger:info_msg("rootA ~p~nrootB ~p~n", [TreeA#dmerkle.root, TreeB#dmerkle.root]),
-  true = equals(TreeA, TreeB).
+  TreeA = get_state(Pid),
+  TreeB = get_state(Pid2),
+  ?infoFmt("leaves A: ~p~n", [leaves(Pid)]),
+  ?infoFmt("leaves B: ~p~n", [leaves(Pid2)]),
+  LeafHashA = lists:foldl(fun({_,Hash}, Sum) ->
+      (Hash + Sum) rem (2 bsl 31)
+    end, 0, leaves(Pid)),
+  LeafHashB = lists:foldl(fun({_,Hash}, Sum) ->
+      (Hash + Sum) rem (2 bsl 31)
+    end, 0, leaves(Pid2)),
+  ?assertEqual(leaves(Pid), leaves(Pid2)),
+  ?assertEqual(true, equals(Pid, Pid2)),
+  close(Pid),
+  close(Pid2).
   
 insert_realistic_scenario_equality_test() ->
   test_cleanup(),
@@ -145,7 +99,9 @@ insert_realistic_scenario_diff_test() ->
   Diff = key_diff(TreeA, TreeB),
   Keys = lists:map(fun(N) -> lists:concat(["key", N]) end, lists:seq(496, 500)),
   error_logger:info_msg("realistic diff: ~p~n", [Diff]),
-  Keys = Diff.
+  ?assertEqual(Keys, Diff),
+  close(Pid),
+  close(Pid2).
 
 insert_500_both_ways_diff_test() ->
   test_cleanup(),
@@ -157,9 +113,10 @@ insert_500_both_ways_diff_test() ->
   TreeB = lists:foldl(fun(N, Tree) ->
       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
     end, PidB, lists:reverse(lists:seq(1,500))),
-  Diff = key_diff(TreeA, TreeB),
-  error_logger:info_msg("both ways diff: ~p~n", [Diff]),
-  [] = Diff.
+  % error_logger:info_msg("both ways diff: ~p~n", [key_diff(TreeA, TreeB)]),
+  ?assertEqual([], key_diff(TreeA, TreeB)),
+  close(PidA),
+  close(PidB).
 
 insert_overwrite_test() ->
   test_cleanup(),
@@ -193,28 +150,30 @@ insert_overwrite2_test() ->
   % [] = Diff,
   1 = length(leaves(TreeB)).
 
-swap_tree_test() ->
-  test_cleanup(),
-  {ok, PidA} = open(data_file(), 256),
-  TreeA = lists:foldl(fun(N, Tree) ->
-      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, PidA, lists:seq(1,250)),
-  {ok, PidB} = open(data_file(1), 256),
-  TreeB = lists:foldl(fun(N, Tree) ->
-      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, PidB, lists:reverse(lists:seq(1,500))),
-  {ok, NewTree} = swap_tree(TreeA, TreeB),
-  true = lists:all(fun(N) -> 
-      Hash = hash(lists:concat(["value", N])),
-      Result = Hash == find(lists:concat(["key", N]), NewTree),
-      if
-        Result -> Result;
-        true -> 
-          error_logger:info_msg("could not get ~p was ~p~n", [N, find(lists:concat(["key", N]), NewTree)]),
-          Result
-      end
-    end, lists:seq(1, 500)).
-  
+%% swapping trees may not be something we want to support nomo
+
+% swap_tree_test() ->
+%   test_cleanup(),
+%   {ok, PidA} = open(data_file(), 256),
+%   TreeA = lists:foldl(fun(N, Tree) ->
+%       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+%     end, PidA, lists:seq(1,250)),
+%   {ok, PidB} = open(data_file(1), 256),
+%   TreeB = lists:foldl(fun(N, Tree) ->
+%       update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+%     end, PidB, lists:reverse(lists:seq(1,500))),
+%   {ok, NewTree} = swap_tree(TreeA, TreeB),
+%   true = lists:all(fun(N) -> 
+%       Hash = hash(lists:concat(["value", N])),
+%       Result = Hash == find(lists:concat(["key", N]), NewTree),
+%       if
+%         Result -> Result;
+%         true -> 
+%           error_logger:info_msg("could not get ~p was ~p~n", [N, find(lists:concat(["key", N]), NewTree)]),
+%           Result
+%       end
+%     end, lists:seq(1, 500)).
+%   
 leaves_test() ->
   test_cleanup(),
   {ok, PidA} = open(data_file(), 256),
@@ -246,27 +205,177 @@ live_test_() ->
     KeyDiff = LeafDiff
   end}]}.
   
+insert_variable_keys_under_block_size_test() ->
+  test_cleanup(),
+  {ok, Pid} = open(data_file(), 256),
+  Keys = lists:map(fun(N) ->
+      lists:duplicate(N, $a)
+    end, lists:seq(1,255)),
+  lists:foreach(fun(Key) -> 
+      update(Key, "value", Pid)
+    end, Keys),
+  {LK, _} = lists:unzip(leaves(Pid)),
+  ?assertEqual(Keys, lists:sort(LK)),
+  close(Pid).
+  
+insert_variable_keys_over_a_block_size_test() ->
+  test_cleanup(),
+  {ok, Pid} = open(data_file(), 256),
+  Keys = lists:map(fun(N) ->
+      lists:duplicate(N, $a)
+    end, lists:seq(1,512)),
+  lists:foreach(fun(Key) -> 
+      update(Key, "value", Pid)
+    end, Keys),
+  {LK, _} = lists:unzip(leaves(Pid)),
+  ?assertEqual(Keys, lists:sort(LK)),
+  close(Pid).
+  
+simple_deletion_test() ->
+  test_cleanup(),
+  {ok, Pid} = open(data_file(), 256),
+  update("key", "value", Pid),
+  delete("key", Pid),
+  Tree = get_state(Pid),
+  Root = Tree#dmerkle.root,
+  error_logger:info_msg("Root ~p~n", [Root]),
+  ?assertEqual(0, Root#leaf.m),
+  close(Pid).
+  
+full_deletion_with_single_split_test() ->
+  test_cleanup(),
+  {ok, Pid} = open(data_file(), 256),
+  lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, Pid, lists:seq(1,20)),
+  lists:foreach(fun(N) ->
+      Key = lists:concat(["key", N]),
+      delete(Key, Pid)
+    end, lists:seq(1,20)),
+  Tree = get_state(Pid),
+  Root = Tree#dmerkle.root,
+  ?assertMatch(#leaf{}, Root),
+  ?assertEqual(0, Root#leaf.m),
+  close(Pid).
+  
+compare_trees_with_delete_test() ->
+  test_cleanup(),
+  {ok, PidA} = open(data_file(), 256),
+  {ok, PidB} = open(data_file(1), 256),
+  lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, PidA, lists:seq(1,20)),
+  lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, PidB, lists:seq(1,20)),
+  delete("key1", PidB),
+  ?assertEqual(["key1"], key_diff(PidA, PidB)),
+  close(PidA),
+  close(PidB).
+  
+full_deletion_with_multiple_split_test_() ->
+  {timeout, 120, [{?LINE, fun() ->
+    test_cleanup(),
+    {ok, Pid} = open(data_file(), 256),
+    lists:foldl(fun(N, Tree) ->
+        update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+      end, Pid, lists:seq(1,300)),
+    lists:foldl(fun(N, Tree) ->
+        Key = lists:concat(["key", N]),
+        % ?infoFmt("deleting ~p~n", [Key]),
+        delete(Key, Tree),
+        ?assertEqual(300-N, length(leaves(Tree))),
+        Tree
+      end, Pid, lists:seq(1,300)),
+    Tree = get_state(Pid),
+    Root = Tree#dmerkle.root,
+    ?infoFmt("root: ~p~n", [Tree#dmerkle.root]),
+    ?assertMatch(#leaf{}, Root),
+    ?assertEqual(0, Root#leaf.m),
+    close(Pid)
+  end}]}.
+  
+partial_deletion_with_multiple_split_test_() ->
+  {timeout, 120, [{?LINE, fun() ->
+    test_cleanup(),
+    {ok, Pid1} = open(data_file(), 256),
+    {ok, Pid2} = open(data_file(1), 256),
+    Keys = lists:map(fun(I) ->
+        lib_misc:rand_str(10)
+      end, lists:seq(1,300)),
+    lists:foreach(fun(Key) ->
+        update(Key, "vallllllueeee" ++ Key, Pid1),
+        update(Key, "vallllllueeee" ++ Key, Pid2)
+      end, Keys),
+    lists:foreach(fun(Key) ->
+        delete(Key, Pid2)
+      end, lists:sublist(Keys, 50)),
+    ?assertEqual(lists:sort(lists:sublist(Keys, 50)), key_diff(Pid1, Pid2)),
+    close(Pid1),
+    close(Pid2)
+  end}]}.
+
+partial_deletion_and_rebuild_test() ->
+  test_cleanup(),
+  {ok, Pid} = open(data_file(), 256),
+  Keys = lists:map(fun(I) ->
+      lib_misc:rand_str(10)
+    end, lists:seq(1,300)),
+  lists:foreach(fun(Key) ->
+      update(Key, "valuuueeeee" ++ Key, Pid)
+    end, Keys),
+  IdxSize = filelib:file_size(data_file()),
+  lists:foreach(fun(Key) ->
+      delete(Key, Pid)
+    end, lists:sublist(Keys, 100)),
+  lists:foreach(fun(Key) ->
+      update(Key, "valuuueeeee" ++ Key, Pid)
+    end, lists:sublist(Keys, 100)),
+  ?assertEqual(IdxSize, filelib:file_size(data_file())),
+  close(Pid).
+
+partial_delete_and_rebuild_var_keysize_small_test() ->
+  test_cleanup(),
+  {ok, Pid} = open(data_file(), 256),
+  Keys = lists:map(fun(N) ->
+      lists:duplicate(N, $a)
+    end, lists:seq(1,255)),
+  lists:foreach(fun(Key) ->
+      update(Key, "value", Pid)
+    end, Keys),
+  Size = filelib:file_size(data_file()),
+  lists:foreach(fun(Key) ->
+      delete(Key, Pid)
+    end, lists:sublist(Keys, 50)),
+  lists:foreach(fun(Key) ->
+      update(Key, "Value", Pid)
+    end, lists:sublist(Keys, 50)),
+  ?assertEqual(Size, filelib:file_size(data_file())),
+  close(Pid).
+
 open_and_insert_n(N) ->
   test_cleanup(),
   {ok, Pid} = open(data_file(), 256),
-  Tree = lists:foldl(fun(N, Tree) ->
-      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-    end, Pid, lists:seq(1,N)),
-  true = lists:all(fun(N) -> 
+  lists:foreach(fun(N) ->
+      Key = lists:concat(["key", N]),
+      Value = lists:concat(["value", N]),
+      update(Key, Value, Pid)
+      % ?infoFmt("leaves ~p~n", [leaves(Pid)])
+    end, lists:seq(1,N)),
+  ?assertEqual(true, lists:all(fun(N) -> 
       Hash = hash(lists:concat(["value", N])),
-      Result = Hash == find(lists:concat(["key", N]), Tree),
+      Result = Hash == find(lists:concat(["key", N]), Pid),
       if
         Result -> Result;
         true -> 
-          error_logger:info_msg("could not get ~p was ~p~n", [N, find(lists:concat(["key", N]), Tree)]),
+          error_logger:info_msg("could not get ~p was ~p~n", [N, find(lists:concat(["key", N]), Pid)]),
           Result
       end
-    end, lists:seq(1, N)),
-  close(Tree).
+    end, lists:seq(1, N))),
+  close(Pid).
 
 stress() ->
   test_cleanup(),
-  process_flag(trap_exit, true),
   spawn_link(
     fun() -> lists:foldl(fun(N, Tree) ->
         update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)

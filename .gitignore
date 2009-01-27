@@ -9,3 +9,5 @@ deps/thrift/ebin
 *.egg-info
 etest/log/*
 test.config
+doc/*_coverage.html
+servers.rb
