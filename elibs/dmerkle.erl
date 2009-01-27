@@ -245,19 +245,19 @@ code_change(_OldVsn, State, _Extra) ->
 %% Internal functions
 %%====================================================================
 delete(KeyHash, Key, Parent, Node = #node{children=Children,keys=Keys}, Tree) ->
-  % error_logger:info_msg("delete key ~p keyhash ~p from node ~p~n", [Key, KeyHash, Node]),
+  error_logger:info_msg("delete key ~p keyhash ~p from node ~p~n", [Key, KeyHash, Node]),
   {WhatItDo, DeleteNode} = case find_child_adj(KeyHash, Keys, Children) of
     {FoundKey, {{LeftHash, LeftPointer}, {RightHash, RightPointer}}} ->
       LeftNode = dmtree:read(LeftPointer, Tree),
       RightNode = dmtree:read(RightPointer, Tree),
-      % ?infoFmt("delete_merge foundkey ~p~nLeftPointer ~p~nrightpointer ~p~nparent ~p~nnode ~p~nleftnode ~p~nrightnode ~p~n", [FoundKey, LeftPointer, RightPointer, Parent, Node, LeftNode, RightNode]),
+      ?infoFmt("delete_merge foundkey ~p~nLeftPointer ~p~nrightpointer ~p~nparent ~p~nnode ~p~nleftnode ~p~nrightnode ~p~n", [FoundKey, LeftPointer, RightPointer, Parent, Node, LeftNode, RightNode]),
       delete_merge(FoundKey, dmtree:d(Tree), Parent, Node, LeftNode, RightNode, Tree);
     {FoundKey, {{LeftHash, LeftPointer}, undefined}} ->
       {nothing, dmtree:read(LeftPointer, Tree)}
   end,
-  % ?infoMsg("recursing into delete~n"),
+  ?infoMsg("recursing into delete~n"),
   ReturnNode = delete(KeyHash, Key, Node, DeleteNode, Tree),
-  % ?infoFmt("reduced from delete ~p~n", [ReturnNode]),
+  ?infoFmt("reduced from delete ~p~n", [ReturnNode]),
   Eqls = ref_equals(ReturnNode, Node),
   case WhatItDo of
     wamp_wamp -> ReturnNode;
@@ -266,22 +266,22 @@ delete(KeyHash, Key, Parent, Node = #node{children=Children,keys=Keys}, Tree) ->
   end;
 
 delete(KeyHash, Key, Parent, Leaf = #leaf{values=Values}, Tree) ->
-  % error_logger:info_msg("delete key ~p keyhash ~p from ~p~n", [Key, KeyHash, Leaf]),
+  error_logger:info_msg("delete key ~p keyhash ~p from ~p~n", [Key, KeyHash, Leaf]),
   case lists:keytake(KeyHash, 1, Values) of
     {value, {KeyHash,Pointer,ValHash}, NewValues} ->
       NewLeaf = Leaf#leaf{values=NewValues,m=length(NewValues)},
-      % ?infoFmt("new leaf ~p~n", [NewLeaf]),
+      ?infoFmt("new leaf ~p~n", [NewLeaf]),
       dmtree:delete_key(Pointer, Key, Tree),
       dmtree:write(NewLeaf, Tree);
     false -> 
-      % ?infoFmt("couldnt find ~p in ~p~n", [KeyHash, Leaf]),
+      ?infoFmt("couldnt find ~p in ~p~n", [KeyHash, Leaf]),
       Leaf
   end.
 
 update_hash(Hash, Pointer, Node = #node{children=Children}, Tree) ->
-  % ?infoFmt("updating hash,ptr ~p for ~p~n", [{Hash,Pointer}, Node]),
+  ?infoFmt("updating hash,ptr ~p for ~p~n", [{Hash,Pointer}, Node]),
   NewNode = Node#node{children=lists:keyreplace(Pointer, 2, Children, {Hash,Pointer})},
-  % ?infoFmt("updated node ~p~n", [NewNode]),
+  ?infoFmt("updated node ~p~n", [NewNode]),
   dmtree:write(NewNode, Tree).
 
 % delete_merge(FoundKey,
@@ -295,7 +295,7 @@ delete_merge(FoundKey, D,
              LeftLeaf = #leaf{values=LeftValues,m=LeftM},
              RightLeaf = #leaf{values=RightValues,m=RightM},
              Tree) when (LeftM+RightM) =< D, PM == 1 ->
-  % ?infoMsg("Replacing root merging leaves~n"),
+  ?infoMsg("Replacing root merging leaves~n"),
   dmtree:delete(Root#node.offset, Tree),
   dmtree:delete(RightLeaf#leaf.offset, Tree),
   NewLeaf = dmtree:write(LeftLeaf#leaf{m=LeftM+RightM,values=LeftValues++RightValues}, Tree),
@@ -308,12 +308,12 @@ delete_merge(FoundKey, D,
              LeftLeaf = #leaf{values=LeftValues,m=LeftM},
              RightLeaf = #leaf{values=RightValues,m=RightM},
              Tree) when (LeftM+RightM) =< D, length(PKeys) == 1 ->
-  % ?infoMsg("Replacing node merging leaves~n"),
+  ?infoMsg("Replacing node merging leaves~n"),
   dmtree:delete(Parent#node.offset, Tree),
   dmtree:delete(RightLeaf#leaf.offset, Tree),
   NewLeaf = dmtree:write(LeftLeaf#leaf{m=LeftM+RightM,values=LeftValues++RightValues}, Tree),
   NP = dmtree:write(SuperParent#node{children=lists:keyreplace(offset(Parent), 2, PChildren, {hash(NewLeaf),offset(NewLeaf)})}, Tree),
-  % ?infoFmt("replaced ~p in super parent ~p~n", [{hash(Parent),offset(Parent)}, NP]),
+  ?infoFmt("replaced ~p in super parent ~p~n", [{hash(Parent),offset(Parent)}, NP]),
   {wamp_wamp, NewLeaf};
   
 delete_merge(FoundKey, D,
@@ -323,16 +323,16 @@ delete_merge(FoundKey, D,
              RightLeaf = #leaf{values=RightValues,m=RightM}, 
              Tree) when (LeftM+RightM) =< D ->
   %we can merge within reqs gogogo
-  % ?infoMsg("Merging leaves~n"),
+  ?infoMsg("Merging leaves~n"),
   N = if
     FoundKey == last -> length(PKeys);
     true -> lib_misc:position(FoundKey, PKeys)
   end,
-  % ?infoFmt("FoundKey ~p~nPKeys ~p~nPChildren ~p~nN ~p~nLeftM ~p~nRightM ~p~nD ~p~n", [FoundKey, PKeys, PChildren, N, LeftM, RightM, D]),
+  ?infoFmt("FoundKey ~p~nPKeys ~p~nPChildren ~p~nN ~p~nLeftM ~p~nRightM ~p~nD ~p~n", [FoundKey, PKeys, PChildren, N, LeftM, RightM, D]),
   NP = dmtree:write(remove_nth(Parent, N), Tree),
   dmtree:write(LeftLeaf#leaf{m=LeftM+RightM,values=LeftValues++RightValues}, Tree),
   dmtree:delete(RightLeaf#leaf.offset, Tree),
-  % ?infoFmt("new parent: ~p~n", [NP]),
+  ?infoFmt("new parent: ~p~n", [NP]),
   { merge, NP};
   
 %merging nodes
@@ -342,7 +342,7 @@ delete_merge(FoundKey, D,
              LeftNode = #node{m=LeftM},
              RightNode = #node{m=RightM},
              Tree) when (LeftM+RightM) < D, length(PKeys) == 1 ->
-  % ?infoMsg("replacing root merging nodes~n"),
+  ?infoMsg("replacing root merging nodes~n"),
   NC = dmtree:write(merge_nodes(FoundKey, PKeys, LeftNode, RightNode), Tree),
   dmtree:delete(offset(Root), Tree),
   dmtree:delete(offset(RightNode), Tree),
@@ -355,14 +355,14 @@ delete_merge(FoundKey, D,
              LeftNode = #node{m=LeftM,keys=LeftKeys,children=LeftChildren},
              RightNode = #node{m=RightM,keys=RightKeys,children=RightChildren},
              Tree) when (LeftM+RightM) < D, length(PKeys) == 1 ->
-  % ?infoMsg("Replacing node merging nodes~n"),
+  ?infoMsg("Replacing node merging nodes~n"),
   dmtree:delete(offset(RightNode), Tree),
   dmtree:delete(offset(Parent), Tree),
   ParentPointer = offset(Parent),
   ParentHash = hash(Parent),
   NN = merge_nodes(FoundKey, PKeys, LeftNode, RightNode),
   NP = dmtree:write(SuperParent#node{children=lists:keyreplace(offset(Parent), 2, PChildren, {hash(NN),offset(NN)})}, Tree),
-  % ?infoFmt("NN: ~p~n", [NN]),
+  ?infoFmt("NN: ~p~n", [NN]),
   NewNode = dmtree:write(NN, Tree),
   {wamp_wamp, NewNode};
 
@@ -372,26 +372,26 @@ delete_merge(FoundKey, D,
              LeftNode = #node{keys=LeftKeys,children=LeftChildren,m=LM},
              RightNode = #node{keys=RightKeys,children=RightChildren,m=RM},
              Tree)  when (LM+RM) < D ->
-  % ?infoMsg("merging nodes~n"),
+  ?infoMsg("merging nodes~n"),
   N = if
     FoundKey == last -> length(PKeys) -1;
     true -> lib_misc:position(FoundKey, PKeys)
   end,
-  % ?infoFmt("FoundKey ~p~nPKeys ~p~nPChildren ~p~nN ~p~nLeftM ~p~nRightM ~p~nD ~p~n", [FoundKey, PKeys, PChildren, N, LM, RM, D]),
+  ?infoFmt("FoundKey ~p~nPKeys ~p~nPChildren ~p~nN ~p~nLeftM ~p~nRightM ~p~nD ~p~n", [FoundKey, PKeys, PChildren, N, LM, RM, D]),
   NP = dmtree:write(remove_nth(Parent, N), Tree),
   NC = dmtree:write(merge_nodes(FoundKey, PKeys, LeftNode, RightNode), Tree),
   dmtree:delete(RightNode#node.offset, Tree),
-  % ?infoFmt("new child: ~p~n", [NC]),
-  % ?infoFmt("new parent: ~p~n", [NP]),
+  ?infoFmt("new child: ~p~n", [NC]),
+  ?infoFmt("new parent: ~p~n", [NP]),
   {merge, NP};
   
 delete_merge(last, _, _, _, _, Right, Tree) ->
-  % ?infoMsg("not merging~n"),
+  ?infoMsg("not merging~n"),
   {nothing, Right};
   
 delete_merge(_, _, _, _, Left, _, Tree) ->
   %merged leaf is too large, do not merge
-  % ?infoMsg("not merging~n"),
+  ?infoMsg("not merging~n"),
   {nothing, Left}.
     
 merge_nodes(FoundKey, PKeys, LeftNode = #node{m=LeftM,keys=LeftKeys,children=LeftChildren}, RightNode = #node{m=RightM,keys=RightKeys,children=RightChildren}) ->

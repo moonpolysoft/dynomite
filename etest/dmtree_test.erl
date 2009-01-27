@@ -57,3 +57,12 @@ leaf_round_trip_test() ->
     offset=0
   },
   Leaf = deserialize(serialize(Leaf, 81), 4, 0).
+
+pointers_for_blocksize_test() ->
+  ?assertEqual(5, ?pointers_from_blocksize(256)),
+  ?assertEqual(1, ?pointers_from_blocksize(16)).
+  
+size_for_pointer_test() ->
+  ?assertEqual(16, ?size_for_pointer(1)),
+  ?assertEqual(256, ?size_for_pointer(5)).
+  

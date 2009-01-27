@@ -24,7 +24,7 @@
 -include("common.hrl").
 -include_lib("kernel/include/file.hrl").
 
--record(dmtree, {file, size=0, virtsize=0, d, blocksize, headersize=0, filename, ops=[], opdict=dict:new(), freepointer=0, rootpointer=0, kfpointers=[]}).
+-record(dmtree, {file, size=0, virtsize=0, d, blocksize, headersize=0, filename, ops=[], opdict=dict:new(), freepointer=0, rootpointer=0, kfpointers=[], bigkfpointer=0}).
 
 -ifdef(TEST).
 -include("etest/dmtree_test.erl").
@@ -143,8 +143,8 @@ handle_call(tx_rollback, _From, State = #dmtree{}) ->
 handle_call(d, _From, State = #dmtree{d=D}) ->
   {reply, D, State};
   
-handle_call(root, _From, State = #dmtree{rootpointer=Ptr}) ->
-  {reply, int_read(Ptr, State), State};
+handle_call(root, _From, State = #dmtree{rootpointer=Ptr,blocksize=BlockSize}) ->
+  {reply, int_read(Ptr, BlockSize, State), State};
   
 handle_call(block_size, _From, State = #dmtree{blocksize=BlockSize}) ->
   {reply, BlockSize, State};
@@ -152,15 +152,15 @@ handle_call(block_size, _From, State = #dmtree{blocksize=BlockSize}) ->
 handle_call({update_root, Node}, _From, State = #dmtree{}) ->
   {reply, self(), write_header(State#dmtree{rootpointer=offset(Node)})};
   
-handle_call({write, Node}, _From, State = #dmtree{}) ->
-  {N, T} = int_write(Node, State),
+handle_call({write, Node}, _From, State = #dmtree{blocksize=BlockSize}) ->
+  {N, T} = int_write(Node, BlockSize, State),
   {reply, N, T};
   
 handle_call({delete, Offset}, _From, State = #dmtree{}) ->
   {reply, self(), int_delete(Offset, State)};
   
-handle_call({read, Offset}, _From, State = #dmtree{}) ->
-  {reply, int_read(Offset, State), State};
+handle_call({read, Offset}, _From, State = #dmtree{blocksize=BlockSize}) ->
+  {reply, int_read(Offset, BlockSize, State), State};
   
 handle_call({read_key, Offset}, _From, State = #dmtree{}) ->
   {reply, int_read_key(Offset, State), State};
@@ -237,21 +237,26 @@ read_header(File) ->
     {error, Msg} -> {error, Msg}
   end.
   
-int_read(0, Tree) ->
+int_read(0, _, Tree) ->
   {error, "tried to read a node from the null pointer"};
 
-int_read(Offset, #dmtree{file=File,d=D,blocksize=BlockSize}) ->
+int_read(Offset, BlockSize, #dmtree{file=File,d=D}) ->
     case file:pread(File, Offset, BlockSize) of
       {ok, Bin} -> deserialize(Bin, D, Offset);
       eof -> 
         error_logger:info_msg("hit an eof for offset ~p", [Offset]),
         undefined;
       {error, Reason} -> 
-        error_logger:info_msg("error ~p at offset", [Reason, Offset]),
+        error_logger:info_msg("error ~p at offset ~p", [Reason, Offset]),
         undefined
     end.
   
-int_write(Node, Tree = #dmtree{file=File,blocksize=BlockSize}) ->
+int_write(Node = #free{}, BlockSize, Tree = #dmtree{size=Size,file=File}) ->
+  Offset = offset(Node),
+  {_, Tree2} = add_operation(Offset, serialize(Node, BlockSize), Tree),
+  {Node, Tree2};
+  
+int_write(Node, BlockSize, Tree = #dmtree{file=File}) ->
   % ?infoFmt("int_write ~p~n", [Node]),
   Offset = offset(Node),
   Bin = serialize(Node, BlockSize),
@@ -260,49 +265,131 @@ int_write(Node, Tree = #dmtree{file=File,blocksize=BlockSize}) ->
   {offset(Node, Offset3), Tree3}.
   
 int_delete(Offset, Tree = #dmtree{file=File,blocksize=BlockSize,freepointer=Pointer}) ->
-  {_, Tree2} = int_write(#free{offset=Offset,pointer=Pointer}, Tree),
+  {_, Tree2} = int_write(#free{offset=Offset,pointer=Pointer}, BlockSize, Tree),
   write_header(Tree2#dmtree{freepointer=Offset}).
   
 %this gotta change at some point
-int_read_key(Offset, #dmtree{file=File}) ->
-  file:position(File, Offset),
-  int_read_key(File, []);
-  
-int_read_key(Keys, [0 | Key]) ->
-  K = lists:reverse(Key),
-  % ?infoFmt("int_read_key ~p~n", [K]),
-  K;
-
-int_read_key(Keys, Key) ->
-  case file:read(Keys, 1) of
-    {ok, <<Char:8>>} -> int_read_key(Keys, [Char|Key]);
-    Other -> Other
+int_read_key(Offset, Tree = #dmtree{file=File,blocksize=BlockSize}) ->
+  case file:pread(File, Offset, BlockSize) of
+    {ok, Bin} -> 
+      case lib_misc:zero_split(Bin) of
+        {Key, _} -> binary_to_list(Key);
+        _ -> binary_to_list(Bin) ++ int_read_key(Offset+BlockSize, Tree)
+      end;
+    eof -> eof;
+    {error, Reason} -> {error, Reason}
   end.
   
-% int_write_key(eof, Key, Tree = #dmtree{blocksize=BlockSize}) when length(Key) < BlockSize ->
-%   
+int_write_key(eof, Key, Tree = #dmtree{size=Size,blocksize=BlockSize,kfpointers=Pointers}) when length(Key) < BlockSize ->
+  N = ?pointer_for_size(length(Key)+1, BlockSize),
+  % ?infoFmt("int_write_key ~p~nN ~p~nsize ~p~n", [Key, N, ?size_for_pointer(N)]),
+  case find_free_keypointer(?size_for_pointer(N), N, lists:nthtail(N-1, Pointers), Tree) of
+    not_found ->
+      {Ptr, Tree2} = split_freespace(?size_for_pointer(N), BlockSize, Size, Tree),
+      % ?infoFmt("writing key to ~p~n tree~p~n", [Ptr, Tree2]),
+      add_operation(Ptr, [Key,0], Tree2);
+    {Ptr, Tree2} -> add_operation(Ptr, [Key,0], Tree2)
+  end;
   
 int_write_key(Offset, Key, Tree) ->
   add_operation(Offset, [Key,0], Tree).
   
-int_delete_key(Offset, Key, Tree = #dmtree{}) ->
-  
-  Tree.
+int_delete_key(Offset, Key, Tree = #dmtree{blocksize=BlockSize,kfpointers=Pointers}) when length(Key) < BlockSize ->
+  FirstN = ?pointer_for_size(length(Key)+1, BlockSize),
+  % ?debugHere,
+  {N, Tree2} = merge_freespace(FirstN, ?size_for_pointer(FirstN), Offset, Tree),
+  % ?debugHere,
+  {_, Tree3} = int_write(#free{pointer=lists:nth(N, Pointers),offset=Offset}, ?size_for_pointer(N), Tree2),
+  % ?debugHere,
+  write_header(replace_kfpointer(N, Offset, Tree3)).
   
 %%--------------------------------
 %% ============SUPPORT FUNCTIONS
 %%--------------------------------
 flush(File, Ops) ->
   file:pwrite(File, lists:reverse(Ops)).
+  
+find_free_keypointer(Size, N, [], Tree) ->
+  % ?infoMsg("find_free_keypointer not found ~n"),
+  not_found;
+  
+find_free_keypointer(Size, N, [0|Pointers], Tree) ->
+  % ?infoFmt("find_free_keypointer Size ~p N ~p [0 | Pointers]~n", [Size, N]),
+  find_free_keypointer(Size, N+1, Pointers, Tree);
+
+find_free_keypointer(Size, N, [Ptr|Pointers], Tree) ->
+  % ?infoFmt("find_free_keypointer found freespace Size ~p N ~p Ptr ~p~n", [Size, N, Ptr]),
+  Free = int_read(Ptr, Size, Tree),
+  % ?infoFmt("Free was ~p~n", Free),
+  {Ptr, Tree2} = split_freespace(Size, ?size_for_pointer(N), Ptr, Tree),
+  {Ptr, write_header(replace_kfpointer(N, Free#free.pointer, Tree2))}.
+  
+replace_kfpointer(N, Ptr, Tree = #dmtree{kfpointers=Pointers}) ->
+  Tree#dmtree{kfpointers=lib_misc:nthreplace(N, Ptr, Pointers)}. 
+  
+merge_freespace(N, BlockSize, Offset, Tree = #dmtree{blocksize=BlockSize}) -> 
+  % ?infoMsg("merge_freespace got whole block~n"),
+  {N, Tree};
+
+merge_freespace(N, Size, Offset, Tree = #dmtree{file=File,blocksize=BlockSize,headersize=HeaderSize}) when Size < BlockSize, ?block(Offset, HeaderSize, BlockSize) == ?block((Offset+Size), HeaderSize, BlockSize) ->
+  % ?infoFmt("merge_freespace N ~p Size ~p Offset ~p~n", [N, Size, Offset]),
+  case file:pread(File, Offset+Size, Size) of
+    {ok, <<3:8, _/binary>>} -> 
+      Tree2 = remove_free_pointer(Offset+Size, N, Tree),
+      merge_freespace(N+1, Size * 2, Offset, Tree2);
+    {ok, Bin} -> {N, Tree};
+    eof -> {N, Tree}
+  end;
+  
+merge_freespace(N, _, _, Tree) -> {N, Tree}.
+  
+remove_free_pointer(Ptr, N, Tree = #dmtree{file=File,kfpointers=Pointers}) ->
+  Head = lists:nth(N, Pointers),
+  Size = ?size_for_pointer(N),
+  Free = int_read(Head, Size, Tree),
+  ToReplace = int_read(Ptr, Size, Tree),
+  if
+    Head == Ptr -> write_header(replace_kfpointer(N, ToReplace#free.pointer, Tree));
+    true -> remove_free_pointer(Free, ToReplace, Size, Tree)
+  end.
+  
+remove_free_pointer(Free = #free{pointer=Ptr}, ToReplace = #free{offset=Ptr,pointer=Next}, Size, Tree = #dmtree{file=File}) ->
+  {_, Tree2} = int_write(Free#free{pointer=Next}, Size, Tree),
+  Tree2;
+  
+remove_free_pointer(Free = #free{pointer=0}, _, _, Tree) -> Tree;
+
+remove_free_pointer(Free = #free{pointer=Ptr}, ToReplace, Size, Tree = #dmtree{file=File}) ->
+  remove_free_pointer(int_read(Ptr, Size, Tree), ToReplace, Size, Tree).
+  
+split_freespace(ReqSize, ReqSize, Ptr, Tree) ->
+  {Ptr, Tree};
+  
+%this is ok because writing past the end fills with zeroes
+split_freespace(ReqSize, FreeSize, Ptr, Tree = #dmtree{file=File,blocksize=BlockSize,kfpointers=Pointers}) when FreeSize > ReqSize ->
+  % ?infoFmt("split_freespace reqsize ~p freesize ~p ptr ~p~n", [ReqSize, FreeSize, Ptr]),
+  N = ?pointer_for_size(FreeSize div 2, BlockSize),
+  NxtPtr = lists:nth(N, Pointers),
+  % ?infoFmt("split_freespace writing free cell of size ~p to ~p~n", [FreeSize div 2, Ptr+(FreeSize div 2)]),
+  {FreeNode, Tree2} = int_write(#free{pointer=NxtPtr,offset=Ptr+(FreeSize div 2)}, FreeSize div 2, Tree),
+  % ?infoFmt("file size after free write ~p~n", [Tree2#dmtree.size]),
+  FreePtr = offset(FreeNode),
+  Tree3 = write_header(replace_kfpointer(N, FreePtr, Tree2)),
+  split_freespace(ReqSize, FreeSize div 2, Ptr, Tree3).
 
 add_operation(eof, Bin, Tree = #dmtree{file=File,size=Size}) ->
   BinSize = iolist_size(Bin),
   ok = file:pwrite(File, Size, Bin),
   {Size, Tree#dmtree{size=Size+BinSize}};
 
-add_operation(Offset, Bin, Tree = #dmtree{file=File}) ->
+add_operation(Offset, Bin, Tree = #dmtree{file=File,size=Size}) ->
+  BinSize = iolist_size(Bin),
   ok = file:pwrite(File, Offset, Bin),
-  {Offset, Tree}.
+  if
+    Offset == Size -> {Offset, Tree#dmtree{size=Size+iolist_size(Bin)}};
+    Offset > Size -> {Offset, Tree#dmtree{size=Offset+iolist_size(Bin)}};
+    true -> {Offset, Tree}
+  end.
 
 % add_operation(eof, Bin, Tree = #dmtree{size=Size,virtsize=VirtSize,ops=Ops,opdict=Dict}) ->
 %   BinSize = true_size(Bin),
@@ -321,7 +408,7 @@ true_size(Bin) when is_binary(Bin) ->
 true_size(_) -> 1.
 
 create_or_read_root(Tree = #dmtree{file=File,blocksize=BlockSize,headersize=HeaderSize,rootpointer=0}) ->
-  {Root, Tree2} = int_write(#leaf{offset=HeaderSize}, Tree),
+  {Root, Tree2} = int_write(#leaf{offset=HeaderSize}, BlockSize, Tree),
   % ?infoFmt("wrote root ~p~n", [Root]),
   write_header(Tree2#dmtree{rootpointer=offset(Root)});
   
@@ -330,27 +417,27 @@ create_or_read_root(Tree = #dmtree{file=File,blocksize=BlockSize,rootpointer=Ptr
 
 take_free_offset(eof, Tree = #dmtree{file=File,blocksize=BlockSize,freepointer=FreePtr}) when FreePtr > 0 ->
   Offset = FreePtr,
-  #free{pointer=NewFreePointer} = int_read(FreePtr, Tree),
+  #free{pointer=NewFreePointer} = int_read(FreePtr, BlockSize, Tree),
   {Offset, write_header(Tree#dmtree{freepointer=NewFreePointer})};
 
 take_free_offset(Offset, Tree) ->
   {Offset, Tree}.
 
-serialize_header(#dmtree{blocksize=BlockSize, freepointer=FreePtr, rootpointer=RootPtr, kfpointers=Pointers}) ->
-  Preamble = <<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64>>,
+serialize_header(#dmtree{blocksize=BlockSize, freepointer=FreePtr, bigkfpointer=BKFPointer, rootpointer=RootPtr, kfpointers=Pointers}) ->
+  Preamble = <<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, BKFPointer:64>>,
   FreeSpace = (?STATIC_HEADER - byte_size(Preamble))*8,
   PtrBin = << <<Ptr:64>> || Ptr <- Pointers >>,
   % ?infoFmt("pointers: ~p~nptrbin~p~nfreespace~p~n", [Pointers, PtrBin, FreeSpace]),
   <<Preamble/binary, PtrBin/binary, 0:FreeSpace>>.
 
 %this will try and match the current version, if it doesn't then we gotta punch out
-deserialize_header(<<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, Rest/binary>>) ->
+deserialize_header(<<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, BKFPointer:64, Rest/binary>>) ->
   PointerSize = ?pointers_from_blocksize(BlockSize),
   <<PBin:PointerSize/binary, _/binary>> = Rest,
   Pointers = [Ptr || <<Ptr:64>> <= PBin],
   HeaderSize = ?headersize_from_blocksize(BlockSize),
   D = ?d_from_blocksize(BlockSize),
-  {ok, #dmtree{blocksize=BlockSize,d=D,headersize=HeaderSize,freepointer=FreePtr,rootpointer=RootPtr,kfpointers=Pointers}};
+  {ok, #dmtree{blocksize=BlockSize,d=D,headersize=HeaderSize,freepointer=FreePtr,rootpointer=RootPtr,kfpointers=Pointers, bigkfpointer=BKFPointer}};
 
 %hit the canopy
 deserialize_header(BinHeader) ->

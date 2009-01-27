@@ -205,6 +205,32 @@ live_test_() ->
     KeyDiff = LeafDiff
   end}]}.
   
+insert_variable_keys_under_block_size_test() ->
+  test_cleanup(),
+  {ok, Pid} = open(data_file(), 256),
+  Keys = lists:map(fun(N) ->
+      lists:duplicate(N, $a)
+    end, lists:seq(1,255)),
+  lists:foreach(fun(Key) -> 
+      update(Key, "value", Pid)
+    end, Keys),
+  {LK, _} = lists:unzip(leaves(Pid)),
+  ?assertEqual(Keys, lists:sort(LK)),
+  close(Pid).
+  
+insert_variable_keys_over_a_block_size_test() ->
+  test_cleanup(),
+  {ok, Pid} = open(data_file(), 256),
+  Keys = lists:map(fun(N) ->
+      lists:duplicate(N, $a)
+    end, lists:seq(1,512)),
+  lists:foreach(fun(Key) -> 
+      update(Key, "value", Pid)
+    end, Keys),
+  {LK, _} = lists:unzip(leaves(Pid)),
+  ?assertEqual(Keys, lists:sort(LK)),
+  close(Pid).
+  
 simple_deletion_test() ->
   test_cleanup(),
   {ok, Pid} = open(data_file(), 256),
@@ -306,6 +332,25 @@ partial_deletion_and_rebuild_test() ->
       update(Key, "valuuueeeee" ++ Key, Pid)
     end, lists:sublist(Keys, 100)),
   ?assertEqual(IdxSize, filelib:file_size(data_file())),
+  close(Pid).
+
+partial_delete_and_rebuild_var_keysize_small_test() ->
+  test_cleanup(),
+  {ok, Pid} = open(data_file(), 256),
+  Keys = lists:map(fun(N) ->
+      lists:duplicate(N, $a)
+    end, lists:seq(1,255)),
+  lists:foreach(fun(Key) ->
+      update(Key, "value", Pid)
+    end, Keys),
+  Size = filelib:file_size(data_file()),
+  lists:foreach(fun(Key) ->
+      delete(Key, Pid)
+    end, lists:sublist(Keys, 50)),
+  lists:foreach(fun(Key) ->
+      update(Key, "Value", Pid)
+    end, lists:sublist(Keys, 50)),
+  ?assertEqual(Size, filelib:file_size(data_file())),
   close(Pid).
 
 open_and_insert_n(N) ->

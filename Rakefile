@@ -18,7 +18,11 @@ task :default => [:build_deps] do
   # end
 end
 
-task :clean do
+task :clean_test do
+  sh "rm -rf etest/log/*"
+end
+
+task :clean => [:clean_test] do
   sh "rm -f ebin/*.beam"
   sh "rm -f etest/*.beam"
 end

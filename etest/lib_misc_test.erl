@@ -23,3 +23,9 @@ nthdelete_test() ->
   ?assertEqual([1,2,3,4,5], nthdelete(6, A)),
   ?assertEqual([2,3,4,5], nthdelete(1, A)),
   ?assertEqual([1,2,4,5], nthdelete(3, A)).
+  
+zero_split_test() ->
+  ?assertEqual({<<"">>, <<0,"abcdefg">>}, zero_split(<<0, "abcdefg">>)),
+  ?assertEqual({<<"abd">>, <<0, "efg">>}, zero_split(<<"abd", 0, "efg">>)),
+  ?assertEqual({<<"abcdefg">>, <<0>>}, zero_split(<<"abcdefg",0>>)),
+  ?assertEqual(<<"abcdefg">>, zero_split(<<"abcdefg">>)).

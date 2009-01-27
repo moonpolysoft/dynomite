@@ -27,3 +27,13 @@ D = (blocksize-5)/16
 key file:
 
 [key\0,key\0,key\0]
+
+keys allocation
+
+l = 2**4
+
+m = 2**64
+
+
+
+header size = 85 + (√blocksize - 4)*8
