@@ -193,7 +193,7 @@ hash_to_directory(Directory, [Char|Left], Original, Depth) ->
   hash_to_directory(lists:concat([Directory, '/', [Char]]), Left, Original, Depth-1).
 
 value_size(V) ->
-    Len = lib_misc:byte_size(V),
+    Len = iolist_size(V),
     if Len >= ?MEM_VALUE_LIMIT ->
             large;
        true ->

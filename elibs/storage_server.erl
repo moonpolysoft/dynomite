@@ -59,7 +59,7 @@ put(Name, Key, Context, Value) ->
     ?MODULE:put(Name, Key, Context, Value, infinity).
 	
 put(Name, Key, Context, Value, Timeout) ->
-  Size = lib_misc:byte_size(Value),
+  Size = iolist_size(Value),
   if
     (Size > ?CHUNK_SIZE) and (node(Name) /= node()) -> stream(Name, Key, Context, Value);
     true -> int_put(Name, Key, Context, Value, Timeout)
@@ -158,7 +158,7 @@ handle_call({get, Key}, {RemotePid, _Tag}, State = #storage{module=Module,table=
   Result = (catch Module:get(sanitize_key(Key), Table)),
   case Result of
     {ok, {Context, Values}} -> 
-      Size = lib_misc:byte_size(Values),
+      Size = iolist_size(Values),
       stats_server:request(get, Size),
       if
         (Size > ?CHUNK_SIZE) and (node(RemotePid) /= node()) ->
@@ -316,7 +316,7 @@ internal_put(Key, Context, Values, Tree, Table, Module, State) ->
   [UpdatedTree, TableResult] = lib_misc:pmap(fun(F) -> F() end, [TreeFun, TableFun], 2),
   case TableResult of
     {ok, ModifiedTable} ->
-      stats_server:request(put, lib_misc:byte_size(Values)),
+      stats_server:request(put, iolist_size(Values)),
       {reply, ok, State#storage{table=ModifiedTable,tree=UpdatedTree}};
     Failure -> {reply, Failure, State}
   end.
