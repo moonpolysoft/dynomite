@@ -1,5 +1,14 @@
 -include_lib("eunit.hrl").
 
+store_conflicting_versions_test() ->
+  {ok, Pid} = storage_server:start_link(dets_storage, db_key(confl), store, 0, (2 bsl 31), 4096),
+  A = vector_clock:create(a),
+  B = vector_clock:create(b),
+  storage_server:put(Pid, "key", A, ["blah"]),
+  storage_server:put(Pid, "key", B, ["blah2"]),
+  ?assertMatch({ok, {_, ["blah", "blah2"]}}, storage_server:get(Pid, "key")),
+  storage_server:close(Pid).
+
 couch_storage_test() ->
     CouchFile = filename:join(priv_dir(), "couch"),
     {ok, State} = couch_storage:open(CouchFile, storage_test),
