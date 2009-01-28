@@ -157,7 +157,7 @@ code_change(_OldVsn, State, _Extra) ->
 internal_put(Key, Context, Value, #mediator{config=Config}) ->
   {N,R,W} = unpack_config(Config),
   Servers = membership:servers_for_key(Key),
-  Incremented = vector_clock:increment(node(), Context),
+  Incremented = increment(Context),
   MapFun = fun(Server) ->
     storage_server:put(Server, Key, Incremented, Value)
   end,
@@ -249,3 +249,12 @@ error_message(Good, Bad, N, T) ->
   
 unpack_config(#config{n=N,r=R,w=W}) ->
   {N, R, W}.
+
+increment({Pid, Context}) when is_pid(Pid) ->
+  vector_clock:increment(pid_to_list(Pid), Context);
+  
+increment({Ref, Context}) ->
+  vector_clock:increment(Ref, Context);
+  
+increment(Context) ->
+  vector_clock:increment(node(), Context).

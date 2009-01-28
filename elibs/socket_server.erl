@@ -158,7 +158,7 @@ accept_loop(Server, Listen, _State) ->
   case catch gen_tcp:accept(Listen) of
     {ok, Socket} ->
       gen_server:cast(Server, {accepted, self()}),
-      connection_loop(Socket, Server);
+      connection_loop(Socket, Server, make_ref());
     {error, closed} ->
       exit({error, closed});
     Other ->
@@ -166,11 +166,11 @@ accept_loop(Server, Listen, _State) ->
       exit({error, accept_failed})
   end.
   
-connection_loop(Socket, Server) ->
+connection_loop(Socket, Server, Ref) ->
   case read_section(Socket) of
     {ok, Cmd} ->
-      catch execute_command(Cmd, Socket, Server),
-      connection_loop(Socket, Server);
+      catch execute_command(Cmd, Socket, Server, Ref),
+      connection_loop(Socket, Server, Ref);
     {error, Reason} ->
       gen_tcp:close(Socket),
       exit(shutdown)
@@ -179,7 +179,7 @@ connection_loop(Socket, Server) ->
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% command implementation
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-execute_command("get", Socket, Server) ->
+execute_command("get", Socket, Server, _) ->
   Length = read_length(Socket),
   Key = binary_to_list(read_data(Socket, Length)),
   case mediator:get(Key) of
@@ -189,7 +189,7 @@ execute_command("get", Socket, Server) ->
     {failure, Reason} -> send_failure(Socket, Reason)
   end;
 
-execute_command("put", Socket, Server) ->
+execute_command("put", Socket, Server, Ref) ->
   Key = binary_to_list(read_length_data(Socket)),
   ContextData = read_length_data(Socket),
   Context = if
@@ -197,12 +197,12 @@ execute_command("put", Socket, Server) ->
     true -> []
   end,
   Data = read_length_data(Socket),
-  case mediator:put(Key, Context, Data) of
+  case mediator:put(Key, {Ref, Context}, Data) of
     {failure, Reason} -> send_failure(Socket, Reason);
     {ok, N} -> send_msg(Socket, "succ", N)
   end;
 
-execute_command("has", Socket, Server) ->
+execute_command("has", Socket, Server, _) ->
   Key = binary_to_list(read_length_data(Socket)),
   case mediator:has_key(Key) of
     {ok, {true, N}} -> send_msg(Socket, "yes", N);
@@ -210,14 +210,14 @@ execute_command("has", Socket, Server) ->
     {failure, Reason} -> send_failure(Socket, Reason)
   end;
 
-execute_command("del", Socket, Server) ->
+execute_command("del", Socket, Server, _) ->
   Key = binary_to_list(read_length_data(Socket)),
   case mediator:delete(Key) of
     {ok, N} -> send_msg(Socket, "succ", N);
     {failure, Reason} -> send_failure(Socket, Reason)
   end;
 
-execute_command("close", Socket, Server) ->
+execute_command("close", Socket, Server, _) ->
   gen_tcp:send(Socket, "close\n"),
   gen_tcp:close(Socket),
   exit(closed).
