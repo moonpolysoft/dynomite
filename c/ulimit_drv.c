@@ -19,10 +19,13 @@ static ErlDrvData init(ErlDrvPort port, char *cmd) {
 
 static void output(ErlDrvData handle, char* buff, int len) {
   ErlDrvPort port = (ErlDrvPort) handle;
-  rlimit
+  int index=1;
+  long new_soft_limit;
+  struct rlimit limit;
   
   switch (buff[0]) {
     case SET:
+      ei_decode_long(buff, &index, &new_soft_limit);
       
       break;
     case GET:
