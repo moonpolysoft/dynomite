@@ -6,7 +6,7 @@ require 'rake'
 ERLC_TEST_FLAGS = "-pa deps/eunit/ebin -I deps/eunit/include -DTEST"
 ERLC_FLAGS = "+debug_info -W0 -I include -pa deps/mochiweb/ebin -I deps/mochiweb/include -pa deps/rfc4627/ebin -I deps/rfc4627/include -I gen-erl/ -o ebin"
 
-task :default => [:build_deps] do
+task :default => [:build_deps, :build_c_drivers] do
   puts "building #{ENV['TEST']}"
   sh "erlc  #{ERLC_FLAGS} #{ENV['TEST'] ? ERLC_TEST_FLAGS : ''} elibs/*.erl gen-erl/*.erl"
   if ENV['TEST']
@@ -110,6 +110,20 @@ task :docs do
   sh %|cd doc && erl -noshell -s init stop -run edoc files #{files}|
 end
 
+task :c_env do
+  ERL = `which erl`
+  ERLDIR = `awk -F= '/ROOTDIR=/ { print $2; exit; }' #{ERL}`.chomp
+  ERTSBASE = `erl -noshell -noinput -eval 'io:format (\"~s\", [[ \"/\" ++ filename:join (lists:reverse ([ \"erts-\" ++ erlang:system_info (version) | tl (lists:reverse (string:tokens (code:lib_dir (), \"/\"))) ])) ]]).' -s erlang halt `.chomp
+  ERL_INTERFACE = `ls #{ERLDIR}/lib`.split("\n").grep(/erl_interface/).last
+  CPPFLAGS = "-I #{ERTSBASE}/include -I #{ERLDIR}/lib/#{ERL_INTERFACE}/include -Wall -fPIC -I./"
+  LIBEI = "#{ERLDIR}/lib/#{ERL_INTERFACE}/lib/libei.a"
+  if `uname` =~ /Linux/
+    LDFLAGS = " -shared"
+  else
+    LDFLAGS = " -dynamic -bundle -undefined suppress -flat_namespace"
+  end
+end
+
 task :build_deps do
   Dir["deps/*"].each do |dir|
     sh "cd #{dir} && make"
@@ -145,3 +159,17 @@ def priv_dir
   priv = File.join(base, "etest", "log", "#{$$}")
   return priv
 end
+
+DRIVERS = FileList['c/*_drv.c'].pathmap("%{c,lib}X.so")
+
+directory "lib"
+
+rule ".so" => '%{lib,c}X.o' do |t|
+  sh "gcc #{CPPFLAGS} #{LDFLAGS} -o #{t.name} #{t.source} #{LIBEI}"
+end
+
+rule ".o" => ".c" do |t|
+  sh "gcc #{CPPFLAGS} -c -o #{t.name} #{t.source}"
+end
+
+task :build_c_drivers => [:c_env] + DRIVERS
