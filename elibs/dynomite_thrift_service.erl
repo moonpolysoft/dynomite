@@ -11,6 +11,7 @@
 ]).
 
 -include("config.hrl").
+-include("common.hrl").
 -include("dynomite_types.hrl").
 
 %%%%% EXTERNAL INTERFACE %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -26,6 +27,7 @@ stop(Server) ->
 %%%%% THRIFT INTERFACE %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 handle_function(Function, Args) when is_atom(Function), is_tuple(Args) ->
+    ?infoFmt("handling thrift stuff in PID ~p~n", [self()]),
     case apply(?MODULE, Function, tuple_to_list(Args)) of
         ok -> ok;
         Reply -> {reply, Reply}
@@ -42,7 +44,7 @@ put(Key, ContextData, Data) when
                   erlang:byte_size(ContextData) > 0 -> binary_to_term(ContextData);
                   true -> []
               end,
-    case mediator:put(binary_to_list(Key), Context, Data) of
+    case mediator:put(binary_to_list(Key), {self(), Context}, Data) of
         {ok, N} -> N;
         {failure, Reason} -> throw(#failureException{message = iolist_to_binary(Reason)})
     end.

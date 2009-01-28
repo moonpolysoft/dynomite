@@ -7,6 +7,10 @@
 
 create(NodeName) -> [{NodeName, lib_misc:now_float()}].
 
+increment(NodeName, Clocks) when length(Clocks) > 10 ->
+  DropNumber = length(Clocks) - 10,
+  increment(NodeName, lists:nthtail(DropNumber, lists:keysort(2, Clocks)));
+
 increment(NodeName, [{NodeName, Version}|Clocks]) ->
 	[{NodeName, lib_misc:now_float()}|Clocks];
 
