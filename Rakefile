@@ -165,11 +165,13 @@ DRIVERS = FileList['c/*_drv.c'].pathmap("%{c,lib}X.so")
 directory "lib"
 
 rule ".so" => '%{lib,c}X.o' do |t|
-  sh "gcc #{CPPFLAGS} #{LDFLAGS} -o #{t.name} #{t.source} #{LIBEI}"
+  puts "cc #{CPPFLAGS} #{LDFLAGS} -o #{t.name} #{t.source} #{LIBEI}"
+  sh "cc #{CPPFLAGS} #{LDFLAGS} -o #{t.name} #{t.source} #{LIBEI}"
 end
 
 rule ".o" => ".c" do |t|
-  sh "gcc #{CPPFLAGS} -c -o #{t.name} #{t.source}"
+  puts "cc #{CPPFLAGS} -c -o #{t.name} #{t.source}"
+  sh "cc #{CPPFLAGS} -c -o #{t.name} #{t.source}"
 end
 
-task :build_c_drivers => [:c_env] + DRIVERS
+task :build_c_drivers => [:c_env, "lib"] + DRIVERS

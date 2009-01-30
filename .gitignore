@@ -11,3 +11,5 @@ etest/log/*
 test.config
 doc/*_coverage.html
 servers.rb
+lib/*.so
+c/*.o

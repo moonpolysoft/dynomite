@@ -6,12 +6,14 @@
 #include <sys/resource.h>
 #include <errno.h>
 
-#define SET 'g'
-#define GET 's'
+#define SET 's'
+#define GET 'g'
 
 static ErlDrvData init(ErlDrvPort port, char *cmd);
 static void output(ErlDrvData handle, char* buff, int len);
 static void stop(ErlDrvData handle);
+static void send_errno(ErlDrvPort port, int code);
+static void send_rlimit(ErlDrvPort port, struct rlimit *limit);
 
 static ErlDrvData init(ErlDrvPort port, char *cmd) {
   return (ErlDrvData) port;
@@ -20,21 +22,50 @@ static ErlDrvData init(ErlDrvPort port, char *cmd) {
 static void output(ErlDrvData handle, char* buff, int len) {
   ErlDrvPort port = (ErlDrvPort) handle;
   int index=1;
-  long new_soft_limit;
   struct rlimit limit;
   
   switch (buff[0]) {
     case SET:
-      ei_decode_long(buff, &index, &new_soft_limit);
-      
-      break;
+      getrlimit(RLIMIT_NOFILE, &limit);
+      ei_decode_version(buff, &index, NULL);
+      ei_decode_long(buff, &index, &limit.rlim_cur);
+      if (-1 == setrlimit(RLIMIT_NOFILE, &limit)) {
+        send_errno(port, errno);
+        return;
+      }
+      getrlimit(RLIMIT_NOFILE, &limit);
+      send_rlimit(port, &limit);
+      return;
     case GET:
-      
+      getrlimit(RLIMIT_NOFILE, &limit);
+      send_rlimit(port, &limit);
+      return;
   }
 }
 
 static void stop(ErlDrvData handle) {
   
+}
+
+static void send_rlimit(ErlDrvPort port, struct rlimit *limit) {
+  ei_x_buff x;
+  ei_x_new_with_version(&x);
+  ei_x_encode_tuple_header(&x, 2);
+  ei_x_encode_long(&x, limit->rlim_cur);
+  ei_x_encode_long(&x, limit->rlim_max);
+  driver_output(port, x.buff, x.index);
+  ei_x_free(&x);
+}
+
+static void send_errno(ErlDrvPort port, int code) {
+  ei_x_buff x;
+  char *msg = erl_errno_id(code);
+  ei_x_new_with_version(&x);
+  ei_x_encode_tuple_header(&x, 2);
+  ei_x_encode_atom(&x, "error");
+  ei_x_encode_atom(&x, msg);
+  driver_output(port, x.buff, x.index);
+  ei_x_free(&x);
 }
 
 static ErlDrvEntry ulimit_driver_entry = {
