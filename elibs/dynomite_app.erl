@@ -49,6 +49,7 @@ start(_Type, []) ->
       _ ->
           prof_start()
   end,
+  verify_ulimit(Config),
   dynomite_sup:start_link(Config, Options).
 
 %%--------------------------------------------------------------------
@@ -108,3 +109,21 @@ prof_start() ->
 prof_stop() ->
     error_logger:info_msg("Stop profiling"),
     fprof:trace(stop).
+
+verify_ulimit(#config{q=Q}) ->
+  Partitions = (2 bsl (Q-1)),
+  % this is our estimated max # of fd's 2 per partition and 100 for connections
+  FD = Partitions * 3 + 103,
+  case ulimit:start() of
+    {ok, U} -> alter_ulimit(U, FD);
+    {error, Msg} -> error_logger:error_msg("Could not load ulimit driver ~p~n", [Msg])
+  end.
+
+alter_ulimit(U, FD) ->
+  case ulimit:getulimit(U) of
+    {SoftLim, _} when SoftLim < FD ->
+      error_logger:info_msg("Setting ulimit to ~p to match the partition map.~n", [FD]),
+      ulimit:setulimit(U, FD);
+    _ -> ok
+  end,
+  ulimit:stop(U).

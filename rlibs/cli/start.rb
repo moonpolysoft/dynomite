@@ -75,6 +75,7 @@ str = "erl \
   -boot start_sasl \
   +K true \
   +A 128 \
+  +P 60000 \
   -smp enable \
   -pz #{ROOT}/ebin/ \
   -pz #{ROOT}/deps/mochiweb/ebin \

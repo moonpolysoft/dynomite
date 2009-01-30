@@ -61,7 +61,7 @@ namespace :dynomite do
         first = sessions[first_server]
         rest = servers.map {|s| sessions[s]}
         puts shortname
-        Command.process("./dynomite/bin/dynomite start -s #{storage} -m ~/dyn-int-data -n 3 -r 2 -w 2 -l ~/dyn-int-log -d", [first], options.merge(:logger => logger))
+        Command.process("./dynomite/bin/dynomite start -s #{storage} -m ~/dyn-int-data -n 3 -r 2 -w 2 -q 10 -l ~/dyn-int-log -d", [first], options.merge(:logger => logger))
         sleep(3)
         Command.process("./dynomite/bin/dynomite start -s #{storage} -m ~/dyn-int-data -j dynomite@#{shortname} -l ~/dyn-int-log -d", rest, options.merge(:logger => logger))
       end
