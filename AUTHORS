@@ -5,3 +5,5 @@ Authors of dynomite.
  Jason Pellerin <jpellerin@gmail.com>
 
 The plumbing for the couch storage engine is from the couchdb project: http://incubator.apache.org/couchdb/
+
+MurmurHash2 is courtesy of Austin Appleby 

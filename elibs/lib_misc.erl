@@ -4,7 +4,7 @@
 -define(OFFSET_BASIS, 2166136261).
 -define(FNV_PRIME, 16777619).
 
--export([pmap/3, hash/1, nthdelete/2, zero_split/1, nthreplace/3, rand_str/1, position/2, shuffle/1, floor/1, ceiling/1, time_to_epoch_int/1, time_to_epoch_float/1, now_int/0, now_float/0, byte_size/1, listify/1, reverse_bits/1]).
+-export([pmap/3, hash/1, fnv/1, nthdelete/2, zero_split/1, nthreplace/3, rand_str/1, position/2, shuffle/1, floor/1, ceiling/1, time_to_epoch_int/1, time_to_epoch_float/1, now_int/0, now_float/0, byte_size/1, listify/1, reverse_bits/1]).
 
 -ifdef(TEST).
 -include("etest/lib_misc_test.erl").
@@ -111,12 +111,13 @@ gather(N, Max, Ref, L) ->
 	  {Ref, Ret} -> gather(N-1, Max, Ref, [Ret|L])
   end.
 
+hash(Term) -> fnv:hash(Term).
   
 %32 bit fnv.  magic numbers ahoy
-hash(Term) when is_binary(Term) ->
+fnv(Term) when is_binary(Term) ->
   fnv_int(?OFFSET_BASIS, 0, Term);
   
-hash(Term) ->
+fnv(Term) ->
   fnv_int(?OFFSET_BASIS, 0, term_to_binary(Term)).
   
 fnv_int(Hash, ByteOffset, Bin) when byte_size(Bin) == ByteOffset ->

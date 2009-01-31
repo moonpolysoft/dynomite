@@ -2,9 +2,14 @@
 require 'fileutils'
 require 'rubygems'
 require 'rake'
+require 'rake/clean'
 
 ERLC_TEST_FLAGS = "-pa deps/eunit/ebin -I deps/eunit/include -DTEST"
 ERLC_FLAGS = "+debug_info -W0 -I include -pa deps/mochiweb/ebin -I deps/mochiweb/include -pa deps/rfc4627/ebin -I deps/rfc4627/include -I gen-erl/ -o ebin"
+
+CLEAN.include("ebin/*.beam")
+CLEAN.include("c/*.o")
+CLEAN.include("lib/*.so")
 
 task :default => [:build_deps, :build_c_drivers] do
   puts "building #{ENV['TEST']}"
@@ -16,15 +21,6 @@ task :default => [:build_deps, :build_c_drivers] do
   # Dir["templates/*"].each do |template|
   #   sh %Q(erl -pz ebin -noshell -eval 'erltl:compile("#{template}", [{outdir, "ebin"}, debug_info, show_errors, show_warnings])' -s erlang halt)
   # end
-end
-
-task :clean_test do
-  sh "rm -rf etest/log/*"
-end
-
-task :clean => [:clean_test] do
-  sh "rm -f ebin/*.beam"
-  sh "rm -f etest/*.beam"
 end
 
 task :test_env => [:build_test_deps, :test_config] do
@@ -115,7 +111,7 @@ task :c_env do
   ERLDIR = `awk -F= '/ROOTDIR=/ { print $2; exit; }' #{ERL}`.chomp
   ERTSBASE = `erl -noshell -noinput -eval 'io:format (\"~s\", [[ \"/\" ++ filename:join (lists:reverse ([ \"erts-\" ++ erlang:system_info (version) | tl (lists:reverse (string:tokens (code:lib_dir (), \"/\"))) ])) ]]).' -s erlang halt `.chomp
   ERL_INTERFACE = `ls #{ERLDIR}/lib`.split("\n").grep(/erl_interface/).last
-  CPPFLAGS = "-I #{ERTSBASE}/include -I #{ERLDIR}/lib/#{ERL_INTERFACE}/include -Wall -fPIC -I./"
+  CPPFLAGS = "-I #{ERTSBASE}/include -I #{ERLDIR}/lib/#{ERL_INTERFACE}/include -Wall -g -O2 -fPIC -I./"
   LIBEI = "#{ERLDIR}/lib/#{ERL_INTERFACE}/lib/libei.a"
   if `uname` =~ /Linux/
     LDFLAGS = " -shared"
@@ -164,14 +160,18 @@ DRIVERS = FileList['c/*_drv.c'].pathmap("%{c,lib}X.so")
 
 directory "lib"
 
-rule ".so" => '%{lib,c}X.o' do |t|
-  puts "cc #{CPPFLAGS} #{LDFLAGS} -o #{t.name} #{t.source} #{LIBEI}"
-  sh "cc #{CPPFLAGS} #{LDFLAGS} -o #{t.name} #{t.source} #{LIBEI}"
+# task "lib/murmur_drv.c" => ["c/murmur.o"]
+
+rule ".so" => ['%{lib,c}X.o', 'c/murmur.o', 'c/fnv.o'] do |t|
+  puts "cc #{CPPFLAGS} #{LDFLAGS} -o #{t.name} #{t.prerequisites.join(' ')} #{LIBEI}"
+  sh "cc #{CPPFLAGS} #{LDFLAGS} -o #{t.name} #{t.prerequisites.join(' ')} #{LIBEI}"
 end
 
 rule ".o" => ".c" do |t|
   puts "cc #{CPPFLAGS} -c -o #{t.name} #{t.source}"
   sh "cc #{CPPFLAGS} -c -o #{t.name} #{t.source}"
 end
+
+
 
 task :build_c_drivers => [:c_env, "lib"] + DRIVERS
