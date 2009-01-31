@@ -1,5 +1,5 @@
 options = {}
-options[:port] = 11222
+options[:port] = "-dynomite port 11222"
 options[:databases] = ''
 options[:config] = ''
 
