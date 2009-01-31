@@ -660,7 +660,7 @@ update(KeyHash, Key, Value, Node = #node{children=Children,keys=Keys}, Tree) ->
       dmtree:write(Node#node{m=length(Node#node.keys),children=lists:keyreplace(ChildPointer, 2, Children, {hash(Child2),offset(Child2)})}, Tree)
   end;
   
-update(KeyHash, Key, Value, Leaf = #leaf{values=Values}, Tree) ->
+update(KeyHash, Key, Value, Leaf = #leaf{m=M,values=Values}, Tree) ->
   % error_logger:info_msg("update(~p, ~p, Value, #leaf ~p, Tree)~n", [KeyHash, Key, offset(Leaf)]),
   NewValHash = hash(Value),
   case lists:keysearch(KeyHash, 1, Values) of
@@ -671,7 +671,7 @@ update(KeyHash, Key, Value, Leaf = #leaf{values=Values}, Tree) ->
         _ ->  %we still need to deal with collision here
           % error_logger:info_msg("hash found but no key found, inserting new ~n"),
           NewPointer = dmtree:write_key(eof, Key, Tree),
-          dmtree:write(Leaf#leaf{values=lists:keymerge(1, Values, [{KeyHash,NewPointer,NewValHash}])}, Tree)
+          dmtree:write(Leaf#leaf{m=M+1,values=lists:keymerge(1, Values, [{KeyHash,NewPointer,NewValHash}])}, Tree)
       end;
     false ->
       % error_logger:info_msg("no hash or key found, inserting new ~n"),
