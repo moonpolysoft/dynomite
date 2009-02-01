@@ -21,8 +21,10 @@ start_link(#config{thrift_port = Port}) ->
     thrift_socket_server:start([
       {port, Port}, 
       {name, dynomite_thrift}, 
+      {service, dynomite_thrift},
       {handler, ?MODULE},
-      {max, 100}]).
+      {max, 100},
+      {socket_opts, [{recv_timeout, infinity}]}]).
 
 stop(Server) ->
     thrift_socket_server:stop(Server),
