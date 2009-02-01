@@ -1,5 +1,5 @@
 -module (vector_clock).
--export ([create/1, increment/2, compare/2, resolve/2, merge/2]).
+-export ([create/1, truncate/1, increment/2, compare/2, resolve/2, merge/2]).
 
 -ifdef(TEST).
 -include("etest/vector_clock_test.erl").
@@ -7,9 +7,10 @@
 
 create(NodeName) -> [{NodeName, lib_misc:now_float()}].
 
-increment(NodeName, Clocks) when length(Clocks) > 10 ->
-  DropNumber = length(Clocks) - 10,
-  increment(NodeName, lists:nthtail(DropNumber, lists:keysort(2, Clocks)));
+truncate(Clock) when length(Clock) > 10 ->
+  lists:nthtail(length(Clock) - 10, lists:keysort(2, Clock));
+
+truncate(Clock) -> Clock.
 
 increment(NodeName, [{NodeName, Version}|Clocks]) ->
 	[{NodeName, lib_misc:now_float()}|Clocks];

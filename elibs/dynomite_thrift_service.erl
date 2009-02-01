@@ -18,10 +18,14 @@
 
 start_link(#config{thrift_port = Port}) ->
     application:load(thrift),
-    thrift_server:start_link(Port, dynomite_thrift, ?MODULE).
+    thrift_socket_server:start([
+      {port, Port}, 
+      {name, dynomite_thrift}, 
+      {handler, ?MODULE},
+      {max, 100}]).
 
 stop(Server) ->
-    thrift_server:stop(Server),
+    thrift_socket_server:stop(Server),
     ok.
 
 %%%%% THRIFT INTERFACE %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

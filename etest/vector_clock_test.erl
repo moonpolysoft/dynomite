@@ -75,5 +75,6 @@ resolve_notfound_test() ->
     
 clock_truncation_test() ->
   Clock = [{a,1},{b,2},{c,3},{d,4},{e,5},{f,6},{g,7},{h,8},{i,9},{j,10},{k,11}],
-  Clock1 = increment(d, Clock),
-  ?assertEqual(10, length(Clock1)).
+  Clock1 = truncate(Clock),
+  ?assertEqual(10, length(Clock1)),
+  ?assertEqual(false, lists:any(fun(E) -> E =:= {a, 1} end, Clock1)).

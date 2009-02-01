@@ -313,7 +313,7 @@ internal_put(Key, Context, Values, Tree, Table, Module, State) ->
     end,
   TableFun = fun() -> 
       ?prof(put),
-      T = Module:put(sanitize_key(Key), Context, Values, Table),
+      T = Module:put(sanitize_key(Key), vector_clock:truncate(Context), Values, Table),
       ?prof(put),
       T
     end,
