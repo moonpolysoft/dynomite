@@ -40,9 +40,9 @@ put(Key, ContextData, Data) when
   (ContextData =:= undefined orelse is_binary(ContextData)),
   is_binary(Data) ->
     Context = if
-                  ContextData =:= undefined -> [];
+                  ContextData =:= undefined -> undefined;
                   erlang:byte_size(ContextData) > 0 -> binary_to_term(ContextData);
-                  true -> []
+                  true -> undefined
               end,
     case mediator:put(binary_to_list(Key), {self(), Context}, Data) of
         {ok, N} -> N;

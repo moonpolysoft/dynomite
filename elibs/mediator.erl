@@ -250,6 +250,12 @@ error_message(Good, Bad, N, T) ->
 unpack_config(#config{n=N,r=R,w=W}) ->
   {N, R, W}.
 
+increment({Pid, undefined}) when is_pid(Pid) ->
+  {clobber, vector_clock:create(pid_to_list(Pid))};
+
+increment({Ref, undefined}) ->
+  {clobber, vector_clock:create(Ref)};
+
 increment({Pid, Context}) when is_pid(Pid) ->
   vector_clock:increment(pid_to_list(Pid), Context);
   

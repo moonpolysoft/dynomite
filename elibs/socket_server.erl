@@ -193,8 +193,9 @@ execute_command("put", Socket, Server, Ref) ->
   Key = binary_to_list(read_length_data(Socket)),
   ContextData = read_length_data(Socket),
   Context = if
+    ContextData =:= undefined -> undefined;
     erlang:byte_size(ContextData) > 0 -> binary_to_term(ContextData);
-    true -> []
+    true -> undefined
   end,
   Data = read_length_data(Socket),
   case mediator:put(Key, {Ref, Context}, Data) of

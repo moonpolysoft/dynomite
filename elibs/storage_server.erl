@@ -175,12 +175,16 @@ handle_call({get, Key}, {RemotePid, _Tag}, State = #storage{module=Module,table=
 handle_call({put, Key, Context, ValIn}, _From, State = #storage{module=Module,table=Table,tree=Tree}) ->
     %% ?debugFmt("handle_call put ~p", [Key]),
   Values = lib_misc:listify(ValIn),
-  case (catch Module:get(sanitize_key(Key), Table)) of
-    {ok, {ReadContext, ReadValues}} ->
-      {ResolvedContext, ResolvedValues} = vector_clock:resolve({ReadContext, ReadValues}, {Context, Values}),
-      internal_put(Key, ResolvedContext, ResolvedValues, Tree, Table, Module, State);
-    {ok, not_found} -> internal_put(Key, Context, Values, Tree, Table, Module, State);
-    Failure -> {reply, Failure, State}
+  case Context of
+    {clobber, Context2} -> internal_put(Key, Context2, Values, Tree, Table, Module, State);
+    _ ->
+      case (catch Module:get(sanitize_key(Key), Table)) of
+        {ok, {ReadContext, ReadValues}} ->
+          {ResolvedContext, ResolvedValues} = vector_clock:resolve({ReadContext, ReadValues}, {Context, Values}),
+          internal_put(Key, ResolvedContext, ResolvedValues, Tree, Table, Module, State);
+        {ok, not_found} -> internal_put(Key, Context, Values, Tree, Table, Module, State);
+        Failure -> {reply, Failure, State}
+      end
   end;
 	
 handle_call({has_key, Key}, _From, State = #storage{module=Module,table=Table}) ->
