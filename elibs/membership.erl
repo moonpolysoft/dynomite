@@ -174,7 +174,7 @@ handle_call({join_node, Node}, {_, _From}, State = #membership{config=Config}) -
 	{reply, {ok, NewState}, NewState#membership{config=Config}};
 
 handle_call({gossip_with, Node}, From, State = #membership{nodes = Nodes}) ->
-  error_logger:info_msg("firing gossip at ~p~n", [Node]),
+  % error_logger:info_msg("firing gossip at ~p~n", [Node]),
 
   % share our state with target node - expects a response back, but we don't
   % want to wait for it
