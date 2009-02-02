@@ -1,4 +1,5 @@
 require 'rubygems'
+require 'ostruct'
 require 'optparse'
 
 class Array
@@ -21,59 +22,90 @@ OptionParser.new do |opts|
     options[:logdir] = l
   end
   
+  opts.on("-a", "--all [ALLDIR]", "Analyze all directories and spit out csv info") do |a|
+    options[:all] = a
+  end
+  
 end.parse!
 
-stats = []
-errors = []
 
-Dir[options[:logdir] + "/*.log"].each do |logfilename|
-  File.open(logfilename, 'r') do |f|
-    f.each_line do |line|
-      fields = line.split("\t")
-      if (fields[1] == "error")
-        # errors << fields
-      else
-        stats << fields
+def get_stats(dir)
+  stats = []
+  error_count = 0
+  
+  Dir[dir + "/*.log"].each do |logfilename|
+    File.open(logfilename, 'r') do |f|
+      f.each_line do |line|
+        fields = line.split("\t")
+        if (fields[1] == "error")
+          error_count += 1
+        else
+          stats << fields
+        end
       end
     end
   end
-end
 
-#the sum
-gets = []
-get_sum = 0
-get_num = 0
-puts = []
-put_sum = 0
-put_num = 0
-stats.each do |time, op, latency, key, host|
-  if op == "get"
-    gets << latency.to_f
-    get_sum += latency.to_f
-    get_num +=1
-  else
-    puts << latency.to_f
-    put_sum += latency.to_f
-    put_num += 1
+  #the sum
+  gets = []
+  get_sum = 0
+  get_num = 0
+  puts = []
+  put_sum = 0
+  put_num = 0
+  errors = 0
+  stats.each do |time, op, latency, key, host|
+    if op == "get"
+      gets << latency.to_f
+      get_sum += latency.to_f
+      get_num +=1
+    else
+      puts << latency.to_f
+      put_sum += latency.to_f
+      put_num += 1
+    end
   end
+
+
+  get_avg = get_sum.to_f / get_num
+  put_avg = put_sum.to_f / put_num
+
+  gets.sort!
+  puts.sort!
+  get_median = gets.percentile(0.5)
+  put_median = puts.percentile(0.5)
+  get_999 = gets.percentile(0.999)
+  put_999 = puts.percentile(0.999)
+  OpenStruct.new(
+    :dir => dir,
+    :get_length => gets.length,
+    :get_avg => get_avg,
+    :get_median => get_median,
+    :get_999 => get_999,
+    :put_length => puts.length,
+    :put_avg => put_avg,
+    :put_median => put_median,
+    :put_999 => put_999,
+    :error_count => error_count
+  )
 end
 
-
-get_avg = get_sum.to_f / get_num
-put_avg = put_sum.to_f / put_num
-
-gets.sort!
-puts.sort!
-get_median = gets.percentile(0.5)
-put_median = puts.percentile(0.5)
-get_999 = gets.percentile(0.999)
-put_999 = puts.percentile(0.999)
-
-puts "get stats: #{gets.length} datapoints"
-puts "\tavg: #{get_avg}"
-puts "\tmed: #{get_median}"
-puts "\t99.9:#{get_999}"
-puts "put stats: #{puts.length} datapoints"
-puts "\tavg: #{put_avg}"
-puts "\tmed: #{put_median}"
-puts "\t99.9:#{put_999}"
+if options[:all]
+  puts "dir,get_length,get_avg,get_median,get_999,put_length,put_avg,put_median,put_999,error_count"
+  directories = Dir[options[:all] + "/*"].each do |dir|
+    stats = get_stats(dir)
+    STDOUT.write "#{stats.dir},#{stats.get_length},#{stats.get_avg},#{stats.get_median},#{stats.get_999},"
+    puts "#{stats.put_length},#{stats.put_avg},#{stats.put_median},#{stats.put_999},#{stats.error_count}"
+  end
+else
+  stats = get_stats(options[:logdir])
+  puts "errors #{stats.error_count}"
+  puts "get stats: #{stats.get_length} datapoints"
+  puts "\tavg: #{stats.get_avg}"
+  puts "\tmed: #{stats.get_median}"
+  puts "\t99.9:#{stats.get_999}"
+  puts "put stats: #{stats.put_length} datapoints"
+  puts "\tavg: #{stats.put_avg}"
+  puts "\tmed: #{stats.put_median}"
+  puts "\t99.9:#{stats.put_999}"
+end
