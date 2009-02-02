@@ -33,7 +33,7 @@ stop(Server) ->
 %%%%% THRIFT INTERFACE %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 handle_function(Function, Args) when is_atom(Function), is_tuple(Args) ->
-    ?infoFmt("handling thrift stuff in PID ~p~n", [self()]),
+    % ?infoFmt("handling thrift stuff in PID ~p~n", [self()]),
     case apply(?MODULE, Function, tuple_to_list(Args)) of
         ok -> ok;
         Reply -> {reply, Reply}
