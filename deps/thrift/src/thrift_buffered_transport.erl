@@ -75,7 +75,7 @@ close(Transport) ->
 %% Description: Reads data through from the wrapped transoprt
 %%--------------------------------------------------------------------
 read(Transport, Len) when is_integer(Len) ->
-    gen_server:call(Transport, {read, Len}).
+    gen_server:call(Transport, {read, Len}, infinity).
 
 %%====================================================================
 %% gen_server callbacks
