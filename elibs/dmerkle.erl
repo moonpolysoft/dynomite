@@ -49,7 +49,7 @@ leaves(Pid) ->
   gen_server:call(Pid, leaves).
 
 update(Key, Value, Pid) ->
-  gen_server:call(Pid, {update, Key, Value}).
+  gen_server:call(Pid, {update, Key, Value}, infinity).
 
 equals(A, B) ->
   gen_server:call(A, hash) == gen_server:call(B, hash).

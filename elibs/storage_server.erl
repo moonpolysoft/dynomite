@@ -132,7 +132,7 @@ close(Name, Timeout) ->
 %%--------------------------------------------------------------------
 init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
     %% ?debugMsg("storage_server init"),
-    process_flag(trap_exit, true),
+    % process_flag(trap_exit, true),  %i don't think this is appropriate, we should fail and let the sup handle restart
     {ok, Table} = StorageModule:open(DbKey,Name),
     %% ?debugFmt("storage table ~p", [Table]),
     
@@ -306,7 +306,8 @@ internal_put(Key, Context, Values, Tree, Table, Module, State) ->
       ?prof(dmerkle_update),
       T = if
         Tree == undefined -> Tree;
-        true -> dmerkle:update(Key, Values, Tree)
+        true -> 
+          dmerkle:update(Key, Values, Tree)
       end,
       ?prof(dmerkle_update),
       T
