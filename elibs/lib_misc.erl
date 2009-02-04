@@ -4,11 +4,24 @@
 -define(OFFSET_BASIS, 2166136261).
 -define(FNV_PRIME, 16777619).
 
--export([pmap/3, hash/1, fnv/1, nthdelete/2, zero_split/1, nthreplace/3, rand_str/1, position/2, shuffle/1, floor/1, ceiling/1, time_to_epoch_int/1, time_to_epoch_float/1, now_int/0, now_float/0, byte_size/1, listify/1, reverse_bits/1]).
+-export([rm_rf/1, pmap/3, hash/1, fnv/1, nthdelete/2, zero_split/1, nthreplace/3, rand_str/1, position/2, shuffle/1, floor/1, ceiling/1, time_to_epoch_int/1, time_to_epoch_float/1, now_int/0, now_float/0, byte_size/1, listify/1, reverse_bits/1]).
 
 -ifdef(TEST).
 -include("etest/lib_misc_test.erl").
 -endif.
+
+rm_rf(Name) when is_list(Name) ->
+  case filelib:is_dir(Name) of
+    false -> 
+      file:delete(Name);
+    true ->
+      case file:list_dir(Name) of
+        {ok, Filenames} -> 
+          lists:foreach(fun rm_rf/1, [ filename:join(Name, F) || F <- Filenames]),
+          file:del_dir(Name);
+        {error, Reason} -> error_logger:info_msg("rm_rf failed because ~p~n", [Reason])
+      end
+  end.
 
 zero_split(Bin) ->
   zero_split(0, Bin).

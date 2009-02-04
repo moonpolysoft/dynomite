@@ -60,3 +60,19 @@ fnv_native_compat_test() ->
   ?assertEqual(fnv("blah"), fnv:hash("blah")),
   ?assertEqual(fnv(<<"blah">>), fnv:hash(<<"blah">>)),
   ?assertEqual(fnv([<<"blah">>, "bleg"]), fnv:hash([<<"blah">>, "bleg"])).
+  
+rm_rf_test() ->
+  lists:foldl(fun(N, Dir) ->
+      NewDir = filename:join(Dir, N),
+      File = filename:join(NewDir, "file"),
+      filelib:ensure_dir(File),
+      file:write_file(File, "blahblah"),
+      NewDir
+    end, priv_dir(), ["a", "b", "c", "d", "e"]),
+  rm_rf(filename:join(priv_dir(), "a")),
+  ?assertEqual({ok, []}, file:list_dir(priv_dir())).
+  
+priv_dir() ->
+  Dir = filename:join([t:config(priv_dir), "lib_misc"]),
+  filelib:ensure_dir(filename:join([Dir, "lib_misc"])),
+  Dir.

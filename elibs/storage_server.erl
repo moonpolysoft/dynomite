@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/6, start_link/7, get/2, diff/2, get/3, put/4, put/5, fold/3, sync/2, get_tree/1, rebuild_tree/1, has_key/2, has_key/3, delete/2, delete/3, close/1, close/2]).
+-export([start_link/6, get/2, diff/2, get/3, put/4, put/5, fold/3, sync/2, get_tree/1, rebuild_tree/1, has_key/2, has_key/3, delete/2, delete/3, close/1, close/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -40,11 +40,6 @@
 %%--------------------------------------------------------------------
 start_link(StorageModule, DbKey, Name, Min, Max, BlockSize) ->
    gen_server:start_link({local, Name}, ?MODULE, {StorageModule,DbKey,Name,Min,Max, BlockSize}, []).
-   
-start_link(StorageModule, DbKey, Name, Min, Max, BlockSize, OldNode) ->
-  {ok, Pid} = start_link(StorageModule, DbKey, Name, Min, Max, BlockSize),
-  spawn(fun() -> sync(Pid, {Name, OldNode}) end),
-  {ok, Pid}.
 
 get(Name, Key) ->
     ?MODULE:get(Name, Key, infinity).

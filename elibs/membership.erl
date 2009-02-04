@@ -443,13 +443,16 @@ reload_storage_servers(OldParts, NewParts, Old, Config = #config{live=Live}) whe
     DbKey = lists:concat([Config#config.directory, "/", Part]),
     BlockSize = Config#config.blocksize,
     {Min,Max} = int_range(Part, Config),
-    Spec = case catch lists:keysearch(Part, 2, Old) of
-      {value, {OldNode, _}} -> {Name, {storage_server,start_link,[Config#config.storage_mod, DbKey, Name, Min, Max, BlockSize, OldNode]}, permanent, 1000, worker, [storage_server]};
-      _ -> {Name, {storage_server,start_link,[Config#config.storage_mod, DbKey, Name, Min, Max, BlockSize]}, permanent, 1000, worker, [storage_server]}
-    end,
-    case supervisor:start_child(storage_server_sup, Spec) of
-      already_present -> supervisor:restart_child(storage_server_sup, Name);
-      _ -> ok
+    Spec = {Name, {storage_server,start_link,[Config#config.storage_mod, DbKey, Name, Min, Max, BlockSize]}, permanent, 1000, worker, [storage_server]},
+    Callback = fun() ->
+        case supervisor:start_child(storage_server_sup, Spec) of
+          already_present -> supervisor:restart_child(storage_server_sup, Name);
+          _ -> ok
+        end
+      end,
+    case catch lists:keysearch(Part, 2, Old) of
+      {value, {OldNode, _}} -> bootstrap:start(DbKey, OldNode, Callback);
+      _ -> Callback()
     end
   end, NewParts).
 
