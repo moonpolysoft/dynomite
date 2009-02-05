@@ -66,3 +66,21 @@ size_for_pointer_test() ->
   ?assertEqual(16, ?size_for_pointer(1)),
   ?assertEqual(256, ?size_for_pointer(5)).
   
+open_and_reopen_test() ->
+  {ok, Pid} = dmtree:start_link(data_file(), 4096),
+  Root = root(Pid),
+  State = state(Pid),
+  dmtree:stop(Pid),
+  {ok, P2} = dmtree:start_link(data_file(), 4096),
+  ?assertEqual(Root, root(P2)),
+  S2 = state(P2),
+  ?assertEqual(State#dmtree.kfpointers, S2#dmtree.kfpointers),
+  dmtree:stop(Pid).
+  
+priv_dir() ->
+    Dir = filename:join(t:config(priv_dir), "data"),
+    filelib:ensure_dir(filename:join(Dir, "dmerkle")),
+    Dir.
+
+data_file() ->
+    filename:join(priv_dir(), "dmerkle").

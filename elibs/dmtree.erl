@@ -85,6 +85,9 @@ write_key(Offset, Key, Pid) ->
   
 filename(Pid) ->
   gen_server:call(Pid, filename).
+  
+state(Pid) ->
+  gen_server:call(Pid, state).
 
 %%====================================================================
 %% gen_server callbacks
@@ -173,7 +176,10 @@ handle_call({write_key, Offset, Key}, _From, State = #dmtree{}) ->
   {reply, Offset2, State2};
   
 handle_call(filename, _From, State = #dmtree{filename=Filename}) ->
-  {reply, Filename, State}.
+  {reply, Filename, State};
+  
+handle_call(state, _From, State) ->
+  {reply, State, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -432,7 +438,7 @@ serialize_header(#dmtree{blocksize=BlockSize, freepointer=FreePtr, bigkfpointer=
 
 %this will try and match the current version, if it doesn't then we gotta punch out
 deserialize_header(<<?VERSION:8, BlockSize:32, FreePtr:64, RootPtr:64, BKFPointer:64, Rest/binary>>) ->
-  PointerSize = ?pointers_from_blocksize(BlockSize),
+  PointerSize = ?pointers_from_blocksize(BlockSize) * 8,
   <<PBin:PointerSize/binary, _/binary>> = Rest,
   Pointers = [Ptr || <<Ptr:64>> <= PBin],
   HeaderSize = ?headersize_from_blocksize(BlockSize),
