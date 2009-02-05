@@ -32,6 +32,7 @@
 %%--------------------------------------------------------------------
 
 start(Directory, OldNode, Callback) when is_function(Callback) ->
+  ?infoFmt("bootstrapping for directory ~p~n", [Directory]),
   Ref = make_ref(),
   Receiver = spawn_link(fun() -> 
       receive_bootstrap(Directory, Ref),
@@ -79,7 +80,8 @@ receive_contents(Ref, IO, Ctx) ->
 send_bootstrap(Directory, Pid, Ref) ->
   filelib:fold_files(Directory, ".*", true, fun(File, _) ->
       send_file(File, Pid, Ref)
-    end, nil).
+    end, nil),
+  Pid ! {Ref, done}.
   
 send_file(File, Pid, Ref) ->
   Pid ! {Ref, filename, File},
