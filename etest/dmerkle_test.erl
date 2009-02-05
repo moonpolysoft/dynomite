@@ -4,7 +4,7 @@ test_cleanup() ->
   file:delete(data_file()),
   file:delete(data_file(1)).
 
-      
+
 open_and_close_test() ->
   test_cleanup(),
   {ok, Pid} = open(data_file(), 256),
