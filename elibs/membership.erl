@@ -15,15 +15,16 @@
 -define(VIRTUALNODES, 100).
 
 %% API
--export([start_link/1, join_node/2, nodes_for_partition/1, replica_nodes/1, servers_for_key/1, nodes_for_key/1, partitions/0, nodes/0, state/0, old_partitions/0, partitions_for_node/2, fire_gossip/1, partition_for_key/1, stop/0, range/1]).
+-export([start_link/0, join_node/2, nodes_for_partition/1, replica_nodes/1, servers_for_key/1, nodes_for_key/1, partitions/0, nodes/0, state/0, old_partitions/0, partitions_for_node/2, fire_gossip/1, partition_for_key/1, stop/0, range/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(membership, {config, partitions, version, nodes, old_partitions}).
+-record(membership, {partitions, version, nodes, old_partitions}).
 
 -include("config.hrl").
+-include("common.hrl").
 
 -define(power_2(N), (2 bsl (N-1))).
 
@@ -39,8 +40,8 @@
 %% @doc Starts the server
 %% @end 
 %%--------------------------------------------------------------------
-start_link(Config) ->
-  gen_server:start_link({local, membership}, ?MODULE, Config, []).
+start_link() ->
+  gen_server:start_link({local, membership}, ?MODULE, [], []).
 
 join_node(JoinTo, Me) ->
 	case catch(gen_server:call({membership, JoinTo}, {join_node, Me})) of
@@ -119,39 +120,40 @@ fire_gossip({A1, A2, A3}) ->
 %% @doc Initiates the server
 %% @end 
 %%--------------------------------------------------------------------
-init(ConfigIn) ->
-    process_flag(trap_exit, true),
-    Nodes = erlang:nodes(),
-    {ok, State} = 
-        case load_state(ConfigIn) of
-            {ok, Value} -> 
-                error_logger:info_msg("loading membership from disk~n", []),
-                configuration:set_config(Value#membership.config),
-                {ok, Value};
-            _ ->
-                if
-                    length(Nodes) > 0 -> 
-                        Node = random_node(Nodes),
-                        error_logger:info_msg("joining node ~p~n", [Node]),
-                        case join_node(Node, node()) of
-                            {ok, JoinedState} ->
-                                {ok, JoinedState};
-                            Other ->
-                                error_logger:info_msg("join_node ~p result ~p", [Node, Other]),
-                                {ok, create_initial_state(ConfigIn)}
-                        end;
-                    true -> 
-                        {ok, create_initial_state(ConfigIn)}
-                end
-        end,
-  error_logger:info_msg("Loading storage servers.~n"),
-	reload_storage_servers(empty, State),
-	error_logger:info_msg("Loading sync servers.~n"),
-	reload_sync_servers(empty, State),
-	error_logger:info_msg("Starting membership gossip.~n"),
+init([]) ->
+  Config = configuration:get_config(),
+  Nodes = erlang:nodes(),
+  {ok, State} = 
+    case load_state(Config) of
+      {ok, Value} -> 
+        error_logger:info_msg("loading membership from disk~n", []),
+        {ok, Value};
+      _ ->
+        if
+          length(Nodes) > 0 -> 
+            Node = random_node(Nodes),
+            error_logger:info_msg("joining node ~p~n", [Node]),
+            case join_node(Node, node()) of
+              {ok, JoinedState} ->
+                {ok, JoinedState};
+              Other ->
+                error_logger:info_msg("join_node ~p result ~p", [Node, Other]),
+                {ok, create_initial_state(Config)}
+            end;
+          true ->
+            {ok, create_initial_state(Config)}
+        end
+    end,
+  ?infoMsg("Saving membership data.~n"),
+  save_state(State),
+  ?infoMsg("Loading storage servers.~n"),
+  reload_storage_servers(empty, State),
+  ?infoMsg("Loading sync servers.~n"),
+  reload_sync_servers(empty, State),
+  ?infoMsg("Starting membership gossip.~n"),
   timer:apply_after(random:uniform(1000) + 1000, membership, fire_gossip, [random:seed()]),
-  error_logger:info_msg("Initialized."),
-	{ok, State#membership{config=configuration:get_config()}}.
+  ?infoMsg("Initialized.~n"),
+  {ok, State}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -165,13 +167,13 @@ init(ConfigIn) ->
 %% @end 
 %%--------------------------------------------------------------------
 
-handle_call({join_node, Node}, {_, _From}, State = #membership{config=Config}) ->
+handle_call({join_node, Node}, {_, _From}, State) ->
   error_logger:info_msg("~p is joining the cluster.~n", [node(_From)]),
   NewState = int_join_node(Node, State),
   reload_storage_servers(State, NewState),
   reload_sync_servers(State, NewState),
   save_state(NewState),
-	{reply, {ok, NewState}, NewState#membership{config=Config}};
+	{reply, {ok, NewState}, NewState};
 
 handle_call({gossip_with, Node}, From, State = #membership{nodes = Nodes}) ->
   % error_logger:info_msg("firing gossip at ~p~n", [Node]),
@@ -196,7 +198,7 @@ handle_call({merge_state, RemoteState}, _From, State) ->
 % Another node is sharing their state with us. Need to merge them in
 % and reply with the merged state
 %%
-handle_call({share, RemoteState}, _From, State = #membership{config=Config}) ->
+handle_call({share, RemoteState}, _From, State) ->
   {ok, Merged} = merge_and_save_state(RemoteState, State),
   {reply, {ok, Merged}, Merged};
 	
@@ -216,7 +218,7 @@ handle_call({replica_nodes, Node}, _From, State) ->
   {reply, int_replica_nodes(Node, State), State};
 	
 handle_call({range, Partition}, _From, State) ->
-  {reply, int_range(Partition, State#membership.config), State};
+  {reply, int_range(Partition, configuration:get_config()), State};
 	
 handle_call({nodes_for_partition, Partition}, _From, State) ->
   {reply, int_nodes_for_partition(Partition, State), State};
@@ -307,7 +309,7 @@ random_node(Nodes) ->
 %   end.
 
 load_state(#config{directory=Directory}) ->
-  case file:read_file(lists:concat([Directory, "/membership.bin"])) of
+  case file:read_file(filename:join(Directory, "membership.bin")) of
     {ok, Binary} -> 
       {ok, binary_to_term(Binary)};
     _ -> not_found
@@ -316,7 +318,7 @@ load_state(#config{directory=Directory}) ->
 save_state(State) ->
   Config = configuration:get_config(),
   Binary = term_to_binary(State),
-  {ok, File} = file:open(lists:concat([Config#config.directory, "/membership.bin"]), [write, raw]),
+  {ok, File} = file:open(filename:join(Config#config.directory, "membership.bin"), [write, raw]),
   ok = file:write(File, Binary),
   ok = file:close(File).
 
@@ -326,7 +328,6 @@ create_initial_state(Config) ->
   #membership{
     version=vector_clock:create(node()),
 	  partitions=create_partitions(Q, node()),
-	  config=Config,
 	  nodes=[node()]}.
 	
 create_partitions(Q, Node) ->
@@ -337,15 +338,14 @@ partition_range(Q) -> ?power_2(32-Q).
 merge_states(StateA, StateB) ->
   PartA = StateA#membership.partitions,
   PartB = StateB#membership.partitions,
-  Config = StateB#membership.config,
+  Config = configuration:get_config(),
   Nodes = lists:usort(lists:merge(StateA#membership.nodes, StateB#membership.nodes)),
   Partitions = partitions:merge_partitions(PartA, PartB, Config#config.n, Nodes),
   % error_logger:info_msg("Merged nodes ~p and partitions ~p~n", [Nodes, length(Partitions)]),
   #membership{
     version=vector_clock:merge(StateA#membership.version, StateB#membership.version),
     nodes=Nodes,
-    partitions=Partitions,
-    config=Config
+    partitions=Partitions
   }.
 
 % Merges in another state, reloads any storage
@@ -365,11 +365,10 @@ merge_and_save_state(RemoteState, State) ->
       concurrent -> % must merge
         merge_states(RemoteState, State)
   end,
-  NewState = Merged#membership{config = State#membership.config},
-  reload_storage_servers(State, NewState),
-  reload_sync_servers(State, NewState),
-  save_state(NewState),
-  {ok, NewState}.
+  reload_storage_servers(State, Merged),
+  reload_sync_servers(State, Merged),
+  save_state(Merged),
+  {ok, Merged}.
 
 
 reload_sync_servers(empty, NewState) ->
@@ -445,6 +444,7 @@ reload_storage_servers(OldParts, NewParts, Old, Config = #config{live=Live}) whe
     {Min,Max} = int_range(Part, Config),
     Spec = {Name, {storage_server,start_link,[Config#config.storage_mod, DbKey, Name, Min, Max, BlockSize]}, permanent, 1000, worker, [storage_server]},
     Callback = fun() ->
+        ?infoFmt("Starting the server for ~p~n", [Spec]),
         case supervisor:start_child(storage_server_sup, Spec) of
           already_present -> supervisor:restart_child(storage_server_sup, Name);
           _ -> ok
@@ -456,10 +456,10 @@ reload_storage_servers(OldParts, NewParts, Old, Config = #config{live=Live}) whe
     end
   end, NewParts).
 
-int_join_node(NewNode, #membership{config=Config,partitions=Partitions,version=Version,nodes=OldNodes}) ->
+int_join_node(NewNode, #membership{partitions=Partitions,version=Version,nodes=OldNodes}) ->
   Nodes = lists:sort([NewNode|OldNodes]),
   P = partitions:rebalance_partitions(NewNode, Nodes, Partitions),
-  #membership{config=Config,
+  #membership{
     partitions=P,
     version = vector_clock:increment(node(), Version),
     nodes=Nodes,
@@ -478,24 +478,24 @@ int_partitions_for_node(Node, State, all) ->
     end, [], Nodes).
   
 reverse_replica_nodes(Node, State) ->
-  Config = State#membership.config,
+  Config = configuration:get_config(),
   n_nodes(Node, Config#config.n, lists:reverse(State#membership.nodes)).
   
 int_replica_nodes(Node, State) ->
-  Config = State#membership.config,
+  Config = configuration:get_config(),
   n_nodes(Node, Config#config.n, State#membership.nodes).
   
 int_nodes_for_key(Key, State) ->
   % error_logger:info_msg("inside int_nodes_for_key~n", []),
   KeyHash = lib_misc:hash(Key),
-  Config = State#membership.config,
+  Config = configuration:get_config(),
   Q = Config#config.q,
   Partition = find_partition(KeyHash, Q),
   % error_logger:info_msg("found partition ~w for key ~p~n", [Partition, Key]),
   int_nodes_for_partition(Partition, State).
   
 int_nodes_for_partition(Partition, State) ->
-  Config = State#membership.config,
+  Config = configuration:get_config(),
   Partitions = State#membership.partitions,
   Q = Config#config.q,
   N = Config#config.n,
@@ -505,7 +505,7 @@ int_nodes_for_partition(Partition, State) ->
   
 int_partition_for_key(Key, State) ->
   KeyHash = lib_misc:hash(Key),
-  Config = State#membership.config,
+  Config = configuration:get_config(),
   Q = Config#config.q,
   find_partition(KeyHash, Q).
   
