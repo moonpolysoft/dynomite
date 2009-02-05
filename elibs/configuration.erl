@@ -22,8 +22,6 @@
 
 -include("config.hrl").
 
--record(configuration, {config}).
-
 %%====================================================================
 %% API
 %%====================================================================
@@ -45,7 +43,7 @@ set_config(Config) ->
   gen_server:call(configuration, {set_config, Config}).
 
 stop() ->
-    gen_server:call(configuration, stop).
+    gen_server:cast(configuration, stop).
 
 
 %%====================================================================
@@ -61,7 +59,7 @@ stop() ->
 %% @end 
 %%--------------------------------------------------------------------
 init(Config) ->
-    {ok, #configuration{config=Config}}.
+    {ok, Config}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -76,17 +74,10 @@ init(Config) ->
 %%--------------------------------------------------------------------
 
 handle_call(get_config, _From, State) ->
-	{reply, State#configuration.config, State};
+	{reply, State, State};
 	
 handle_call({set_config, Config}, _From, State) ->
-  {reply, ok, State#configuration{config=Config}};
-
-handle_call(stop, _From, State) ->
-    {stop, shutdown, ok, State};
-
-handle_call(_Request, _From, State) ->
-    Reply = ok,
-    {reply, Reply, State}.
+  {reply, ok, Config}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -95,8 +86,8 @@ handle_call(_Request, _From, State) ->
 %% @doc Handling cast messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+handle_cast(stop, State) ->
+    {stop, shutdown, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_info(Info, State) -> {noreply, State} |
