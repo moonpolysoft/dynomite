@@ -47,6 +47,12 @@ rebalance_6_test() ->
   {value, {e, 10}} = lists:keysearch(e, 1, Sizes),
   {value, {f, 10}} = lists:keysearch(f, 1, Sizes).
   
+rebalance_rejoin_test() ->
+  Partitions = create_partitions([{a, 13}, {b, 13}, {c, 13}, {d, 13}, {e, 12}]),
+  Parts1 = rebalance_partitions(a, [a, b, c, d, e], Partitions),
+  Sizes = sizes([a, b, c, d, e, f], Parts1),
+  ?assertEqual({value, {a, 13}}, lists:keysearch(a, 1, Sizes)).
+  
 merge_same_partitions_test() ->
   Partitions = create_partitions([{a, 64}]),
   Parts1 = rebalance_partitions(b, [a], Partitions),

@@ -1,26 +1,26 @@
 %%%-------------------------------------------------------------------
-%%% File:      sync_manager.erl
-%%% @author    Cliff Moon <cliff@powerset.com> [http://www.powerset.com/]
-%%% @copyright 2008 Cliff Moon
+%%% File:      storage_manager.erl
+%%% @author    Cliff Moon <> []
+%%% @copyright 2009 Cliff Moon
 %%% @doc  
 %%%
 %%% @end  
 %%%
-%%% @since 2008-10-21 by Cliff Moon
+%%% @since 2009-02-07 by Cliff Moon
 %%%-------------------------------------------------------------------
--module(sync_manager).
+-module(storage_manager).
 -author('cliff@powerset.com').
 
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, load/3, sync/5, done/1, running/0, running/1, diffs/0, diffs/1]).
+-export([start_link/0, load/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {running,diffs}).
+-record(state, {partitions,specs}).
 
 %%====================================================================
 %% API
@@ -31,28 +31,10 @@
 %% @end 
 %%--------------------------------------------------------------------
 start_link() ->
-    gen_server:start_link({local, sync_manager}, ?MODULE, [], []).
-
+  gen_server:start_link({local, storage_manager}, ?MODULE, [], []).
+  
 load(Node, Nodes, Partitions) ->
-  gen_server:call(sync_manager, {load, Node, Nodes, Partitions}).
-
-sync(Part, Master, NodeA, NodeB, DiffSize) ->
-  gen_server:cast(sync_manager, {sync, Part, Master, NodeA, NodeB, DiffSize}).
-  
-done(Part) ->
-  gen_server:cast(sync_manager, {done, Part}).
-  
-running() ->
-  gen_server:call(sync_manager, running).
-  
-running(Node) ->
-  gen_server:call({sync_manager, Node}, running).
-  
-diffs() ->
-  gen_server:call(sync_manager, diffs).
-  
-diffs(Node) ->
-  gen_server:call({sync_manager, Node}, diffs).
+  gen_server:call(storage_manager, {load, Node, Nodes, Partitions}).
 
 %%====================================================================
 %% gen_server callbacks
@@ -67,7 +49,7 @@ diffs(Node) ->
 %% @end 
 %%--------------------------------------------------------------------
 init([]) ->
-    {ok, #state{running=[],diffs=[]}}.
+    {ok, #state{}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -80,11 +62,9 @@ init([]) ->
 %% @doc Handling call messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_call(running, _From, State = #state{running=Running}) ->
-  {reply, Running, State};
-  
-handle_call(diffs, _From, State = #state{diffs=Diffs}) ->
-  {reply, Diffs, State}.
+handle_call(_Request, _From, State) ->
+    Reply = ok,
+    {reply, Reply, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -93,14 +73,8 @@ handle_call(diffs, _From, State = #state{diffs=Diffs}) ->
 %% @doc Handling cast messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_cast({sync, Part, Master, NodeA, NodeB, DiffSize}, State = #state{running=Running,diffs=Diffs}) ->
-  NewDiffs = store_diff(Part, Master, NodeA, NodeB, DiffSize, Diffs),
-  NewRunning = lists:keysort(1, lists:keystore(Part, 1, Running, {Part, NodeA, NodeB})),
-  {noreply, State#state{running=NewRunning,diffs=NewDiffs}};
-    
-handle_cast({done, Part}, State = #state{running=Running}) ->
-  NewRunning = lists:keydelete(Part, 1, Running),
-  {noreply, State#state{running=NewRunning}}.
+handle_cast(_Msg, State) ->
+    {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_info(Info, State) -> {noreply, State} |
@@ -108,9 +82,9 @@ handle_cast({done, Part}, State = #state{running=Running}) ->
 %%                                       {stop, Reason, State}
 %% @doc Handling all non call/cast messages
 %% @end 
-%%--------------------------------------------------------------------
+%%--------------------------------------------------------------------  
 handle_info(_Info, State) ->
-    {noreply, State}.
+  {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @spec terminate(Reason, State) -> void()
@@ -134,15 +108,16 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
-% reload_sync_servers(empty, NewState) ->
+% reload_storage_servers(empty, NewState) ->
 %   Config = configuration:get_config(),
-%   Partitions = int_partitions_for_node(node(), NewState, master),
-%   reload_sync_servers([], Partitions, Config);
-%   
-% reload_sync_servers(OldState, NewState) ->
+%   Partitions = int_partitions_for_node(node(), NewState, all),
+%   Old = NewState#membership.old_partitions,
+%   reload_storage_servers([], Partitions, Old, Config);
+% 
+% reload_storage_servers(OldState, NewState) ->
 %   Config = configuration:get_config(),
-%   PartForNode = int_partitions_for_node(node(), NewState, master),
-%   OldPartForNode = int_partitions_for_node(node(), OldState, master),
+%   PartForNode = int_partitions_for_node(node(), NewState, all),
+%   OldPartForNode = int_partitions_for_node(node(), OldState, all),
 %   Old = OldState#membership.partitions,
 %   NewPartitions = lists:filter(fun(E) ->
 %       not lists:member(E, OldPartForNode)
@@ -150,39 +125,32 @@ code_change(_OldVsn, State, _Extra) ->
 %   OldPartitions = lists:filter(fun(E) ->
 %       not lists:member(E, PartForNode)
 %     end, OldPartForNode),
-%   reload_sync_servers(OldPartitions, NewPartitions, Config).
+%   reload_storage_servers(OldPartitions, NewPartitions, Old, Config).
 %   
-% reload_sync_servers(_, _, #config{live=Live}) when not Live ->
+% reload_storage_servers(_, _, _, #config{live=Live}) when not Live ->
 %   ok;
 %   
-% reload_sync_servers(OldParts, NewParts, Config) ->
+% reload_storage_servers(OldParts, NewParts, Old, Config = #config{live=Live}) when Live ->
 %   lists:foreach(fun(E) ->
-%       Name = list_to_atom(lists:concat([sync_, E])),
-%       supervisor:terminate_child(sync_server_sup, Name),
-%       supervisor:delete_child(sync_server_sup, Name)
+%       Name = list_to_atom(lists:concat([storage_, E])),
+%       supervisor:terminate_child(storage_server_sup, Name),
+%       supervisor:delete_child(storage_server_sup, Name)
 %     end, OldParts),
 %   lists:foreach(fun(Part) ->
-%       Name = list_to_atom(lists:concat([sync_, Part])),
-%       Spec = {Name, {sync_server, start_link, [Name, Part]}, permanent, 1000, worker, [sync_server]},
-%       case supervisor:start_child(sync_server_sup, Spec) of
-%         already_present -> supervisor:restart_child(sync_server_sup, Name);
-%         _ -> ok
-%       end
-%     end, NewParts).
-
-store_diff(Part, Master, Master, NodeB, DiffSize, Diffs) ->
-  store_diff(Part, Master, NodeB, DiffSize, Diffs);
-  
-store_diff(Part, Master, NodeA, Master, DiffSize, Diffs) ->
-  store_diff(Part, Master, NodeA, DiffSize, Diffs);
-
-store_diff(Part, Master, NodeA, NodeB, DiffSize, Diffs) ->
-  Diffs.
-  
-store_diff(Part, Master, Node, DiffSize, Diffs) ->
-  case lists:keysearch(Part, 1, Diffs) of
-    {value, {Part, DiffSizes}} -> lists:keystore(Part, 1, Diffs, {Part, 
-        lists:keystore(Node, 1, DiffSizes, {Node, DiffSize})
-      });
-    false -> lists:keystore(Part, 1, Diffs, {Part, [{Node, DiffSize}]})
-  end.
+%     Name = list_to_atom(lists:concat([storage_, Part])),
+%     DbKey = lists:concat([Config#config.directory, "/", Part]),
+%     BlockSize = Config#config.blocksize,
+%     {Min,Max} = int_range(Part, Config),
+%     Spec = {Name, {storage_server,start_link,[Config#config.storage_mod, DbKey, Name, Min, Max, BlockSize]}, permanent, 1000, worker, [storage_server]},
+%     Callback = fun() ->
+%         ?infoFmt("Starting the server for ~p~n", [Spec]),
+%         case supervisor:start_child(storage_server_sup, Spec) of
+%           already_present -> supervisor:restart_child(storage_server_sup, Name);
+%           _ -> ok
+%         end
+%       end,
+%     case catch lists:keysearch(Part, 2, Old) of
+%       {value, {OldNode, _}} -> bootstrap:start(DbKey, OldNode, Callback);
+%       _ -> Callback()
+%     end
+%   end, NewParts).

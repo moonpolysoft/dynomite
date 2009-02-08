@@ -8,11 +8,12 @@ all_test_() ->
   [
     ?_test(test_write_membership_to_disk()),
     ?_test(test_load_membership_from_disk()),
-    ?_test(test_join_one_node())
+    ?_test(test_join_one_node()),
+    ?_test(test_membership_gossip_cluster_collision())
   ]}.
 
 test_write_membership_to_disk() ->
-  membership:start_link(),
+  {ok, _} = membership:start_link(node(), [node()]),
   {ok, Bin} = file:read_file(data_file()),
   State = binary_to_term(Bin),
   ?assertEqual([node()], State#membership.nodes),
@@ -20,10 +21,10 @@ test_write_membership_to_disk() ->
   membership:stop().
 
 test_load_membership_from_disk() ->
-  State = create_initial_state(configuration:get_config()),
+  State = create_initial_state(node(), [node()], configuration:get_config()),
   NS = State#membership{version=[a,b,c]},
   file:write_file(data_file(), term_to_binary(NS)),
-  membership:start_link(),
+  {ok, _} = membership:start_link(node(), [node()]),
   ?assertEqual([node()], membership:nodes()),
   ?assertEqual(64, length(membership:partitions())),
   MemState = state(),
@@ -31,7 +32,7 @@ test_load_membership_from_disk() ->
   membership:stop().
 
 test_join_one_node() ->
-  membership:start_link(),
+  {ok, _} = membership:start_link(node(), [nodes()]),
   membership:join_node(node(), node_a),
   Partitions = membership:partitions(),
   {A, B} = lists:partition(fun({Node,_}) -> Node == node() end, Partitions),
@@ -39,6 +40,17 @@ test_join_one_node() ->
   ?assertEqual(32, length(B)),
   membership:stop().
 
+test_membership_gossip_cluster_collision() ->
+  {ok, _} = membership:start_link(mem_a, a, [a]),
+  {ok, _} = membership:start_link(mem_b, b, [b]),
+  gen_server:call(mem_a, {gossip_with, mem_b}),
+  Partitions = gen_server:call(mem_a, partitions),
+  {A, B} = lists:partition(fun({Node,_}) -> Node == a end, Partitions),
+  ?assertEqual(32, length(A)),
+  ?assertEqual(32, length(B)),
+  membership:stop(mem_a),
+  membership:stop(mem_b).
+  
 
 
 test_setup() ->

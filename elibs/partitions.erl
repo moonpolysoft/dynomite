@@ -12,7 +12,9 @@
 -author('cliff@powerset.com').
 
 %% API
--export([rebalance_partitions/3, merge_partitions/4]).
+-export([partition_range/1, create_partitions/2, rebalance_partitions/3, merge_partitions/4]).
+
+-define(power_2(N), (2 bsl (N-1))).
 
 -ifdef(TEST).
 -include("etest/partitions_test.erl").
@@ -27,12 +29,23 @@
 %% @end 
 %%--------------------------------------------------------------------
 
+partition_range(Q) -> ?power_2(32-Q).
+
+create_partitions(Q, Node) ->
+  lists:map(fun(Partition) -> {Node, Partition} end, lists:seq(1, ?power_2(32), partition_range(Q))).
+
 rebalance_partitions(NewNode, Nodes, Partitions) ->
   Nodes1 = lists:filter(fun(E) -> E /= NewNode end, Nodes),
   Sizes = sizes(Nodes1, Partitions),
   {Taken, Parts1} = lists:partition(fun({Node, Part}) -> Node == NewNode end, Partitions),
   TargetSize = length(Partitions) div (length(Nodes1) + 1) - length(Taken),
-  int_rebalance(NewNode, TargetSize, Sizes, Parts1, Taken).
+  if
+    TargetSize < 1 -> 
+      error_logger:info_msg("Cannot allocate any more partitions to this node~n"),
+      Partitions;
+    true -> int_rebalance(NewNode, TargetSize, Sizes, Parts1, Taken)
+  end.
+  
 
 %%====================================================================
 %% Internal functions
