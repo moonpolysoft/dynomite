@@ -46,14 +46,7 @@ start_link(Node, Nodes) ->
   gen_server:start_link({local, membership}, ?MODULE, [Node, Nodes], []).
 
 join_node(JoinTo, Me) ->
-	case catch(gen_server:call({membership, JoinTo}, {join_node, Me})) of
-        {'EXIT', R} ->
-            error_logger:info_msg("join_node call at ~p failed: ~p", 
-                                  [JoinTo, R]),
-            failed;
-        Other ->
-            Other
-    end.
+  gen_server:call({membership, JoinTo}, {join_node, Me}).
 	
 servers_for_key(Key) ->
   gen_server:call(membership, {servers_for_key, Key}).
@@ -108,6 +101,7 @@ fire_gossip(Node) when is_atom(Node) ->
 %%--------------------------------------------------------------------
 init([Node, Nodes]) ->
   % process_flag(trap_exit, true), % this is for the gossip server which tags along
+  ?debugFmt("init with ~p ~p", [Node, Nodes]),
   Config = configuration:get_config(),
   State = try_join_into_cluster(Node, create_or_load_state(Node, Nodes, Config)),
   ?infoMsg("Saving membership data.~n"),
@@ -139,6 +133,7 @@ handle_call({join_node, Node}, {_, _From}, State) ->
   error_logger:info_msg("~p is joining the cluster.~n", [node(_From)]),
   NewState = int_join_node(Node, State),
   #membership{node=Node1,nodes=Nodes,partitions=Parts} = NewState,
+  ?debugFmt("node1 ~p", [Node1]),
   storage_manager:load(Node1, Nodes, Parts),
   sync_manager:load(Node1, Nodes, Parts),
   save_state(NewState),
@@ -168,6 +163,7 @@ handle_call({merge_state, RemoteState}, _From, State) ->
 % and reply with the merged state
 %%
 handle_call({share, RemoteState}, _From, State) ->
+  ?debugFmt("~p is sharing state with ~p", [_From, self()]),
   {ok, Merged} = merge_and_save_state(RemoteState, State),
   {reply, {ok, Merged}, Merged};
 	
@@ -293,10 +289,11 @@ random_node(Nodes) ->
 
 % we are alone in the world
 try_join_into_cluster(Node, State = #membership{nodes=[Node]}) ->
-  ?debugMsg("Not going to try to join the cluster.~n"),
+  ?debugMsg("Not going to try to join the cluster."),
   State;
   
 try_join_into_cluster(Node, State = #membership{nodes=Nodes}) ->
+  ?debugFmt("Will try and join the cluster. ~p", [Nodes]),
   JoinTo = random_node(Nodes),
   error_logger:info_msg("Joining node ~p~n", [JoinTo]),
   case join_node(JoinTo, Node) of
@@ -307,7 +304,7 @@ try_join_into_cluster(Node, State = #membership{nodes=Nodes}) ->
   end.
 
 create_or_load_state(Node, Nodes, Config) ->
-  case load_state(Config) of
+  case load_state(Node, Config) of
     {ok, Value = #membership{header=?VERSION,nodes=LoadedNodes}} -> 
       error_logger:info_msg("loaded membership from disk~n", []),
       Value#membership{node=Node,nodes=lists:umerge([Nodes, LoadedNodes])};
@@ -315,8 +312,8 @@ create_or_load_state(Node, Nodes, Config) ->
       create_initial_state(Node, Nodes, Config)
   end.
 
-load_state(#config{directory=Directory}) ->
-  case file:read_file(filename:join(Directory, "membership.bin")) of
+load_state(Node, #config{directory=Directory}) ->
+  case file:read_file(filename:join(Directory, atom_to_list(Node) ++ ".bin")) of
     {ok, Binary} -> 
       {ok, binary_to_term(Binary)};
     _ -> not_found
@@ -335,6 +332,7 @@ create_initial_state(Node, Nodes, Config) ->
   #membership{
     version=vector_clock:create(pid_to_list(self())),
 	  partitions=partitions:create_partitions(Q, Node),
+	  node=Node,
 	  nodes=Nodes}.
 
 merge_states(StateA, StateB) ->
@@ -342,11 +340,12 @@ merge_states(StateA, StateB) ->
   PartB = StateB#membership.partitions,
   Config = configuration:get_config(),
   Nodes = lists:usort(lists:merge(StateA#membership.nodes, StateB#membership.nodes)),
-  Partitions = partitions:merge_partitions(PartA, PartB, Config#config.n, Nodes),
+  Partitions = partitions:map_partitions(PartA, Nodes),
   % error_logger:info_msg("Merged nodes ~p and partitions ~p~n", [Nodes, length(Partitions)]),
   #membership{
     version=vector_clock:merge(StateA#membership.version, StateB#membership.version),
     nodes=Nodes,
+    node=StateA#membership.node,
     partitions=Partitions
   }.
 
@@ -373,12 +372,13 @@ merge_and_save_state(RemoteState, State) ->
   save_state(Merged),
   {ok, Merged}.
 
-int_join_node(NewNode, #membership{partitions=Partitions,version=Version,nodes=OldNodes}) ->
+int_join_node(NewNode, #membership{node=Node,partitions=Partitions,version=Version,nodes=OldNodes}) ->
   Nodes = lists:sort([NewNode|OldNodes]),
-  P = partitions:rebalance_partitions(NewNode, Nodes, Partitions),
+  P = partitions:map_partitions(Partitions, Nodes),
   #membership{
     partitions=P,
     version = vector_clock:increment(pid_to_list(self()), Version),
+    node=Node,
     nodes=Nodes}.
   
 int_partitions_for_node(Node, State, master) ->

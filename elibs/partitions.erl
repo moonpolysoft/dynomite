@@ -12,7 +12,7 @@
 -author('cliff@powerset.com').
 
 %% API
--export([partition_range/1, create_partitions/2, rebalance_partitions/3, merge_partitions/4]).
+-export([partition_range/1, create_partitions/2, map_partitions/2, diff/2]).
 
 -define(power_2(N), (2 bsl (N-1))).
 
@@ -33,23 +33,39 @@ partition_range(Q) -> ?power_2(32-Q).
 
 create_partitions(Q, Node) ->
   lists:map(fun(Partition) -> {Node, Partition} end, lists:seq(1, ?power_2(32), partition_range(Q))).
-
-rebalance_partitions(NewNode, Nodes, Partitions) ->
-  Nodes1 = lists:filter(fun(E) -> E /= NewNode end, Nodes),
-  Sizes = sizes(Nodes1, Partitions),
-  {Taken, Parts1} = lists:partition(fun({Node, Part}) -> Node == NewNode end, Partitions),
-  TargetSize = length(Partitions) div (length(Nodes1) + 1) - length(Taken),
-  if
-    TargetSize < 1 -> 
-      error_logger:info_msg("Cannot allocate any more partitions to this node~n"),
-      Partitions;
-    true -> int_rebalance(NewNode, TargetSize, Sizes, Parts1, Taken)
-  end.
   
-
+map_partitions(Partitions, Nodes) ->
+  {_, Max} = lists:last(Partitions),
+  NodeHashes = lists:map(fun(Name) -> node_hash(Name, Nodes, Max) end, Nodes),
+  map_partitions(Partitions, NodeHashes, Nodes, []).
+  
+diff(From, To) when length(From) =/= length(To) ->
+  throw("Cannot diff partition maps with different length");
+  
+diff(From, To) ->
+  diff(From , To, []).
 %%====================================================================
 %% Internal functions
 %%====================================================================
+diff([], [], Results) ->
+  lists:reverse(Results);
+  
+diff([{Node,Part}|PartsA], [{Node,Part}|PartsB], Results) ->
+  diff(PartsA, PartsB, Results);
+  
+diff([{NodeA,Part}|PartsA], [{NodeB,Part}|PartsB], Results) ->
+  diff(PartsA, PartsB, [{NodeA,NodeB,Part}|Results]).
+
+map_partitions([], _, _, Results) ->
+  lists:reverse(Results);
+
+map_partitions([{_Old,Part}|Parts], [Hash|Hashes], [Node|Nodes], Results) ->
+  if
+    Part < Hash -> map_partitions(Parts, [Hash|Hashes], [Node|Nodes], [{Node,Part}|Results]);
+    Part == Hash -> map_partitions(Parts, Hashes, Nodes, [{Node,Part}|Results]);
+    % can this happen?  hope not.
+    true -> map_partitions([{_Old,Part}|Parts], Hashes, Nodes, Results)
+  end.
 
 sizes(Nodes, Partitions) ->
   lists:reverse(lists:keysort(2, 
@@ -60,49 +76,6 @@ sizes(Nodes, Partitions) ->
         end, 0, Partitions),
       {Node, Count}
     end, Nodes))).
-
-int_rebalance(Node, TargetSize, Sizes, Partitions, Taken) when TargetSize =< length(Sizes) ->
-  % io:format("int_rebalance: ~p~n", [{Node, TargetSize, Sizes, Partitions, Taken}]),
-  {Partitions1, Taken1} = take_n(Node, TargetSize, Sizes, Partitions, Taken),
-  % error_logger:info_msg("end partitions, taken = {~w, ~w}~n", [Partitions1, Taken1]),
-  lists:keysort(2, Partitions1 ++ Taken1);
-  
-int_rebalance(Node, TargetSize, Sizes, Partitions, Taken) ->
-  {Partitions1, Taken1} = take_n(Node, length(Sizes), Sizes, Partitions, Taken),
-  % error_logger:info_msg("partitions, taken = {~w, ~w}~n", [Partitions1, Taken1]),
-  int_rebalance(Node, TargetSize - length(Sizes), Sizes, Partitions1, Taken1).
-  
-take_n(_, 0, _, Partitions, Taken) ->
-  {Partitions, Taken};
-  
-take_n(Node, N, [{TakeFrom,Size}|Sizes], Partitions, Taken) ->
-  case lists:keytake(TakeFrom, 1, Partitions) of
-    {value, {TakeFrom, Part}, Partitions1} -> take_n(Node, N-1, Sizes, Partitions1, [{Node,Part}|Taken]);
-    false -> take_n(Node, N, Sizes, Partitions, Taken)
-  end.
-  
-merge_partitions(PartA, PartB, N, Nodes) ->
-  merge_partitions(PartA, PartB, [], N, Nodes).
-
-merge_partitions([], [], Result, _, _) -> lists:keysort(2, Result);
-merge_partitions(A, [], Result, _, _) -> lists:keysort(2, A ++ Result);
-merge_partitions([], B, Result, _, _) -> lists:keysort(2, B ++ Result);
-
-merge_partitions([{NodeA,Number}|PartA], [{NodeB,Number}|PartB], Result, N, Nodes) ->
-  if
-    NodeA == NodeB -> 
-      merge_partitions(PartA, PartB, [{NodeA,Number}|Result], N, Nodes);
-    true ->
-      case within(N, NodeA, NodeB, Nodes) of
-        {true, First} -> merge_partitions(PartA, PartB, [{First,Number}|Result], N, Nodes);
-        % bah, maybe we should just fucking pick one
-        _ -> merge_partitions(PartA, PartB, [{NodeA,Number}|Result], N, Nodes)
-      end
-  end;
-  
-merge_partitions([{NodeA,PA}|PartA], [{NodeB,PB}|PartB], Result, N, Nodes) ->
-  error_logger:info_msg("merge_partitions error: {~p,~p}, {~p,~p}~n", [NodeA,PA,NodeB,PB]),
-  throw("FUCK").
 
 within(N, NodeA, NodeB, Nodes) ->
   within(N, NodeA, NodeB, Nodes, nil).
@@ -123,3 +96,8 @@ within(N, Last, nil, [Head|Nodes], First) ->
     Last -> {true, First};
     _ -> within(N-1, Last, nil, Nodes, First)
   end.
+  
+node_hash(Name, Nodes, Max) ->
+  C = Max / length(Nodes),
+  lib_misc:ceiling(C * lib_misc:position(Name, Nodes)).
+  

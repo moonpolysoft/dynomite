@@ -127,7 +127,7 @@ task :build_deps do
 end
 
 task :build_test_deps do
-  sh "erlc +debug_info -I include #{ERLC_TEST_FLAGS} -o etest etest/t.erl etest/mock_genserver.erl"
+  sh "erlc +debug_info -I include #{ERLC_TEST_FLAGS} -o etest etest/t.erl etest/mock_genserver.erl etest/mock.erl"
 end
 
 task :test_config do
