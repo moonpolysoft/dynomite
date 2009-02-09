@@ -16,22 +16,6 @@ simple_send_test_() ->
       ?assertEqual(file:read_file(data_file("a")), file:read_file(data_file("b")))
     end}}.
   
-diff({ok, BinA}, {ok, BinB}) ->
-  diff(binary_to_list(BinA), binary_to_list(BinB), 1).
-  
-diff(LA, LB, N) when length(LA) =/= length(LB) ->
-  ?debugFmt("length mismatch ~p ~p", [length(LA), length(LB)]),
-  ok;
-  
-diff([], [], _) -> ok;
-
-diff([A|LA], [A|LB], N) ->
-  diff(LA, LB, N+1);
-  
-diff([A|LA], [B|LB], N) ->
-  ?debugFmt("difference at ~p: ~p ~p", [N, A, B]),
-  diff(LA, LB, N+1).
-  
 test_cleanup() ->
   rm_rf_dir(priv_dir("a")),
   rm_rf_dir(priv_dir("b")).
