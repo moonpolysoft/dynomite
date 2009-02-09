@@ -12,7 +12,7 @@
 -author('cliff@powerset.com').
 
 %% API
--export([mock/1, proxy_call/2, proxy_call/3, expects/4, expects/5, verify/1, stop/1]).
+-export([mock/1, proxy_call/2, proxy_call/3, expects/4, expects/5, verify/1, stub_proxy_call/3, stub_function/4, stop/1]).
 
 -include("common.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -49,6 +49,15 @@ proxy_call(Module, Function) ->
 proxy_call(Module, Function, Args) ->
   gen_server:call(mod_to_name(Module), {proxy_call, Function, Args}).
   
+stub_proxy_call(Module, Function, Args) ->
+  RegName = list_to_atom(lists:concat([Module, "_", Function, "_stub"])),
+  Ref = make_ref(),
+  RegName ! {Ref, self(), Args},
+  ?debugFmt("sending {~p,~p,~p}", [Ref, self(), Args]),
+  receive
+    {Ref, Answer} -> Answer
+  end.
+  
 %% @spec expects(Module::atom(), 
 %%               Function::atom(), 
 %%               Args::fun/1,
@@ -76,6 +85,25 @@ verify(Module) ->
 stop(Module) ->
   gen_server:cast(mod_to_name(Module), stop),
   timer:sleep(10).
+  
+stub_function(Module, Name, Arity, Ret) when is_function(Ret) ->
+  {_, Bin, _} = code:get_object_code(Module),
+  {ok, {Module,[{abstract_code,{raw_abstract_v1,Forms}}]}} = beam_lib:chunks(Bin, [abstract_code]),
+  {Prefix, Functions} = lists:splitwith(fun(Form) -> element(1, Form) =/= function end, Forms),
+  Function = {function,1,Name,Arity,[{clause,1,generate_variables(Arity), [], generate_expression(mock, stub_proxy_call, Module, Name, Arity)}]},
+  RegName = list_to_atom(lists:concat([Module, "_", Name, "_stub"])),
+  Pid = spawn_link(fun() ->
+      stub_function_loop(Ret)
+    end),
+  register(RegName, Pid),
+  Forms1 = Prefix ++ replace_function(Function, Functions),
+  code:purge(Module),
+  code:delete(Module),
+  case compile:forms(Forms1, [binary]) of
+    {ok, Module, Binary} -> code:load_binary(Module, atom_to_list(Module) ++ ".erl", Binary);
+    Other -> Other
+  end.
+  
 %%====================================================================
 %% gen_server callbacks
 %%====================================================================
@@ -240,6 +268,16 @@ get_exports(Info, Acc) ->
     _ -> Acc
   end.
   
+stub_function_loop(Fun) ->
+  receive
+    {Ref, Pid, Args} ->
+      ?debugFmt("received {~p,~p,~p}", [Ref, Pid, Args]),
+      Ret = (catch Fun(Args) ),
+      ?debugFmt("sending {~p,~p}", [Ref,Ret]),
+      Pid ! {Ref, Ret},
+      stub_function_loop(Fun)
+  end.
+
 % Function -> {function, Lineno, Name, Arity, [Clauses]}
 % Clause -> {clause, Lineno, [Variables], [Guards], [Expressions]}
 % Variable -> {var, Line, Name}
@@ -254,7 +292,7 @@ generate_functions(Module, [{Name,Arity}|Exports], FunctionForms) ->
   generate_functions(Module, Exports, [generate_function(Module, Name, Arity)|FunctionForms]).
   
 generate_function(Module, Name, Arity) ->
-  {function, 1, Name, Arity, [{clause, 1, generate_variables(Arity), [], generate_expression(Module, Name, Arity)}]}.
+  {function, 1, Name, Arity, [{clause, 1, generate_variables(Arity), [], generate_expression(mock, proxy_call, Module, Name, Arity)}]}.
   
 generate_variables(0) -> [];
   
@@ -263,13 +301,32 @@ generate_variables(Arity) ->
       {var, 1, list_to_atom(lists:concat(['Arg', N]))}
     end, lists:seq(1, Arity)).
     
-generate_expression(Module, Name, 0) ->
-  [{call,1,{remote,1,{atom,1,mock},{atom,1,proxy_call}}, [{atom,1,Module}, {atom,1,Name}]}];
+generate_expression(M, F, Module, Name, 0) ->
+  [{call,1,{remote,1,{atom,1,M},{atom,1,F}}, [{atom,1,Module}, {atom,1,Name}]}];
     
-generate_expression(Module, Name, Arity) ->
-  [{call,1,{remote,1,{atom,1,mock},{atom,1,proxy_call}}, [{atom,1,Module}, {atom,1,Name}, {tuple,1,lists:map(fun(N) ->
+generate_expression(M, F, Module, Name, Arity) ->
+  [{call,1,{remote,1,{atom,1,M},{atom,1,F}}, [{atom,1,Module}, {atom,1,Name}, {tuple,1,lists:map(fun(N) ->
       {var, 1, list_to_atom(lists:concat(['Arg', N]))}
     end, lists:seq(1, Arity))}]}].
     
 mod_to_name(Module) ->
   list_to_atom(lists:concat([mock_, Module])).
+  
+replace_function(FF, Forms) ->
+  replace_function(FF, Forms, []).
+  
+replace_function(FF, [], Ret) ->
+  [FF|lists:reverse(Ret)];
+  
+replace_function({function,_,Name,Arity,Clauses}, [{function,Line,Name,Arity,_}|Forms], Ret) ->
+  lists:reverse(Ret) ++ [{function,Line,Name,Arity,Clauses}|Forms];
+  
+replace_function(FF, [FD|Forms], Ret) ->
+  replace_function(FF, Forms, [FD|Ret]).
+  
+  
+  
+  
+  
+  
+  
