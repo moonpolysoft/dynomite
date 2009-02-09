@@ -52,7 +52,7 @@ receive_bootstrap(Directory, Ref) ->
       filelib:ensure_dir(File),
       receive_file(File, Ref),
       receive_bootstrap(Directory, Ref);
-    {Ref, done} -> ok
+    {Ref, Pid, done} -> Pid ! {Ref, ok}
   end.
   
 receive_file(File, Ref) ->
@@ -80,8 +80,11 @@ send_bootstrap(Directory, Pid, Ref) ->
   filelib:fold_files(Directory, ".*", true, fun(File, _) ->
       send_file(File, Pid, Ref)
     end, nil),
-  Pid ! {Ref, done}.
-  
+  Pid ! {Ref, self(), done},
+  receive
+    {Ref, ok} -> ok % now we're done
+  end.
+   
 send_file(File, Pid, Ref) ->
   Pid ! {Ref, filename, File},
   {ok, IO} = file:open(File, [raw, binary, read]),

@@ -13,7 +13,6 @@ simple_send_test_() ->
       Ref = make_ref(),
       Receiver = spawn_link(fun() -> receive_bootstrap(priv_dir("b"), Ref) end),
       send_bootstrap(priv_dir("a"), Receiver, Ref),
-      receive {'EXIT',Receiver,_} -> ok end,
       ?assertEqual(file:read_file(data_file("a")), file:read_file(data_file("b")))
     end}}.
   
