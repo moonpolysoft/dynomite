@@ -46,7 +46,7 @@ start_link(Node, Nodes) ->
   gen_server:start_link({local, membership}, ?MODULE, [Node, Nodes], []).
 
 join_node(JoinTo, Me) ->
-  gen_server:call({membership, JoinTo}, {join_node, Me}).
+  (catch gen_server:call({membership, JoinTo}, {join_node, Me})).
 	
 servers_for_key(Key) ->
   gen_server:call(membership, {servers_for_key, Key}).
@@ -101,7 +101,6 @@ fire_gossip(Node) when is_atom(Node) ->
 %%--------------------------------------------------------------------
 init([Node, Nodes]) ->
   % process_flag(trap_exit, true), % this is for the gossip server which tags along
-  ?debugFmt("init with ~p ~p", [Node, Nodes]),
   Config = configuration:get_config(),
   State = try_join_into_cluster(Node, create_or_load_state(Node, Nodes, Config)),
   ?infoMsg("Saving membership data.~n"),
@@ -133,7 +132,6 @@ handle_call({join_node, Node}, {_, _From}, State) ->
   error_logger:info_msg("~p is joining the cluster.~n", [node(_From)]),
   NewState = int_join_node(Node, State),
   #membership{node=Node1,nodes=Nodes,partitions=Parts} = NewState,
-  ?debugFmt("node1 ~p", [Node1]),
   storage_manager:load(Node1, Nodes, Parts),
   sync_manager:load(Node1, Nodes, Parts),
   save_state(NewState),
@@ -163,7 +161,6 @@ handle_call({merge_state, RemoteState}, _From, State) ->
 % and reply with the merged state
 %%
 handle_call({share, RemoteState}, _From, State) ->
-  ?debugFmt("~p is sharing state with ~p", [_From, self()]),
   {ok, Merged} = merge_and_save_state(RemoteState, State),
   {reply, {ok, Merged}, Merged};
 	
@@ -289,12 +286,10 @@ random_node(Nodes) ->
 
 % we are alone in the world
 try_join_into_cluster(Node, State = #membership{nodes=[Node]}) ->
-  ?debugMsg("Not going to try to join the cluster."),
   State;
   
 try_join_into_cluster(Node, State = #membership{nodes=Nodes}) ->
-  ?debugFmt("Will try and join the cluster. ~p", [Nodes]),
-  JoinTo = random_node(Nodes),
+  JoinTo = random_node(lists:delete(Node, Nodes)),
   error_logger:info_msg("Joining node ~p~n", [JoinTo]),
   case join_node(JoinTo, Node) of
     {ok, JoinedState} -> JoinedState;
@@ -308,7 +303,7 @@ create_or_load_state(Node, Nodes, Config) ->
     {ok, Value = #membership{header=?VERSION,nodes=LoadedNodes}} -> 
       error_logger:info_msg("loaded membership from disk~n", []),
       Value#membership{node=Node,nodes=lists:umerge([Nodes, LoadedNodes])};
-    _ -> 
+    _V -> 
       create_initial_state(Node, Nodes, Config)
   end.
 
@@ -320,9 +315,10 @@ load_state(Node, #config{directory=Directory}) ->
   end. 
 
 save_state(State) ->
+  Node = State#membership.node,
   Config = configuration:get_config(),
   Binary = term_to_binary(State),
-  {ok, File} = file:open(filename:join(Config#config.directory, "membership.bin"), [write, raw]),
+  {ok, File} = file:open(filename:join(Config#config.directory, atom_to_list(Node) ++ ".bin"), [write, raw]),
   ok = file:write(File, Binary),
   ok = file:close(File).
 

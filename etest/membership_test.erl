@@ -6,14 +6,18 @@ all_test_() ->
     fun() -> test_setup() end,
     fun(V) -> test_teardown(V) end,
   [
-    % {"test_write_membership_to_disk", ?_test(test_write_membership_to_disk())},
-    % {"test_load_membership_from_disk", ?_test(test_load_membership_from_disk())},
-    % {"test_join_one_node", ?_test(test_join_one_node())},
-    {"test_membership_gossip_cluster_collision", ?_test(test_membership_gossip_cluster_collision())}
+    {"test_write_membership_to_disk", ?_test(test_write_membership_to_disk())},
+    {"test_load_membership_from_disk", ?_test(test_load_membership_from_disk())},
+    {"test_join_one_node", ?_test(test_join_one_node())},
+    {"test_membership_gossip_cluster_collision", ?_test(test_membership_gossip_cluster_collision())},
+    {"test_replica_nodes", ?_test(test_replica_nodes())},
+    {"test_nodes_for_partition", ?_test(test_nodes_for_partition())},
+    {"test_servers_for_key", ?_test(test_servers_for_key())}
   ]}.
 
 test_write_membership_to_disk() ->
   {ok, _} = membership:start_link(node(), [node()]),
+  ?debugFmt("~p", [data_file()]),
   {ok, Bin} = file:read_file(data_file()),
   State = binary_to_term(Bin),
   ?assertEqual([node()], State#membership.nodes),
@@ -60,6 +64,24 @@ test_membership_gossip_cluster_collision() ->
   membership:stop(mem_b),
   verify().
 
+test_replica_nodes() ->
+  C = configuration:get_config(),
+  configuration:set_config(C#config{n=3}),
+  {ok, _} = membership:start_link(a, [a, b, c, d, e, f]),
+  ?assertEqual([f,a,b], replica_nodes(f)).
+  
+test_nodes_for_partition() ->
+  C = configuration:get_config(),
+  configuration:set_config(C#config{n=3}),
+  {ok, _} = membership:start_link(a, [a, b, c, d, e, f]),
+  ?assertEqual([a,b,c], nodes_for_partition(1)).
+  
+test_servers_for_key() ->
+  C = configuration:get_config(),
+  configuration:set_config(C#config{n=3}),
+  {ok, _} = membership:start_link(a, [a, b, c, d, e, f]),
+  % 25110333
+  ?assertEqual([{storage_1, a}, {storage_1, b}, {storage_1, c}], servers_for_key("key")).
 
 test_setup() ->
   configuration:start_link(#config{n=1,r=1,w=1,q=6,directory=priv_dir()}),
@@ -73,6 +95,8 @@ verify() ->
   ok = mock:verify(storage_manager).
   
 test_teardown(_) ->
+  file:delete(data_file()),
+  membership:stop(),
   mock:stop(sync_manager),
   mock:stop(storage_manager),
   configuration:stop().
@@ -83,4 +107,7 @@ priv_dir() ->
   Dir.
   
 data_file() ->
-  filename:join([priv_dir(), "membership.bin"]).
+  filename:join([priv_dir(), atom_to_list(node()) ++ ".bin"]).
+  
+data_file(Name) ->
+  filename:join([priv_dir(), Name ++ ".bin"]).
