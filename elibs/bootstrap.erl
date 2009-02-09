@@ -52,8 +52,7 @@ receive_bootstrap(Directory, Ref) ->
       filelib:ensure_dir(File),
       receive_file(File, Ref),
       receive_bootstrap(Directory, Ref);
-    {Ref, done} -> ok;
-    _ -> ok
+    {Ref, done} -> ok
   end.
   
 receive_file(File, Ref) ->
@@ -89,10 +88,10 @@ send_file(File, Pid, Ref) ->
   Ctx = crypto:md5_init(),
   send_contents(Ref, Pid, IO, Ctx),
   ok = file:close(IO),
+  % receive_ok(File, Pid, Ref).
   receive
     {Ref, ok} -> ok;
-    {Ref, error} -> send_file(File, Pid, Ref);
-    _ -> ok
+    {Ref, error} -> send_file(File, Pid, Ref)
   end.
   
 send_contents(Ref, Pid, IO, Ctx) ->

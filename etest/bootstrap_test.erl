@@ -5,13 +5,33 @@ relative_path_test() ->
   File = "/bleep/bloop/blop/blorp/1/file.idx",
   ?assertEqual("/blah/blaa/bloo/blee/1/file.idx", relative_path(Dir, File)).
 
-simple_send_test() ->
-  test_cleanup(),
-  test_setup(),
-  Ref = make_ref(),
-  Receiver = spawn_link(fun() -> receive_bootstrap(priv_dir("b"), Ref) end),
-  send_bootstrap(priv_dir("a"), Receiver, Ref),
-  ?assertEqual(file:read_file(data_file("a")), file:read_file(data_file("b"))).
+simple_send_test_() ->
+  {timeout, 120, {?LINE, fun() ->
+      process_flag(trap_exit, true),
+      test_cleanup(),
+      test_setup(),
+      Ref = make_ref(),
+      Receiver = spawn_link(fun() -> receive_bootstrap(priv_dir("b"), Ref) end),
+      send_bootstrap(priv_dir("a"), Receiver, Ref),
+      receive {'EXIT',Receiver,_} -> ok end,
+      ?assertEqual(file:read_file(data_file("a")), file:read_file(data_file("b")))
+    end}}.
+  
+diff({ok, BinA}, {ok, BinB}) ->
+  diff(binary_to_list(BinA), binary_to_list(BinB), 1).
+  
+diff(LA, LB, N) when length(LA) =/= length(LB) ->
+  ?debugFmt("length mismatch ~p ~p", [length(LA), length(LB)]),
+  ok;
+  
+diff([], [], _) -> ok;
+
+diff([A|LA], [A|LB], N) ->
+  diff(LA, LB, N+1);
+  
+diff([A|LA], [B|LB], N) ->
+  ?debugFmt("difference at ~p: ~p ~p", [N, A, B]),
+  diff(LA, LB, N+1).
   
 test_cleanup() ->
   rm_rf_dir(priv_dir("a")),
