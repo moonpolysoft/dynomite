@@ -14,13 +14,17 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, load/3, sync/5, done/1, running/0, running/1, diffs/0, diffs/1]).
+-export([start_link/0, stop/0, load/3, sync/5, done/1, running/0, running/1, diffs/0, diffs/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {running,diffs}).
+-record(state, {running,diffs,partitions=[],parts_for_node=[]}).
+
+-ifdef(TEST).
+-include("etest/sync_manager_test.erl").
+-endif.
 
 %%====================================================================
 %% API
@@ -31,10 +35,13 @@
 %% @end 
 %%--------------------------------------------------------------------
 start_link() ->
-    gen_server:start_link({local, sync_manager}, ?MODULE, [], []).
+  gen_server:start_link({local, sync_manager}, ?MODULE, [], []).
 
-load(Node, Nodes, Partitions) ->
-  gen_server:call(sync_manager, {load, Node, Nodes, Partitions}).
+stop() ->
+  gen_server:cast(sync_manager, stop).
+
+load(Nodes, Partitions, PartsForNode) ->
+  gen_server:call(sync_manager, {load, Nodes, Partitions, PartsForNode}).
 
 sync(Part, Master, NodeA, NodeB, DiffSize) ->
   gen_server:cast(sync_manager, {sync, Part, Master, NodeA, NodeB, DiffSize}).
@@ -84,7 +91,17 @@ handle_call(running, _From, State = #state{running=Running}) ->
   {reply, Running, State};
   
 handle_call(diffs, _From, State = #state{diffs=Diffs}) ->
-  {reply, Diffs, State}.
+  {reply, Diffs, State};
+  
+handle_call({load, Nodes, Partitions, PartsForNode}, _From, State = #state{partitions=OldPartitions,parts_for_node=OldPartsForNode}) ->
+  Partitions1 = lists:filter(fun(E) ->
+      not lists:member(E, OldPartsForNode)
+    end, PartsForNode),
+  OldPartitions1 = lists:filter(fun(E) ->
+      not lists:member(E, PartsForNode)
+    end, OldPartsForNode),
+  reload_sync_servers(OldPartitions1, Partitions1),
+  {reply, ok, State#state{partitions=Partitions,parts_for_node=PartsForNode}}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -100,7 +117,10 @@ handle_cast({sync, Part, Master, NodeA, NodeB, DiffSize}, State = #state{running
     
 handle_cast({done, Part}, State = #state{running=Running}) ->
   NewRunning = lists:keydelete(Part, 1, Running),
-  {noreply, State#state{running=NewRunning}}.
+  {noreply, State#state{running=NewRunning}};
+  
+handle_cast(stop, State) ->
+  {stop, shutdown, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_info(Info, State) -> {noreply, State} |
@@ -134,41 +154,20 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
-% reload_sync_servers(empty, NewState) ->
-%   Config = configuration:get_config(),
-%   Partitions = int_partitions_for_node(node(), NewState, master),
-%   reload_sync_servers([], Partitions, Config);
-%   
-% reload_sync_servers(OldState, NewState) ->
-%   Config = configuration:get_config(),
-%   PartForNode = int_partitions_for_node(node(), NewState, master),
-%   OldPartForNode = int_partitions_for_node(node(), OldState, master),
-%   Old = OldState#membership.partitions,
-%   NewPartitions = lists:filter(fun(E) ->
-%       not lists:member(E, OldPartForNode)
-%     end, PartForNode),
-%   OldPartitions = lists:filter(fun(E) ->
-%       not lists:member(E, PartForNode)
-%     end, OldPartForNode),
-%   reload_sync_servers(OldPartitions, NewPartitions, Config).
-%   
-% reload_sync_servers(_, _, #config{live=Live}) when not Live ->
-%   ok;
-%   
-% reload_sync_servers(OldParts, NewParts, Config) ->
-%   lists:foreach(fun(E) ->
-%       Name = list_to_atom(lists:concat([sync_, E])),
-%       supervisor:terminate_child(sync_server_sup, Name),
-%       supervisor:delete_child(sync_server_sup, Name)
-%     end, OldParts),
-%   lists:foreach(fun(Part) ->
-%       Name = list_to_atom(lists:concat([sync_, Part])),
-%       Spec = {Name, {sync_server, start_link, [Name, Part]}, permanent, 1000, worker, [sync_server]},
-%       case supervisor:start_child(sync_server_sup, Spec) of
-%         already_present -> supervisor:restart_child(sync_server_sup, Name);
-%         _ -> ok
-%       end
-%     end, NewParts).
+reload_sync_servers(OldParts, NewParts) ->
+  lists:foreach(fun(E) ->
+      Name = list_to_atom(lists:concat([sync_, E])),
+      supervisor:terminate_child(sync_server_sup, Name),
+      supervisor:delete_child(sync_server_sup, Name)
+    end, OldParts),
+  lists:foreach(fun(Part) ->
+      Name = list_to_atom(lists:concat([sync_, Part])),
+      Spec = {Name, {sync_server, start_link, [Name, Part]}, permanent, 1000, worker, [sync_server]},
+      case supervisor:start_child(sync_server_sup, Spec) of
+        already_present -> supervisor:restart_child(sync_server_sup, Name);
+        _ -> ok
+      end
+    end, NewParts).
 
 store_diff(Part, Master, Master, NodeB, DiffSize, Diffs) ->
   store_diff(Part, Master, NodeB, DiffSize, Diffs);
