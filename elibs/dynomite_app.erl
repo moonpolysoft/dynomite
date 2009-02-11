@@ -42,6 +42,7 @@ start(_Type, []) ->
   		end;
 		undefined -> process_arguments([r, w, n, q, directory, blocksize, port, storage_mod, thrift_port])
 	end,
+	ok = filelib:ensure_dir(Config#config.directory ++ "/"),
 	Options = process_options([web_port]),
   case init:get_argument(profile) of
       error ->
