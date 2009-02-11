@@ -27,6 +27,15 @@ minimal_rebalance_3_test() ->
   Diff = diff(Partitions, Parts1),
   ?assertEqual(21, length(Diff)).
 
+create_with_4_test() ->
+  Partitions = create_partitions(6, a, [a,b,c,d]),
+  Sizes = sizes([a, b, c, d], Partitions),
+  {value, {a, 16}} = lists:keysearch(a, 1, Sizes),
+  {value, {b, 16}} = lists:keysearch(b, 1, Sizes),
+  {value, {c, 16}} = lists:keysearch(c, 1, Sizes),
+  {value, {d, 16}} = lists:keysearch(d, 1, Sizes).
+  
+
 rebalance_4_test() ->
   Partitions = create_partitions([{a, 22}, {b, 21}, {c, 21}]),
   Parts1 = map_partitions(Partitions, [a, b, c, d]),

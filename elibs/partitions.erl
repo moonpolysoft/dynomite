@@ -12,7 +12,7 @@
 -author('cliff@powerset.com').
 
 %% API
--export([partition_range/1, create_partitions/2, map_partitions/2, diff/2]).
+-export([partition_range/1, create_partitions/3, map_partitions/2, diff/2, sizes/2]).
 
 -define(power_2(N), (2 bsl (N-1))).
 
@@ -31,8 +31,10 @@
 
 partition_range(Q) -> ?power_2(32-Q).
 
-create_partitions(Q, Node) ->
-  lists:map(fun(Partition) -> {Node, Partition} end, lists:seq(1, ?power_2(32), partition_range(Q))).
+create_partitions(Q, Node, Nodes) ->
+  NodeHashes = lists:map(fun(Name) -> node_hash(Name, Nodes, ?power_2(32)) end, Nodes),
+  P = lists:map(fun(P) -> {Node, P} end, lists:seq(1, ?power_2(32), partition_range(Q))),
+  map_partitions(P, NodeHashes, Nodes, []).
   
 map_partitions(Partitions, Nodes) ->
   {_, Max} = lists:last(Partitions),
