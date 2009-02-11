@@ -26,7 +26,7 @@ INSTALL_DST = $(ERLANG_OTP)/lib/$(APP_NAME)-$(VSN)
 
 
 MODULES = $(shell find . -name \*.erl | sed 's:^\./::' | sed 's/\.erl//')
-MODULES_STRING_LIST = $(shell find . -name \*.erl | sed 's:^\./:":' | sed 's/\.erl/",/')
+MODULES_STRING_LIST = $(shell find . -name \*.erl | sed "s:^\./:':" | sed "s/\.erl/',/")
 
 HRL_FILES=
 INTERNAL_HRL_FILES= $(APP_NAME).hrl
