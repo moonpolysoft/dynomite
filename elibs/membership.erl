@@ -85,6 +85,7 @@ stop(Server) ->
   gen_server:cast(Server, stop).
 
 fire_gossip(Node) when is_atom(Node) ->
+  ?infoFmt("firing gossip at ~p~n", [Node]),
 	gen_server:call(membership, {gossip_with, {membership, Node}}).
 
 %%====================================================================
@@ -146,16 +147,11 @@ handle_call({gossip_with, Server}, From, State = #membership{nodes = Nodes}) ->
   GosFun =
     fun() ->
         {ok, RemoteState} = gen_server:call(Server, {share, State}),
-        {ok, ModState} = gen_server:call(Self, {merge_state, RemoteState}),
+        {ok, ModState} = gen_server:call(Self, {share, RemoteState}),
         gen_server:reply(From, {ok, ModState})
     end,
   spawn_link(GosFun),
   {noreply, State};
-
-handle_call({merge_state, RemoteState}, _From, State) ->
-  {ok, NewState} = merge_and_save_state(RemoteState, State),
-  {reply, {ok, NewState}, NewState};
-
 %%
 % Another node is sharing their state with us. Need to merge them in
 % and reply with the merged state
@@ -246,6 +242,7 @@ gossip_loop(Server) ->
   case lists:delete(Node, Nodes) of
     [] -> ok; % no other nodes
     Nodes1 when is_list(Nodes1) ->
+      ?infoFmt("nodes1 ~p", [Nodes1]),
       fire_gossip(random_node(Nodes1))
   end,
   receive
@@ -292,7 +289,7 @@ try_join_into_cluster(Node, State = #membership{nodes=Nodes}) ->
   JoinTo = random_node(lists:delete(Node, Nodes)),
   error_logger:info_msg("Joining node ~p~n", [JoinTo]),
   case join_node(JoinTo, Node) of
-    {ok, JoinedState} -> JoinedState;
+    {ok, JoinedState} -> JoinedState#membership{node=Node};
     Other ->
       error_logger:info_msg("Join to ~p failed with ~p~n", [JoinTo, Other]),
       State
@@ -335,14 +332,16 @@ merge_states(StateA, StateB) ->
   PartA = StateA#membership.partitions,
   PartB = StateB#membership.partitions,
   Config = configuration:get_config(),
-  Nodes = lists:usort(lists:merge(StateA#membership.nodes, StateB#membership.nodes)),
+  Nodes = lists:usort(StateA#membership.nodes ++ StateB#membership.nodes),
   Partitions = partitions:map_partitions(PartA, Nodes),
   % error_logger:info_msg("Merged nodes ~p and partitions ~p~n", [Nodes, length(Partitions)]),
+  ?infoFmt("merge states setting node to ~p", [StateA#membership.node]),
   #membership{
     version=vector_clock:merge(StateA#membership.version, StateB#membership.version),
     nodes=Nodes,
     node=StateA#membership.node,
-    partitions=Partitions
+    partitions=Partitions,
+    gossip=StateA#membership.gossip
   }.
 
 % Merges in another state, reloads any storage
@@ -354,7 +353,7 @@ merge_and_save_state(RemoteState, State) ->
   Merged =
     case vector_clock:compare(State#membership.version, RemoteState#membership.version) of
       less -> % remote state is strictly newer than ours
-        RemoteState;
+        RemoteState#membership{node=State#membership.node,gossip=State#membership.gossip};
       greater -> % remote state is strictly older
         State;
       equal -> % same vector clock
@@ -368,14 +367,16 @@ merge_and_save_state(RemoteState, State) ->
   save_state(Merged),
   {ok, Merged}.
 
-int_join_node(NewNode, #membership{node=Node,partitions=Partitions,version=Version,nodes=OldNodes}) ->
-  Nodes = lists:sort([NewNode|OldNodes]),
+int_join_node(NewNode, #membership{node=Node,partitions=Partitions,version=Version,nodes=OldNodes,gossip=Gossip}) ->
+  Nodes = lists:usort([NewNode|OldNodes]),
   P = partitions:map_partitions(Partitions, Nodes),
+  ?infoFmt("int join setting node to ~p", [Node]),
   #membership{
     partitions=P,
     version = vector_clock:increment(pid_to_list(self()), Version),
     node=Node,
-    nodes=Nodes}.
+    nodes=Nodes,
+    gossip=Gossip}.
   
 int_partitions_for_node(Node, State, master) ->
   Partitions = State#membership.partitions,

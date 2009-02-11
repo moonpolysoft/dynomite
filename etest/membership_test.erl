@@ -56,7 +56,6 @@ test_membership_gossip_cluster_collision() ->
   mock:expects(storage_manager, load, fun({_, _, P}) -> is_list(P) end, ok, 3),
   {ok, _} = membership:start_link(mem_a, a, [a]),
   {ok, _} = membership:start_link(mem_b, b, [b]),
-  ?debugHere,
   gen_server:call(mem_a, {gossip_with, mem_b}),
   Partitions = gen_server:call(mem_a, partitions),
   {A, B} = lists:partition(fun({Node,_}) -> Node == a end, Partitions),

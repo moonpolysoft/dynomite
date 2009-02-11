@@ -145,7 +145,7 @@ reload_storage_servers(OldParts, NewParts, Old, Config) ->
     Max = Part+Size,
     Spec = {Name, {storage_server,start_link,[Config#config.storage_mod, DbKey, Name, Min, Max, BlockSize]}, permanent, 1000, worker, [storage_server]},
     Callback = fun() ->
-        ?infoFmt("Starting the server for ~p~n", [Spec]),
+        % ?infoFmt("Starting the server for ~p~n", [Spec]),
         case supervisor:start_child(storage_server_sup, Spec) of
           already_present -> supervisor:restart_child(storage_server_sup, Name);
           _ -> ok
