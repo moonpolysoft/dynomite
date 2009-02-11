@@ -13,7 +13,6 @@ all_test_() ->
     ]}.
 
 test_initial_load() ->
-  ?debugFmt("node ~p", [node()]),
   Partitions = partitions:create_partitions(1, node(), [node()]),
   expect_start_servers([storage_1, storage_2147483649]),
   storage_manager:load(node(), Partitions, lists:map(fun({_,P}) -> P end, Partitions)),
