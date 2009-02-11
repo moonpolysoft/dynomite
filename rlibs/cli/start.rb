@@ -44,11 +44,12 @@ str = "erl \
   -sname #{options[:name]} \
   #{options[:log]} \
   #{options[:config]} \
-  -noshell \
   #{options[:jointo]} \
   -setcookie #{cookie} \
   -run dynomite start \
+  -boot #{ROOT}/releases/0.5.0/dynomite_rel \
   #{options[:detached]} \
   #{options[:profile]}"
 puts str
 exec str
+  # -run dynomite start \
