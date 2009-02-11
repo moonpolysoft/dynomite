@@ -51,6 +51,8 @@ start_link(Config, Options) ->
 %% @end 
 %%--------------------------------------------------------------------
 init([Config, Options]) ->
+    Node = node(),
+    Nodes = nodes([self]),
     Required = [
                 {configuration, 
                  {configuration, start_link, [Config]}, 
@@ -60,6 +62,9 @@ init([Config, Options]) ->
                  {stats_server, start_link, []}, 
                  permanent, 1000, worker, 
                  [stats_server]},
+                {storage_manager,
+                  {storage_manager,start_link, []},
+                  permanent, 1000, worker, [storage_manager]},
                 {storage_server_sup, 
                  {storage_server_sup, start_link, [Config]}, 
                  permanent, 10000, supervisor, 
@@ -67,12 +72,12 @@ init([Config, Options]) ->
                 {sync_manager, 
                  {sync_manager, start_link, []}, 
                  permanent, 1000, worker, [sync_manager]},
-                {sync_server_sup, 
+                {sync_server_sup,
                  {sync_server_sup, start_link, [Config]}, 
                  permanent, 10000, supervisor, 
                  [sync_server_sup]},
                 {membership, 
-                 {membership, start_link, [Config]}, 
+                 {membership, start_link, [Node, Nodes]}, 
                  permanent, 1000, worker, 
                  [membership]},
                 {mediator, 
