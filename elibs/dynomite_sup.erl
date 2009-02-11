@@ -52,7 +52,7 @@ start_link(Config, Options) ->
 %%--------------------------------------------------------------------
 init([Config, Options]) ->
     Node = node(),
-    Nodes = nodes([self]),
+    Nodes = nodes([this]),
     Required = [
                 {configuration, 
                  {configuration, start_link, [Config]}, 
