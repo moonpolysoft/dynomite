@@ -12,7 +12,9 @@ all_test_() ->
     {"test_membership_gossip_cluster_collision", ?_test(test_membership_gossip_cluster_collision())},
     {"test_replica_nodes", ?_test(test_replica_nodes())},
     {"test_nodes_for_partition", ?_test(test_nodes_for_partition())},
-    {"test_servers_for_key", ?_test(test_servers_for_key())}
+    {"test_servers_for_key", ?_test(test_servers_for_key())},
+    {"test_partitions_for_node_all", ?_test(test_partitions_for_node_all())},
+    {"test_initial_partition_setup", ?_test(test_initial_partition_setup())}
   ]}.
 
 test_write_membership_to_disk() ->
@@ -82,6 +84,29 @@ test_servers_for_key() ->
   {ok, _} = membership:start_link(a, [a, b, c, d, e, f]),
   % 25110333
   ?assertEqual([{storage_1, a}, {storage_1, b}, {storage_1, c}], servers_for_key("key")).
+  
+test_initial_partition_setup() ->
+  {ok, _} = membership:start_link(a, [a, b, c, d, e, f]),
+  Sizes = partitions:sizes([a,b,c,d,e,f], partitions()),
+  ?debugFmt("~p", [Sizes]),
+  {value, {c,S}} = lists:keysearch(c, 1, Sizes),
+  ?assert(S > 0).
+  
+test_partitions_for_node_all() ->
+  C = configuration:get_config(),
+  configuration:set_config(C#config{n=2}),
+  {ok, _} = membership:start_link(a, [a, b, c, d, e, f]),
+  % 715827883
+  Parts = partitions_for_node(a, all),
+  PA = partitions_for_node(a, master),
+  PF = partitions_for_node(f, master),
+  ?debugFmt("Parts ~p", [Parts]),
+  ?assertEqual(lists:sort(Parts), lists:sort(PA ++ PF)).
+
+test_partitions_for_node_master() ->
+  {ok, _} = membership:start_link(a, [a,b,c,d,e,f]),
+  Parts = partitions_for_node(a, master),
+  ?assertEqual(10, length(Parts)).
 
 test_setup() ->
   configuration:start_link(#config{n=1,r=1,w=1,q=6,directory=priv_dir()}),
@@ -96,6 +121,8 @@ verify() ->
   
 test_teardown(_) ->
   file:delete(data_file()),
+  file:delete(data_file("a")),
+  file:delete(data_file("b")),
   membership:stop(),
   mock:stop(sync_manager),
   mock:stop(storage_manager),

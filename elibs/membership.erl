@@ -100,15 +100,15 @@ fire_gossip(Node) when is_atom(Node) ->
 %% @end 
 %%--------------------------------------------------------------------
 init([Node, Nodes]) ->
-  % process_flag(trap_exit, true), % this is for the gossip server which tags along
+  process_flag(trap_exit, true), % this is for the gossip server which tags along
   Config = configuration:get_config(),
   State = try_join_into_cluster(Node, create_or_load_state(Node, Nodes, Config)),
   ?infoMsg("Saving membership data.~n"),
   save_state(State),
   ?infoMsg("Loading storage servers.~n"),
-  storage_manager:load(Node, Nodes, State#membership.partitions),
+  storage_manager:load(Node, Nodes, int_partitions_for_node(Node, State, all)),
   ?infoMsg("Loading sync servers.~n"),
-  sync_manager:load(Node, Nodes, State#membership.partitions),
+  sync_manager:load(Node, Nodes, int_partitions_for_node(Node, State, all)),
   ?infoMsg("Starting membership gossip.~n"),
   Self = self(),
   GossipPid = spawn_link(fun() -> gossip_loop(Self) end),
@@ -132,8 +132,8 @@ handle_call({join_node, Node}, {_, _From}, State) ->
   error_logger:info_msg("~p is joining the cluster.~n", [node(_From)]),
   NewState = int_join_node(Node, State),
   #membership{node=Node1,nodes=Nodes,partitions=Parts} = NewState,
-  storage_manager:load(Node1, Nodes, Parts),
-  sync_manager:load(Node1, Nodes, Parts),
+  storage_manager:load(Nodes, Parts, int_partitions_for_node(Node1, NewState, all)),
+  sync_manager:load(Nodes, Parts, int_partitions_for_node(Node1, NewState, all)),
   save_state(NewState),
 	{reply, {ok, NewState}, NewState};
 
@@ -300,7 +300,7 @@ try_join_into_cluster(Node, State = #membership{nodes=Nodes}) ->
 
 create_or_load_state(Node, Nodes, Config) ->
   case load_state(Node, Config) of
-    {ok, Value = #membership{header=?VERSION,nodes=LoadedNodes}} -> 
+    {ok, Value = #membership{header=?VERSION,nodes=LoadedNodes}} ->
       error_logger:info_msg("loaded membership from disk~n", []),
       Value#membership{node=Node,nodes=lists:umerge([Nodes, LoadedNodes])};
     _V -> 
@@ -327,7 +327,7 @@ create_initial_state(Node, Nodes, Config) ->
   Q = Config#config.q,
   #membership{
     version=vector_clock:create(pid_to_list(self())),
-	  partitions=partitions:create_partitions(Q, Node),
+	  partitions=partitions:create_partitions(Q, Node, Nodes),
 	  node=Node,
 	  nodes=Nodes}.
 
@@ -363,8 +363,8 @@ merge_and_save_state(RemoteState, State) ->
         merge_states(RemoteState, State)
   end,
   #membership{node=Node,nodes=Nodes,partitions=Parts} = Merged,
-  storage_manager:load(Node, Nodes, Parts),
-  sync_manager:load(Node, Nodes, Parts),
+  storage_manager:load(Node, Nodes, int_partitions_for_node(Node, Merged, all)),
+  sync_manager:load(Node, Nodes, int_partitions_for_node(Node, Merged, all)),
   save_state(Merged),
   {ok, Merged}.
 
