@@ -203,8 +203,11 @@ handle_call(get_tree, _From, State = #storage{tree=Tree}) ->
   {reply, Tree, State};
   
 handle_call({fold, Fun, AccIn}, _From, State = #storage{module=Module,table=Table}) ->
-  Reply = Module:fold(Fun, Table, AccIn),
-  {reply, Reply, State};
+  spawn_link(fun() -> 
+    Reply = Module:fold(Fun, Table, AccIn),
+    gen_server:reply(_From, Reply)
+  end),
+  {noreply, State};
   
 handle_call(info, _From, State = #storage{module=Module, table=Table}) ->
   {reply, State, State};
