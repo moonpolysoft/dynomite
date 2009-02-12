@@ -14,7 +14,8 @@ all_test_() ->
     {"test_nodes_for_partition", ?_test(test_nodes_for_partition())},
     {"test_servers_for_key", ?_test(test_servers_for_key())},
     {"test_partitions_for_node_all", ?_test(test_partitions_for_node_all())},
-    {"test_initial_partition_setup", ?_test(test_initial_partition_setup())}
+    {"test_initial_partition_setup", ?_test(test_initial_partition_setup())},
+    {"test_recover_from_old_membership_read", ?_test(test_recover_from_old_membership_read())}
   ]}.
 
 test_write_membership_to_disk() ->
@@ -38,6 +39,16 @@ test_load_membership_from_disk() ->
   ?assertEqual([a,b,c], MemState#membership.version),
   membership:stop(),
   verify().
+  
+  
+%-record(membership, {config, partitions, version, nodes, old_partitions}).
+test_recover_from_old_membership_read() ->
+  P = partitions:create_partitions(6, a, [a, b, c, d, e, f]),
+  OldMem = {membership, {config, 1, 2, 3, 4}, P, [{a, 1}, {b, 1}], [a, b, c, d, e, f], undefined},
+  ok = file:write_file(data_file("a"), term_to_binary(OldMem)),
+  {ok, _} = membership:start_link(a, [a, b, c]),
+  ?assertEqual(P, membership:partitions()),
+  ?assertEqual([a, b, c, d, e, f], membership:nodes()).
 
 test_join_one_node() ->
   mock:expects(sync_manager, load, fun({_, _, P}) -> is_list(P) end, ok),

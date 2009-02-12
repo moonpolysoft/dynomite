@@ -299,8 +299,11 @@ create_or_load_state(Node, Nodes, Config) ->
   case load_state(Node, Config) of
     {ok, Value = #membership{header=?VERSION,nodes=LoadedNodes}} ->
       error_logger:info_msg("loaded membership from disk~n", []),
-      Value#membership{node=Node,nodes=lists:umerge([Nodes, LoadedNodes])};
-    _V -> 
+      Value#membership{node=Node,nodes=lists:usort(Nodes ++ LoadedNodes)};
+    {ok, {membership, C, P, Version, LoadedNodes, _}} ->
+      ?infoMsg("trying to load a legacy format membership file~n"),
+      #membership{node=Node,nodes=lists:usort(Nodes ++ LoadedNodes),partitions=P,version=Version};
+    _V ->
       create_initial_state(Node, Nodes, Config)
   end.
 
