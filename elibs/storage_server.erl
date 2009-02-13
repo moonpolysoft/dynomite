@@ -23,6 +23,7 @@
 -record(storage, {module,table,name,tree,dbkey,blocksize}).
 
 -include("chunk_size.hrl").
+-include("common.hrl").
 
 -ifdef(TEST).
 -include("etest/storage_server_test.erl").
@@ -130,11 +131,26 @@ init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
     % process_flag(trap_exit, true),  %i don't think this is appropriate, we should fail and let the sup handle restart
     {ok, Table} = StorageModule:open(DbKey,Name),
     %% ?debugFmt("storage table ~p", [Table]),
-    
-    {ok, Tree} = if
+    DMName = filename:join([DbKey, "dmerkle.idx"]),
+    V = if
       BlockSize == undefined -> {ok, undefined};
-      true -> dmerkle:open(lists:concat([DbKey, "/dmerkle"]), BlockSize)
+      true -> dmerkle:open(DMName, BlockSize)
     end,
+    Tree = case V of
+      {ok, T} -> T;
+      {error, Reason} -> 
+        ?infoFmt("Opening merkle tree failed due to ~p.  Rebuilding.~n", [Reason]),
+        file:delete(DMName),
+        file:delete(filename:join([DbKey, "dmerkle.keys"])),
+        {ok, T} = dmerkle:open(DMName, BlockSize),
+        spawn_link(fun() ->
+            Result = (catch StorageModule:fold(fun({Key,_,Values}, _) -> 
+                dmerkle:update(Key, Values, T) 
+              end, nil, Table))
+          end),
+        T
+    end,
+    
     %% ?debugFmt("dmerkle tree ~p", [Tree]),
     {ok, #storage{module=StorageModule,dbkey=DbKey,blocksize=BlockSize,table=Table,name=Name,tree=Tree}}.
 

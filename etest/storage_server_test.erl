@@ -91,7 +91,25 @@ concurrent_update_test() ->
     end),
   receive {'EXIT', P1, _} -> ok end,
   receive {'EXIT', P2, _} -> ok end.
-
+  
+rebuild_merkle_trees_test() ->
+  {ok, _} = mock:mock(dmerkle),
+  {ok, _} = mock:mock(dets_storage),
+  mock:expects(dmerkle, open, fun(_) -> true end, {error, "Poop, fart. Balls."}),
+  mock:expects(dmerkle, open, fun(_) -> true end, {ok, pid}),
+  mock:expects(dmerkle, update, fun({K, V, P}) -> (K == "key") and (V == [<<"values">>]) end, fun({_, _, P}, _) -> P end),
+  mock:expects(dets_storage, open, fun(_) -> true end, {ok, table}),
+  mock:expects(dets_storage, fold, fun({F, A, T}) -> (T == table) and is_function(F) end, fun({F, A, T}, _) ->
+      F({"key",ctx,[<<"values">>]}, A)
+    end),
+  {ok, Pid} = storage_server:start_link(dets_storage, db_key(merkle_test), store5, 0, (2 bsl 31), 4096),
+  timer:sleep(10),
+  mock:verify(dmerkle),
+  mock:verify(dets_storage),
+  mock:stop(dmerkle),
+  mock:stop(dets_storage),
+  storage_server:close(Pid).
+  
 %   
 % local_fs_storage_test() ->
 %   {ok, State} = fs_storage:open("/Users/cliff/data/storage_test", storage_test),
@@ -147,6 +165,9 @@ db_key(Name) ->
                [t:config(priv_dir), "storage_server", atom_to_list(Name)]),
     filelib:ensure_dir(filename:join(Fpath, "dmerkle")),
     Fpath.
+    
+merkle_file(Name) ->
+  filename:join(db_key(Name), "dmerkle.idx").
 
 big_val(Size) when is_integer(Size) ->
     list_to_binary([ random:uniform(128) || _ <- lists:seq(0, Size) ]).

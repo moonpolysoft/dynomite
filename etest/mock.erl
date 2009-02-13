@@ -80,7 +80,7 @@ stub(Module, Function, Args, Ret) ->
   gen_server:call(mod_to_name(Module), {stub, Function, Args, Ret}).
   
 verify(Module) ->
-  gen_server:call(mod_to_name(Module), verify).
+  ?assertEqual(ok, gen_server:call(mod_to_name(Module), verify)).
 
 stop(Module) ->
   gen_server:cast(mod_to_name(Module), stop),
