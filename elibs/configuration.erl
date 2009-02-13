@@ -37,7 +37,13 @@ get_config(Node) ->
 	gen_server:call({configuration, Node}, get_config, 1000).
 	
 get_config() ->
-  gen_server:call(configuration, get_config).
+  case get(config) of
+    undefined -> 
+      C = gen_server:call(configuration, get_config),
+      put(config, C),
+      C;
+    C -> C
+  end.
   
 set_config(Config) ->
   gen_server:call(configuration, {set_config, Config}).
