@@ -41,17 +41,17 @@
 start_link(Config) ->
   gen_server:start_link({local, mediator}, ?MODULE, Config, []).
 
-get(Key) -> 
-  gen_server:call(mediator, {get, Key}).
+get(Key) ->
+  internal_get(Key, #mediator{config=configuration:get_config()}).
   
-put(Key, Context, Value) -> 
-  gen_server:call(mediator, {put, Key, Context, Value}).
+put(Key, Context, Value) ->
+  internal_put(Key, Context, Value, #mediator{config=configuration:get_config()}).
   
-has_key(Key) -> 
-  gen_server:call(mediator, {has_key, Key}).
+has_key(Key) ->
+  internal_has_key(Key, #mediator{config=configuration:get_config()}).
 
 delete(Key) ->
-  gen_server:call(mediator, {delete, Key}).
+  internal_delete(Key, #mediator{config=configuration:get_config()}).
   
 stop() ->
   gen_server:call(mediator, stop).
