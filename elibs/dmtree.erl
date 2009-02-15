@@ -42,52 +42,52 @@ start_link(FileName, BlockSize) ->
   gen_server:start_link(dmtree, [FileName, BlockSize], []).
   
 tx_begin(Pid) ->
-  gen_server:call(Pid, tx_begin).
+  gen_server:call(Pid, tx_begin, infinity).
   
 tx_commit(Pid) ->
-  gen_server:call(Pid, tx_commit).
+  gen_server:call(Pid, tx_commit, infinity).
   
 tx_rollback(Pid) ->
-  gen_server:call(Pid, tx_rollback).
+  gen_server:call(Pid, tx_rollback, infinity).
   
 root(Pid) ->
-  gen_server:call(Pid, root).
+  gen_server:call(Pid, root, infinity).
   
 d(Pid) ->
-  gen_server:call(Pid, d).
+  gen_server:call(Pid, d, infinity).
   
 block_size(Pid) ->
-  gen_server:call(Pid, block_size).
+  gen_server:call(Pid, block_size, infinity).
   
 update_root(Node, Pid) ->
-  gen_server:call(Pid, {update_root, Node}).
+  gen_server:call(Pid, {update_root, Node}, infinity).
     
 stop(Pid) ->
   gen_server:cast(Pid, close).
   
 write(Node, Pid) ->
-  gen_server:call(Pid, {write, Node}).
+  gen_server:call(Pid, {write, Node}, infinity).
   
 delete(Offset, Pid) ->
-  gen_server:call(Pid, {delete, Offset}).
+  gen_server:call(Pid, {delete, Offset}, infinity).
   
 read(Offset, Pid) ->
-  gen_server:call(Pid, {read, Offset}).
+  gen_server:call(Pid, {read, Offset}, infinity).
   
 read_key(Offset, Pid) ->
-  gen_server:call(Pid, {read_key, Offset}).
+  gen_server:call(Pid, {read_key, Offset}, infinity).
   
 delete_key(Offset, Key, Pid) ->
-  gen_server:call(Pid, {delete_key, Offset, Key}).
+  gen_server:call(Pid, {delete_key, Offset, Key}, infinity).
   
 write_key(Offset, Key, Pid) ->
-  gen_server:call(Pid, {write_key, Offset, Key}).
+  gen_server:call(Pid, {write_key, Offset, Key}, infinity).
   
 filename(Pid) ->
-  gen_server:call(Pid, filename).
+  gen_server:call(Pid, filename, infinity).
   
 state(Pid) ->
-  gen_server:call(Pid, state).
+  gen_server:call(Pid, state, infinity).
 
 %%====================================================================
 %% gen_server callbacks
