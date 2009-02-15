@@ -73,7 +73,7 @@ end
 keys.compact!
 
 worker = lambda do |host|
-  log = File.open(options[:logdir] + "/#{$$}_bench.log", "w")
+  log = File.open(options[:logdir] + "/#{$$}_#{host}_bench.log", "w")
   Signal.trap("INT") do
     log.close
     exit(0)
