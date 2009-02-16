@@ -59,7 +59,6 @@ hash(Thing, Seed) ->
 %% Internal functions
 %%====================================================================
 convert(List) ->
-  ?infoFmt("list ~p", [List]),
   <<Hash:32/unsigned-integer>> = list_to_binary(List),
   Hash.
 
