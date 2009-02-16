@@ -11,6 +11,8 @@
 -module(fnv).
 -author('cliff@powerset.com').
 
+-include("common.hrl").
+
 -define(SEED, 2166136261).
 %% API
 -export([start/0, stop/1, hash/1, hash/2]).
@@ -45,26 +47,31 @@ hash(Thing) ->
   
 hash(Thing, Seed) when is_binary(Thing) ->
   P = get_or_open(),
-  port_command(P, [term_to_binary(Seed), Thing]),
-  recv(P);
+  convert(port_control(P, Seed, Thing));
+  % recv(P);
   
 hash(Thing, Seed) ->
   P = get_or_open(),
-  port_command(P, [term_to_binary(Seed), term_to_binary(Thing)]),
-  recv(P).
+  convert(port_control(P, Seed, term_to_binary(Thing))).
+  % recv(P).
 
 %%====================================================================
 %% Internal functions
 %%====================================================================
+convert(List) ->
+  ?infoFmt("list ~p", [List]),
+  <<Hash:32/unsigned-integer>> = list_to_binary(List),
+  Hash.
+
 get_or_open() ->
-  case get(fnv) of
+  case whereis(fnv_drv) of
     undefined -> start();
     P -> P
   end.
 
 open() ->
   P = open_port({spawn, fnv_drv}, [binary]),
-  put(fnv, P),
+  register(fnv_drv, P),
   P.
 
 load_driver() ->
@@ -73,7 +80,8 @@ load_driver() ->
 
 recv(P) ->
   receive
-    {P, {data, Bin}} -> binary_to_term(Bin)
+    {P, {data, Bin}} -> binary_to_term(Bin);
+    V -> V
   end.
   
 

@@ -4,6 +4,10 @@
 #include <ei.h>
 #include <stdio.h>
 
+#define write_int32(i, s) {((char*)(s))[0] = (char)((i) >> 24) & 0xff; \
+                        ((char*)(s))[1] = (char)((i) >> 16) & 0xff; \
+                        ((char*)(s))[2] = (char)((i) >> 8)  & 0xff; \
+                        ((char*)(s))[3] = (char)((i)        & 0xff);}
 
 static ErlDrvData init(ErlDrvPort port, char *cmd);
 static void stop(ErlDrvData handle);
@@ -20,6 +24,7 @@ static void stop(ErlDrvData handle) {
 
 static void outputv(ErlDrvData handle, ErlIOVec *ev) {
   ErlDrvPort port = (ErlDrvPort) handle;
+  ErlDrvTermData caller;
   SysIOVec *bin;
   int i, n, index = 0;
   unsigned long hash;
@@ -33,18 +38,32 @@ static void outputv(ErlDrvData handle, ErlIOVec *ev) {
   // printf("bin->iov_base %s\n", bin->iov_base);
   ei_decode_version(bin->iov_base, &index, NULL);
   ei_decode_ulong(bin->iov_base, &index, &seed);
-  hash = (unsigned int) seed;
+  hash = seed;
   if (index < bin->iov_len) {
     hash = fnv_hash(&bin->iov_base[index], bin->iov_len - index, hash);
   }
-  // printf("hash %d\n", hash);
   for (i=2; i<ev->vsize; i++) {
     bin = &ev->iov[i];
-    // printf("bin->orig_size %d\n", bin->iov_len);
     hash = fnv_hash(bin->iov_base, bin->iov_len, hash);
-    // printf("hashed %d\n", i);
   }
-  send_hash(port, hash);
+  caller = driver_caller(port);
+  ErlDrvTermData spec[] = {
+    ERL_DRV_UINT, hash
+  };
+  driver_send_term(port, caller, spec, 2);
+}
+
+static int control(ErlDrvData data, unsigned int seed, char *buf, int len, char **rbuf, int rlen) {
+  unsigned int hash;
+  int index = 0;
+  // printf("length %d\n", len);
+  // printf("buf %s\n", buf);
+  hash = fnv_hash(buf, len, seed);
+  if (rlen < sizeof(hash)) {
+    (*rbuf) = (char *) driver_realloc(*rbuf, sizeof(hash));
+  }
+  write_int32(hash, *rbuf);
+  return sizeof(hash);
 }
 
 static void send_hash(ErlDrvPort port, unsigned long hash) {
@@ -66,7 +85,7 @@ static ErlDrvEntry fnv_driver_entry = {
     "fnv_drv",             /* the name of the driver */
     NULL,                     /* finish */
     NULL,                     /* handle */
-    NULL,                     /* control */
+    control,                     /* control */
     NULL,                     /* timeout */
     outputv,                  /* outputv */
     NULL,                     /* ready_async */

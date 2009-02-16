@@ -31,31 +31,31 @@ zero_split_test() ->
   ?assertEqual(<<"abcdefg">>, zero_split(<<"abcdefg">>)).
   
   
-hash_throughput_test_() ->
-  {timeout, 120, [{?LINE, fun() ->
-    Keys = lists:map(fun(N) ->
-        lists:duplicate(1000, random:uniform(255))
-      end, lists:seq(1,1000)),
-    FNVStart = now_float(),
-    lists:foreach(fun(Key) ->
-        fnv(Key)
-      end, Keys),
-    FNVEnd = now_float(),
-    ?debugFmt("fnv took ~ps~n", [FNVEnd - FNVStart]),
-    MStart = now_float(),
-    lists:foreach(fun(Key) ->
-        hash(Key)
-      end, Keys),
-    MEnd = now_float(),
-    ?debugFmt("murmur took ~ps~n", [MEnd - MStart]),
-    FNVNStart = now_float(),
-    lists:foreach(fun(Key) ->
-        fnv:hash(Key)
-      end, Keys),
-    FNVNEnd = now_float(),
-    ?debugFmt("fnv native took ~ps~n", [FNVNEnd - FNVNStart])
-  end}]}.
-  
+% hash_throughput_test_() ->
+%   {timeout, 120, [{?LINE, fun() ->
+%     Keys = lists:map(fun(N) ->
+%         lists:duplicate(1000, random:uniform(255))
+%       end, lists:seq(1,1000)),
+%     FNVStart = now_float(),
+%     lists:foreach(fun(Key) ->
+%         fnv(Key)
+%       end, Keys),
+%     FNVEnd = now_float(),
+%     ?debugFmt("fnv took ~ps~n", [FNVEnd - FNVStart]),
+%     MStart = now_float(),
+%     lists:foreach(fun(Key) ->
+%         hash(Key)
+%       end, Keys),
+%     MEnd = now_float(),
+%     ?debugFmt("murmur took ~ps~n", [MEnd - MStart]),
+%     FNVNStart = now_float(),
+%     lists:foreach(fun(Key) ->
+%         fnv:hash(Key)
+%       end, Keys),
+%     FNVNEnd = now_float(),
+%     ?debugFmt("fnv native took ~ps~n", [FNVNEnd - FNVNStart])
+%   end}]}.
+%   
 fnv_native_compat_test() ->
   ?assertEqual(fnv("blah"), fnv:hash("blah")),
   ?assertEqual(fnv(<<"blah">>), fnv:hash(<<"blah">>)),
