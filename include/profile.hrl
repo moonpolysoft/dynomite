@@ -1,6 +1,7 @@
 -ifdef(PROF).
--define(prof(Label),
-        dynomite_prof:call(Label, ?MODULE, ?LINE)).
+-define(prof(Label), dynomite_prof:start_prof(Label)).
+-define(forp(Label), dynomite_prof:stop_prof(Label)).
 -else.
 -define(prof(Label), true).
+-define(forp(Label), true).
 -endif.
