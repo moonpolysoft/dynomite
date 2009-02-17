@@ -6,6 +6,8 @@
 
 -export([rm_rf/1, pmap/3, hash/1, fnv/1, nthdelete/2, zero_split/1, nthreplace/3, rand_str/1, position/2, shuffle/1, floor/1, ceiling/1, time_to_epoch_int/1, time_to_epoch_float/1, now_int/0, now_float/0, byte_size/1, listify/1, reverse_bits/1]).
 
+-include("profile.hrl").
+
 -ifdef(TEST).
 -include("etest/lib_misc_test.erl").
 -endif.
@@ -124,7 +126,11 @@ gather(N, Max, Ref, L) ->
 	  {Ref, Ret} -> gather(N-1, Max, Ref, [Ret|L])
   end.
 
-hash(Term) -> fnv:hash(Term).
+hash(Term) -> 
+  ?prof(hash),
+  R = fnv:hash(Term),
+  ?forp(hash),
+  R.
   
 %32 bit fnv.  magic numbers ahoy
 fnv(Term) when is_binary(Term) ->

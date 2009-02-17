@@ -166,7 +166,9 @@ init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_call({get, Key}, {RemotePid, _Tag}, State = #storage{module=Module,table=Table}) ->
+  ?prof(get),
   Result = (catch Module:get(sanitize_key(Key), Table)),
+  ?forp(get),
   case Result of
     {ok, {Context, Values}} -> 
       Size = iolist_size(Values),
@@ -186,7 +188,8 @@ handle_call({get, Key}, {RemotePid, _Tag}, State = #storage{module=Module,table=
 handle_call({put, Key, Context, ValIn}, _From, State = #storage{module=Module,table=Table,tree=Tree}) ->
     %% ?debugFmt("handle_call put ~p", [Key]),
   Values = lib_misc:listify(ValIn),
-  case Context of
+  ?prof(outer_put),
+  R = case Context of
     {clobber, Context2} -> internal_put(Key, Context2, Values, Tree, Table, Module, State);
     _ ->
       case (catch Module:get(sanitize_key(Key), Table)) of
@@ -196,7 +199,9 @@ handle_call({put, Key, Context, ValIn}, _From, State = #storage{module=Module,ta
         {ok, not_found} -> internal_put(Key, Context, Values, Tree, Table, Module, State);
         Failure -> {reply, Failure, State}
       end
-  end;
+  end,
+  ?forp(outer_put),
+  R;
 	
 handle_call({has_key, Key}, _From, State = #storage{module=Module,table=Table}) ->
 	{reply, catch Module:has_key(sanitize_key(Key),Table), State};
@@ -323,13 +328,13 @@ internal_put(Key, Context, Values, Tree, Table, Module, State) ->
         true -> 
           dmerkle:update(Key, Values, Tree)
       end,
-      ?prof(dmerkle_update),
+      ?forp(dmerkle_update),
       T
     end,
   TableFun = fun() -> 
       ?prof(put),
       T = Module:put(sanitize_key(Key), vector_clock:truncate(Context), Values, Table),
-      ?prof(put),
+      ?forp(put),
       T
     end,
   [UpdatedTree, TableResult] = lib_misc:pmap(fun(F) -> F() end, [TreeFun, TableFun], 2),

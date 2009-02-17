@@ -23,6 +23,7 @@
          terminate/2, code_change/3]).
 
 -include("config.hrl").
+-include("profile.hrl").
 
 -record(mediator, {config}).
   
@@ -155,6 +156,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 
 internal_put(Key, Context, Value, #mediator{config=Config}) ->
+  ?prof(internal_put),
   {N,R,W} = unpack_config(Config),
   Servers = membership:servers_for_key(Key),
   Incremented = increment(Context),
@@ -162,12 +164,15 @@ internal_put(Key, Context, Value, #mediator{config=Config}) ->
     storage_server:put(Server, Key, Incremented, Value)
   end,
   {Good, Bad} = pcall(MapFun, Servers, W),
-  if
+  Final = if
     length(Good) >= W -> {ok, length(Good)};
     true -> {failure, error_message(Good, Bad, N, W)}
-  end.
+  end,
+  ?forp(internal_put),
+  Final.
   
 internal_get(Key, #mediator{config=Config}) ->
+  ?prof(internal_get),
   {N,R,W} = unpack_config(Config),
   Servers = membership:servers_for_key(Key),
   MapFun = fun(Server) ->
@@ -175,11 +180,13 @@ internal_get(Key, #mediator{config=Config}) ->
   end,
   {Good, Bad} = pcall(MapFun, Servers, R),
   NotFound = resolve_not_found(Bad, R),
-  if
+  Final = if
     length(Good) >= R -> {ok, resolve_read(Good)};
     NotFound -> {ok, not_found};
     true -> {failure, error_message(Good, Bad, N, R)}
-  end.
+  end,
+  ?forp(internal_get),
+  Final.
   
 internal_has_key(Key, #mediator{config=Config}) ->
   {N,R,W} = unpack_config(Config),
