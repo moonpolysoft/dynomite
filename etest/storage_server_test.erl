@@ -74,23 +74,23 @@ mnesia_large_value_test() ->
     ok = storage_server:put(store3, "key_one", [], Val),
     {ok, {_Context, [Val]}} = storage_server:get(store3, "key_one").
 
-concurrent_update_test() ->
-  process_flag(trap_exit, true),
-  {ok, Pid} = storage_server:start_link(dets_storage, db_key(dets), store4, 0, (2 bsl 31), undefined),
-  Keys1 = [lists:concat(["key", V]) || V <- lists:seq(1, 1000)],
-  Keys2 = [lists:concat(["key", V]) || V <- lists:seq(1001, 2000)],
-  lists:foreach(fun(K) -> storage_server:put(store4, K, [], <<"val">>) end, Keys1),
-  P1 = spawn_link(fun() ->
-      lists:foreach(fun(K) -> 
-          storage_server:put(store4, K, [], <<"val">>) end, Keys2)
-    end),
-  P2 = spawn_link(fun() ->
-      storage_server:fold(store4, fun({Key, Ctx, Vals}, _) -> 
-          ?assert(lists:any(fun(E) -> E == Key end, Keys1))
-        end, nil)
-    end),
-  receive {'EXIT', P1, _} -> ok end,
-  receive {'EXIT', P2, _} -> ok end.
+% concurrent_update_test() ->
+%   process_flag(trap_exit, true),
+%   {ok, Pid} = storage_server:start_link(dets_storage, db_key(dets), store4, 0, (2 bsl 31), undefined),
+%   Keys1 = [lists:concat(["key", V]) || V <- lists:seq(1, 1000)],
+%   Keys2 = [lists:concat(["key", V]) || V <- lists:seq(1001, 2000)],
+%   lists:foreach(fun(K) -> storage_server:put(store4, K, [], <<"val">>) end, Keys1),
+%   P1 = spawn_link(fun() ->
+%       lists:foreach(fun(K) -> 
+%           storage_server:put(store4, K, [], <<"val">>) end, Keys2)
+%     end),
+%   P2 = spawn_link(fun() ->
+%       storage_server:fold(store4, fun({Key, Ctx, Vals}, _) -> 
+%           ?assert(lists:any(fun(E) -> E == Key end, Keys1))
+%         end, nil)
+%     end),
+%   receive {'EXIT', P1, _} -> ok end,
+%   receive {'EXIT', P2, _} -> ok end.
   
 rebuild_merkle_trees_test() ->
   {ok, _} = mock:mock(dmerkle),

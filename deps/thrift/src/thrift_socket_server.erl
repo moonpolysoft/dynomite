@@ -25,6 +25,7 @@
          handler,
          name,
          max=2048,
+         connections=0,
          ip=any,
          listen=null,
          acceptor=null,
@@ -151,7 +152,7 @@ gen_tcp_listen(Port, Opts, State) ->
             {stop, Reason}
     end.
 
-new_acceptor(State=#thrift_socket_server{max=0}) ->
+new_acceptor(State=#thrift_socket_server{max=Max,connections=Connections}) when Connections == Max ->
     error_logger:error_msg("Not accepting new connections"),
     State#thrift_socket_server{acceptor=null};
 new_acceptor(State=#thrift_socket_server{acceptor=OldPid, listen=Listen,
@@ -184,17 +185,21 @@ acceptor_loop({Server, Listen, Service, Handler, SocketOpts})
                lists:flatten(io_lib:format("~p", [Other]))]),
             exit({error, accept_failed})
     end.
+    
+handle_call(connections, _From, State = #thrift_socket_server{connections=Connections}) ->
+  {reply, Connections, State};
 
 handle_call({get, port}, _From, State=#thrift_socket_server{port=Port}) ->
     {reply, Port, State};
+    
 handle_call(_Message, _From, State) ->
     Res = error,
     {reply, Res, State}.
 
 handle_cast({accepted, Pid},
-            State=#thrift_socket_server{acceptor=Pid, max=Max}) ->
+            State=#thrift_socket_server{acceptor=Pid, connections=Connections, max=Max}) ->
     % io:format("accepted ~p~n", [Pid]),
-    State1 = State#thrift_socket_server{max=Max - 1},
+    State1 = State#thrift_socket_server{connections=Connections+1},
     {noreply, new_acceptor(State1)};
 handle_cast(stop, State) ->
     {stop, normal, State}.
@@ -222,14 +227,14 @@ handle_info({'EXIT', Pid, Reason},
     timer:sleep(100),
     {noreply, new_acceptor(State)};
 handle_info({'EXIT', _LoopPid, Reason},
-            State=#thrift_socket_server{acceptor=Pid, max=Max}) ->
+            State=#thrift_socket_server{acceptor=Pid, max=Connections}) ->
     case Reason of
         normal -> ok;
         shutdown -> ok;
         _ -> error_logger:error_report({?MODULE, ?LINE,
                                         {child_error, Reason, erlang:get_stacktrace()}})
     end,
-    State1 = State#thrift_socket_server{max=Max + 1},
+    State1 = State#thrift_socket_server{max=Connections-1},
     State2 = case Pid of
                  null -> new_acceptor(State1);
                  _ -> State1

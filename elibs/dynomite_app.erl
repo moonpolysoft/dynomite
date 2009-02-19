@@ -14,6 +14,7 @@
 -behaviour(application).
 
 -include("config.hrl").
+-include("common.hrl").
 
 %% Application callbacks
 -export([start/2, stop/1]).
@@ -33,25 +34,15 @@
 %% @end 
 %%--------------------------------------------------------------------
 start(_Type, []) ->
-	Config = case application:get_env(jointo) of
-		{ok, NodeName} -> 
-		  error_logger:info_msg("attempting to contact ~w~n", [NodeName]),
-		  case net_adm:ping(NodeName) of
-  			pong -> process_arguments([directory, port, thrift_port], configuration:get_config(NodeName));
-  			pang -> {error, io_lib:format("Could not connect to ~p.  Exiting.~n", [NodeName])}
-  		end;
-		undefined -> process_arguments([r, w, n, q, directory, blocksize, port, storage_mod, thrift_port])
-	end,
-	ok = filelib:ensure_dir(Config#config.directory ++ "/"),
-	Options = process_options([web_port]),
-  case init:get_argument(profile) of
-      error ->
-          ok;
-      _ ->
-          prof_start()
-  end,
-  verify_ulimit(Config),
-  dynomite_sup:start_link(Config, Options).
+  case application:get_env(config) of
+    {ok, ConfigFile} ->
+      case filelib:is_file(ConfigFile) of
+        true -> join_and_start(ConfigFile);
+        false -> {error, ?fmt("~p does not exist.", [ConfigFile])}
+      end;
+    undefined -> 
+      {error, ?fmt("No config file given.", [])}
+  end.
 
 %%--------------------------------------------------------------------
 %% @spec stop(State) -> void()
@@ -61,56 +52,12 @@ start(_Type, []) ->
 %% @end 
 %%--------------------------------------------------------------------
 stop({_, Sup}) ->
-    prof_stop(),
   exit(Sup, shutdown),
   ok.
 
 %%====================================================================
 %% Internal functions
 %%====================================================================
-
-process_options(OptionNames) ->
-  process_options(OptionNames, []).
-
-process_options([], Taken) ->
-  lists:reverse(Taken);
-
-process_options([Name|OptionNames], Taken) ->
-  case application:get_env(Name) of
-    undefined -> process_options(OptionNames, Taken);
-    {ok, Val} -> process_options(OptionNames, [{Name, Val}|Taken])
-  end.
-  
-process_arguments(Args) ->
-	process_arguments(Args, #config{n=3,r=2,w=2,q=6,port=11222,blocksize=4096,directory="/tmp/dynomite",storage_mod=fs_storage}).
-	
-process_arguments([], Config) -> Config;
-
-process_arguments([Arg | ArgList], Config) ->
-	process_arguments(ArgList, 
-		case application:get_env(Arg) of
-			{ok, Val} -> config_replace(Arg, Config, Val);
-			undefined -> Config
-		end).
-		
-config_replace(Field, Tuple, Value) ->
-  config_replace(record_info(fields, config), Field, Tuple, Value, 2).
-  
-config_replace([Field | _], Field, Tuple, Value, Index) ->
-  setelement(Index, Tuple, Value);
-  
-config_replace([_|Fields], Field, Tuple, Value, Index) ->
-  config_replace(Fields, Field, Tuple, Value, Index+1).
-
-
-prof_start() ->
-    error_logger:info_msg("Profiling"),
-    fprof:trace(start).
-
-prof_stop() ->
-    error_logger:info_msg("Stop profiling"),
-    fprof:trace(stop).
-
 verify_ulimit(#config{q=Q}) ->
   Partitions = (2 bsl (Q-1)),
   % this is our estimated max # of fd's 2 per partition and 100 for connections
@@ -128,3 +75,17 @@ alter_ulimit(U, FD) ->
     _ -> ok
   end,
   ulimit:stop(U).
+
+join_and_start(ConfigFile) ->
+  case application:get_env(jointo) of
+    {ok, NodeName} -> 
+      ?infoFmt("attempting to contact ~p~n", [NodeName]),
+      case net_adm:ping(NodeName) of
+        pong -> 
+          ?infoFmt("Connected to ~p~n", [NodeName]),
+          dynomite_sup:start_link(ConfigFile);
+        pang ->
+          {error, ?fmt("Could not connect to ~p.  Exiting.", [NodeName])}
+      end;
+    undefined -> dynomite_sup:start_link(ConfigFile)
+  end.

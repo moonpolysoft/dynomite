@@ -12,7 +12,15 @@
 -author('cliff@powerset.com').
 
 %% API
--export([start/1, stop/0, loop/2]).
+-export([start_link/0, stop/0, loop/2]).
+
+-include("config.hrl").
+-include("common.hrl").
+
+-behavior(gen_server).
+%% gen_server callbacks
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+         terminate/2, code_change/3]).
 
 %%====================================================================
 %% API
@@ -23,23 +31,16 @@
 %% @end 
 %%--------------------------------------------------------------------
 
-start(Options) ->
-  io:format("options ~p~n", [Options]),
-  {WebPort, Options1} = get_option(web_port, proplists:delete(port, Options)),
-  WebPort1 = if
-    WebPort == undefined -> 8080;
-    true -> WebPort
-  end,
-  {DocRoot, Options2} = get_option(docroot, Options1),
-  DocRoot1 = if
-    DocRoot == undefined -> "web";
-    true -> DocRoot
-  end,
-  {true, DocRoot1} = {is_list(DocRoot1), DocRoot1},
-  Loop = fun (Req) ->
-	   ?MODULE:loop(Req, DocRoot1)
-   end,
-  mochiweb_http:start([{name, ?MODULE}, {loop, Loop}, {port, WebPort1} | Options1]).
+start_link() ->
+  Config = configuration:get_config(),
+  case Config#config.web_port of
+    undefined -> gen_server:start_link({local, dynomite_web}, ?MODULE, [], []);
+    Port ->
+      Loop = fun(Req) ->
+          ?MODULE:loop(Req, "web")
+        end,
+      mochiweb_http:start([{name, ?MODULE}, {loop, Loop}, {port, Port}])
+  end.
 
 stop() ->
     mochiweb_http:stop(?MODULE).
@@ -70,6 +71,26 @@ loop(Req, DocRoot) ->
   end.
 
 
+%%================ gen server ============
+
+init([]) ->
+  {ok, undefined}.
+  
+handle_call(Req, _From, State) ->
+  {reply, Req, State}.
+  
+handle_cast(_Req, State) ->
+  {noreply, State}.
+  
+handle_info(_Msg, State) ->
+  {noreply, State}.
+  
+terminate(_Reason, State) ->
+  ok.
+  
+code_change(_OldVsn, State, _Extra) ->
+  {ok, State}.
+
 %%====================================================================
 %% Internal functions
 %%====================================================================
@@ -78,7 +99,7 @@ rpc_invoke(Path, Req) ->
   [Meth, Arg] = [list_to_atom(M) || M <- string:tokens(Path, "/")],
   Result = web_rpc:Meth(Arg),
   % error_logger:info_msg("invoking web_rpc:~p(~p) got ~p~n", [Meth, Arg, Result]),
-  Req:ok({rfc4627:mime_type(), rfc4627:encode(Result)}).
+  Req:ok({"application/json", mochijson:encode(Result)}).
 
 get_option(Option, Options) ->
     {proplists:get_value(Option, Options), proplists:delete(Option, Options)}.

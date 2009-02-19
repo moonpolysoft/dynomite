@@ -84,7 +84,7 @@ handle_call({load, Nodes, Partitions, PartsForNode}, _From, #state{partitions=Ol
   %   length(OldPartitions) == 0 -> 
   %     reload_storage_servers(OldPartitions1, Partitions1, Partitions, Config);
   %   true ->
-      reload_storage_servers(OldPartitions1, Partitions1, OldPartitions, Config),
+  reload_storage_servers(OldPartitions1, Partitions1, OldPartitions, Config),
   % end,
   {reply, ok, #state{partitions=Partitions,parts_for_node=PartsForNode}}.
 

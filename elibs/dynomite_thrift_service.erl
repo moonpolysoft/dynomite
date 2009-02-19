@@ -1,6 +1,6 @@
 -module(dynomite_thrift_service).
 
--export([start_link/1, stop/1,
+-export([start_link/0, stop/1,
          handle_function/2,
 
          % Internal
@@ -10,25 +10,53 @@
          remove/1
 ]).
 
+-behavior(gen_server).
+%% gen_server callbacks
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2,
+         terminate/2, code_change/3]).
+
 -include("config.hrl").
 -include("common.hrl").
 -include("dynomite_types.hrl").
 
 %%%%% EXTERNAL INTERFACE %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-start_link(#config{thrift_port = Port}) ->
-    application:load(thrift),
-    thrift_socket_server:start([
-      {port, Port}, 
-      {name, dynomite_thrift}, 
+start_link() ->
+  Config = configuration:get_config(),
+  case Config#config.thrift_port of
+    undefined -> gen_server:start_link({local, dynomite_thrift}, ?MODULE, [], []);
+    Port -> thrift_socket_server:start([
+      {port, Port},
+      {name, dynomite_thrift},
       {service, dynomite_thrift},
       {handler, ?MODULE},
       {max, 100},
-      {socket_opts, [{recv_timeout, infinity}]}]).
+      {socket_opts, [{recv_timeout, infinity}]}])
+  end.
 
 stop(Server) ->
-    thrift_socket_server:stop(Server),
-    ok.
+  thrift_socket_server:stop(Server),
+  ok.
+
+%%%%%% DUMMY GEN_SERVER %%%%%%%%%%%%%%%%%%%
+
+init([]) ->
+  {ok, undefined}.
+  
+handle_call(connections, _From, State) ->
+  {reply, 0, State}.
+  
+handle_cast(_Req, State) ->
+  {noreply, State}.
+  
+handle_info(_Msg, State) ->
+  {noreply, State}.
+  
+terminate(_Reason, State) ->
+  ok.
+  
+code_change(_OldVsn, State, _Extra) ->
+  {ok, State}.
 
 %%%%% THRIFT INTERFACE %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

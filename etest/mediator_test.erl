@@ -7,15 +7,13 @@ init_integrated(Good, Bad, Config) ->
   GoodServers = start_storage_servers(dict_storage, good_store, Good, []),
   BadServers = start_storage_servers(fail_storage, bad_store, Bad, []),
   {ok, MockMem} = mock_genserver:start_link({local, membership}),
-  mock_genserver:expects_call(MockMem, {servers_for_key, unbound}, fun(_, _) -> GoodServers ++ BadServers end),
-  {ok, _} = mediator:start_link(Config).
+  mock_genserver:expects_call(MockMem, {servers_for_key, unbound}, fun(_, _) -> GoodServers ++ BadServers end).
   
 stop_integrated(Good, Bad) ->
   ok = stop_storage_servers(bad_store, Bad),
   ok = stop_storage_servers(good_store, Good),
   configuration:stop(),
   receive {'EXIT', Pid, Val} -> ok end,
-  mediator:stop(),
   mock_genserver:stop(membership).
   
 start_storage_servers(_Module, _Name, 0, Servers) -> Servers;

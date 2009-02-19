@@ -21,6 +21,11 @@
          terminate/2, code_change/3]).
 
 -include("config.hrl").
+-include("common.hrl").
+
+-ifdef(TEST).
+-include("etest/configuration_test.erl").
+-endif.
 
 %%====================================================================
 %% API
@@ -30,12 +35,12 @@
 %% @doc Starts the server
 %% @end 
 %%--------------------------------------------------------------------
-start_link(Config) ->
-	gen_server:start_link({local, configuration}, configuration, Config, []).
+start_link(ConfigFile) ->
+  gen_server:start_link({local, configuration}, configuration, ConfigFile, []).
 
 get_config(Node) ->
-	gen_server:call({configuration, Node}, get_config, 1000).
-	
+  gen_server:call({configuration, Node}, get_config, 1000).
+
 get_config() ->
   case get(config) of
     undefined -> 
@@ -64,8 +69,16 @@ stop() ->
 %% @doc Initiates the server
 %% @end 
 %%--------------------------------------------------------------------
-init(Config) ->
-    {ok, Config}.
+init(Config = #config{}) ->
+  {ok, Config};
+
+init(ConfigFile) when is_list(ConfigFile) ->
+  case read_config_file(ConfigFile) of
+    {ok, Config} -> 
+      filelib:ensure_dir(Config#config.directory ++ "/"),
+      {ok, Config};
+    {error, Reason} -> {error, Reason}
+  end.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -127,3 +140,32 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+read_config_file(ConfigFile) ->
+  case file:read_file(ConfigFile) of
+    {ok, Bin} -> {ok, decode_json(mochijson:decode(Bin))};
+    {error, Reason} -> {error, Reason}
+  end.
+  
+decode_json({struct, Options}) ->
+  decode_json(Options, #config{}).
+  
+decode_json([], Config) ->
+  Config;
+  
+decode_json([{Field,null} | Options], Config) -> % null is undefined lol
+  decode_json(Options, config_replace(list_to_atom(Field), Config, undefined));
+  
+decode_json([{Field,Value} | Options], Config) ->
+  decode_json(Options, config_replace(list_to_atom(Field), Config, Value)).
+  
+config_replace(Field, Tuple, Value) ->
+  config_replace(record_info(fields, config), Field, Tuple, Value, 2).
+
+config_replace([], Field, Tuple, _, _) ->
+  Tuple;
+
+config_replace([Field | _], Field, Tuple, Value, Index) ->
+  setelement(Index, Tuple, Value);
+
+config_replace([_|Fields], Field, Tuple, Value, Index) ->
+  config_replace(Fields, Field, Tuple, Value, Index+1).

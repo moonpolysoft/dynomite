@@ -5,6 +5,8 @@
 start() ->
   application:load(os_mon),
   application:start(os_mon),
+  application:load(thrift),
+  % application:start(thrift),
   application:load(dynomite),
   %spawn(fun() -> collect_loop() end),
   crypto:start(),

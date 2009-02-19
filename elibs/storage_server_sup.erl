@@ -14,7 +14,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/1, storage_servers/0]).
+-export([start_link/0, storage_servers/0]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -31,8 +31,8 @@
 %% @doc Starts the supervisor
 %% @end 
 %%--------------------------------------------------------------------
-start_link(Config) ->
-  supervisor:start_link({local, storage_server_sup}, storage_server_sup, Config).
+start_link() ->
+  supervisor:start_link({local, storage_server_sup}, storage_server_sup, []).
     
 storage_servers() ->
   lists:filter(fun
@@ -55,18 +55,7 @@ storage_servers() ->
 %% specifications.
 %% @end 
 %%--------------------------------------------------------------------
-init(Config) ->
-  % Partitions = membership:partitions_for_node(node(), all),
-  % Old = membership:old_partitions(),
-  % ChildSpecs = lists:map(fun(Part) ->
-  %     Name = list_to_atom(lists:concat([storage_, Part])),
-  %     DbKey = lists:concat([Config#config.directory, "/", Part]),
-  %     {Min,Max} = membership:range(Part),
-  %     case lists:keysearch(Part, 2, Old) of
-  %       {OldNode, _} -> {Name, {storage_server,start_link,[Config#config.storage_mod, DbKey, Name, Min, Max, OldNode]}, permanent, 1000, worker, [storage_server]};
-  %       false -> {Name, {storage_server,start_link,[Config#config.storage_mod, DbKey, Name, Min, Max]}, permanent, 1000, worker, [storage_server]}
-  %     end
-  %   end, Partitions),
+init([]) ->
   ChildSpecs = [],
   {ok,{{one_for_one,10,1}, ChildSpecs}}.
 

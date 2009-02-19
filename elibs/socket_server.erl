@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/1, accept_loop/3, connections/1]).
+-export([start_link/0, accept_loop/3, connections/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -32,8 +32,8 @@
 %% @doc Starts the server
 %% @end 
 %%--------------------------------------------------------------------
-start_link(Config) ->
-  gen_server:start_link({local, socket_server}, ?MODULE, Config, []).
+start_link() ->
+  gen_server:start_link({local, socket_server}, ?MODULE, [], []).
 
 connections(Node) ->
   gen_server:call({socket_server, Node}, connections).
@@ -50,9 +50,13 @@ connections(Node) ->
 %% @doc Initiates the server
 %% @end 
 %%--------------------------------------------------------------------
-init(Config) ->
+init([]) ->
   process_flag(trap_exit, true),
-  listen(Config, #socket_server{}).
+  Config = configuration:get_config(),
+  case Config#config.text_port of
+    undefined -> {ok, #socket_server{}}; %start up for otp but don't actually listen
+    Port -> listen(Config, #socket_server{})
+  end.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -138,7 +142,7 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 
-listen(Config = #config{port=Port}, State) ->
+listen(Config = #config{text_port=Port}, State) ->
   case gen_tcp:listen(Port, [binary, inet6, {active,false}, {packet, 0}, {reuseaddr, true}]) of
     {ok, Listen} ->
       {ok, spawn_acceptor(State#socket_server{listen=Listen})};

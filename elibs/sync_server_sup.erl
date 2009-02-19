@@ -14,7 +14,7 @@
 -behaviour(supervisor).
 
 %% API
--export([start_link/1, sync_servers/0]).
+-export([start_link/0, sync_servers/0]).
 
 %% Supervisor callbacks
 -export([init/1]).
@@ -31,8 +31,8 @@
 %% @doc Starts the supervisor
 %% @end 
 %%--------------------------------------------------------------------
-start_link(Config) ->
-  supervisor:start_link({local, sync_server_sup}, sync_server_sup, Config).
+start_link() ->
+  supervisor:start_link({local, sync_server_sup}, sync_server_sup, []).
     
 sync_servers() ->
   lists:filter(fun
@@ -55,7 +55,7 @@ sync_servers() ->
 %% specifications.
 %% @end 
 %%--------------------------------------------------------------------
-init(Config) ->
+init([]) ->
   ChildSpecs = [],
   {ok,{{one_for_one,10,1}, ChildSpecs}}.
 
