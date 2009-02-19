@@ -128,7 +128,7 @@ close(Name, Timeout) ->
 %%--------------------------------------------------------------------
 init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
     %% ?debugMsg("storage_server init"),
-    % process_flag(trap_exit, true),  %i don't think this is appropriate, we should fail and let the sup handle restart
+    process_flag(trap_exit, true),  % need to trap exits to deal with merkle issues. gotta do shit the hard way.
     {ok, Table} = StorageModule:open(DbKey,Name),
     %% ?debugFmt("storage table ~p", [Table]),
     DMName = filename:join([DbKey, "dmerkle.idx"]),

@@ -340,7 +340,7 @@ merge_freespace(N, BlockSize, Offset, Tree = #dmtree{blocksize=BlockSize}) ->
 merge_freespace(N, Size, Offset, Tree = #dmtree{file=File,blocksize=BlockSize,headersize=HeaderSize}) when Size < BlockSize, ?block(Offset, HeaderSize, BlockSize) == ?block((Offset+Size), HeaderSize, BlockSize) ->
   % ?infoFmt("merge_freespace N ~p Size ~p Offset ~p~n", [N, Size, Offset]),
   case file:pread(File, Offset+Size, Size) of
-    {ok, <<3:8, _/binary>>} -> 
+    {ok, <<3:8, Size:16, _/binary>>} -> 
       Tree2 = remove_free_pointer(Offset+Size, N, Tree),
       merge_freespace(N+1, Size * 2, Offset, Tree2);
     {ok, Bin} -> {N, Tree};
@@ -352,7 +352,12 @@ merge_freespace(N, _, _, Tree) -> {N, Tree}.
 remove_free_pointer(Ptr, N, Tree = #dmtree{file=File,kfpointers=Pointers}) ->
   Head = lists:nth(N, Pointers),
   Size = ?size_for_pointer(N),
-  Free = int_read(Head, Size, Tree),
+  Free = case int_read(Head, Size, Tree) of
+    {error, Reason} -> 
+      ?infoFmt("remove_free_pointer bug ~p, ~p, ~p", [Ptr, N, Tree]),
+      {error, Reason};
+    F -> F
+  end,
   ToReplace = int_read(Ptr, Size, Tree),
   if
     Head == Ptr -> write_header(replace_kfpointer(N, ToReplace#free.pointer, Tree));
@@ -471,12 +476,12 @@ deserialize(<<1:8, Bin/binary>>, D, Offset) ->
   Values = unpack_values(M, ValuesBin),
   #leaf{m=M,values=Values,offset=Offset};
 
-deserialize(<<3:8, Pointer:64, _/binary>>, D, Offset) ->
-  #free{offset=Offset,pointer=Pointer}.
+deserialize(<<3:8, Size:16, Pointer:64, _/binary>>, D, Offset) ->
+  #free{offset=Offset,size=Size,pointer=Pointer}.
 
-serialize(Free = #free{pointer=Pointer}, BlockSize) ->
-  LeftOverBits = (BlockSize - 9) * 8,
-  <<3:8,Pointer:64,0:LeftOverBits>>;
+serialize(Free = #free{pointer=Pointer,size=Size}, BlockSize) ->
+  LeftOverBits = (BlockSize - 11) * 8,
+  <<3:8,Size:16,Pointer:64,0:LeftOverBits>>;
 
 serialize(Node = #node{keys=Keys,children=Children,m=M}, BlockSize) ->
   D = ?d_from_blocksize(BlockSize),

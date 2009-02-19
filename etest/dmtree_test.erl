@@ -62,6 +62,9 @@ pointers_for_blocksize_test() ->
   ?assertEqual(5, ?pointers_from_blocksize(256)),
   ?assertEqual(1, ?pointers_from_blocksize(16)).
   
+pointer_for_size_test() ->
+  ?assertEqual(1, ?pointer_for_size(14, 4096)).
+  
 size_for_pointer_test() ->
   ?assertEqual(16, ?size_for_pointer(1)),
   ?assertEqual(256, ?size_for_pointer(5)).
@@ -77,10 +80,25 @@ open_and_reopen_test() ->
   ?assertEqual(State#dmtree.kfpointers, S2#dmtree.kfpointers),
   dmtree:stop(Pid).
   
+adjacent_blocks_test() ->
+  {ok, Pid} = dmtree:start_link(fixture("dm_adjacentblocks.idx"), 4096),
+  dmtree:delete_key(4741, "afknf", Pid),
+  dmtree:stop(Pid).
+  
+fixture_dir() ->
+  filename:join(t:config(test_dir), "fixtures").
+
+fixture(Name) -> % need to copy the fixture for repeatability
+  file:copy(filename:join(fixture_dir(), Name), data_file(Name)),
+  data_file(Name).
+  
 priv_dir() ->
-    Dir = filename:join(t:config(priv_dir), "data"),
-    filelib:ensure_dir(filename:join(Dir, "dmerkle")),
+    Dir = filename:join([t:config(priv_dir), "data", "dmtree"]),
+    filelib:ensure_dir(Dir ++ "/"),
     Dir.
 
+data_file(Name) ->
+  filename:join(priv_dir(), Name).
+
 data_file() ->
-    filename:join(priv_dir(), "dmerkle").
+    filename:join(priv_dir(), "dmtree").

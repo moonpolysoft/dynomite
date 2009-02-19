@@ -1,4 +1,4 @@
--define(VERSION, 1).
+-define(VERSION, 2).
 -define(STATIC_HEADER, 93).
 
 -define(d_from_blocksize(BlockSize), trunc((BlockSize - 17)/16)).  
@@ -11,4 +11,4 @@
 
 -record(node, {m=0, keys=[], children=[], offset=eof}).
 -record(leaf, {m=0, values=[], offset=eof}).
--record(free, {offset,pointer=0}).
+-record(free, {offset,size=0,pointer=0}).
