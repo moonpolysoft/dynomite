@@ -70,12 +70,14 @@ stop() ->
 %% @end 
 %%--------------------------------------------------------------------
 init(Config = #config{}) ->
-  {ok, Config};
+  Merged = pick_node_and_merge(Config, nodes([visible])),
+  {ok, Merged};
 
 init(ConfigFile) when is_list(ConfigFile) ->
   case read_config_file(ConfigFile) of
     {ok, Config} -> 
       filelib:ensure_dir(Config#config.directory ++ "/"),
+        Merged = pick_node_and_merge(Config, nodes([visible])),
       {ok, Config};
     {error, Reason} -> {error, Reason}
   end.
@@ -140,6 +142,25 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+pick_node_and_merge(Config, Nodes) when length(Nodes) == 0 ->
+  Config;
+
+pick_node_and_merge(Config, Nodes) ->
+  [Node|_] = lib_misc:shuffle(Nodes),
+  case (catch configuration:get_config(Node)) of
+    {'EXIT', _, _} -> Config;
+    Remote -> merge_configs(Remote, Config)
+  end.
+
+merge_configs(Remote, Local) ->
+  %we need to merge in any cluster invariants
+  merge_configs([n, r, w, q, storage_mod, blocksize], Remote, Local).
+  
+merge_configs([], Remote, Merged) -> Merged;
+
+merge_configs([Field|Fields], Remote, Merged) ->
+  merge_configs(Fields, Remote, config_set(Field, Merged, config_get(Field, Remote))).
+
 read_config_file(ConfigFile) ->
   case file:read_file(ConfigFile) of
     {ok, Bin} -> {ok, decode_json(mochijson:decode(Bin))};
@@ -153,19 +174,31 @@ decode_json([], Config) ->
   Config;
   
 decode_json([{Field,null} | Options], Config) -> % null is undefined lol
-  decode_json(Options, config_replace(list_to_atom(Field), Config, undefined));
+  decode_json(Options, config_set(list_to_atom(Field), Config, undefined));
   
 decode_json([{Field,Value} | Options], Config) ->
-  decode_json(Options, config_replace(list_to_atom(Field), Config, Value)).
+  decode_json(Options, config_set(list_to_atom(Field), Config, Value)).
   
-config_replace(Field, Tuple, Value) ->
-  config_replace(record_info(fields, config), Field, Tuple, Value, 2).
+config_get(Field, Tuple) ->
+  config_get(record_info(fields, config), Field, Tuple, 2).
+  
+config_get([], _, _, _) ->
+  undefined;
+  
+config_get([Field | _], Field, Tuple, Index) ->
+  element(Index, Tuple);
+  
+config_get([_ | Fields], Field, Tuple, Index) ->
+  config_get(Fields, Field, Tuple, Index+1).
+  
+config_set(Field, Tuple, Value) ->
+  config_set(record_info(fields, config), Field, Tuple, Value, 2).
 
-config_replace([], Field, Tuple, _, _) ->
+config_set([], Field, Tuple, _, _) ->
   Tuple;
 
-config_replace([Field | _], Field, Tuple, Value, Index) ->
+config_set([Field | _], Field, Tuple, Value, Index) ->
   setelement(Index, Tuple, Value);
 
-config_replace([_|Fields], Field, Tuple, Value, Index) ->
-  config_replace(Fields, Field, Tuple, Value, Index+1).
+config_set([_|Fields], Field, Tuple, Value, Index) ->
+  config_set(Fields, Field, Tuple, Value, Index+1).

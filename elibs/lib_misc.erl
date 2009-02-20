@@ -74,14 +74,10 @@ ceiling(X) ->
     Pos when Pos > 0 -> T + 1;
     _ -> T
   end.
-
-shuffle(List) ->
-  lists:sort(fun(A,B) ->
-      case random:uniform() of
-        R when R > 0.5 -> true;
-        _ -> false
-      end
-    end, List).
+    
+shuffle(List) when is_list(List) ->
+  {_, Shuffled} = lists:unzip(lists:keysort(1, [[ {random:uniform(),X} || X <- List ]])),
+  Shuffled.
 
 pmap(Fun, List, ReturnNum) ->
   N = if
