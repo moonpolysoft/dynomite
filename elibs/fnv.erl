@@ -33,6 +33,7 @@ start() ->
           register(fnv_drv, P),
           loop(P)
         end),
+      timer:sleep(1),
       {ok, Pid};
     {error, Err} ->
       Msg = erl_ddll:format_error(Err),
@@ -53,12 +54,12 @@ hash(Thing) ->
   
 hash(Thing, Seed) when is_binary(Thing) ->
   P = get_or_open(),
-  convert(port_control(P, Seed, Thing));
+  convert(port_control(fnv_drv, Seed, Thing));
   % recv(P);
   
 hash(Thing, Seed) ->
   P = get_or_open(),
-  convert(port_control(P, Seed, term_to_binary(Thing))).
+  convert(port_control(fnv_drv, Seed, term_to_binary(Thing))).
   % recv(P).
 
 %%====================================================================
@@ -73,7 +74,8 @@ convert(List) ->
 
 get_or_open() ->
   case whereis(fnv_drv) of
-    undefined -> open();
+    undefined -> {ok, P} = start(),
+      P;
     P -> P
   end.
 
