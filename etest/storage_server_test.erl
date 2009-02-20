@@ -110,6 +110,26 @@ rebuild_merkle_trees_test() ->
   mock:stop(dets_storage),
   storage_server:close(Pid).
   
+streaming_put_test() ->
+  {ok, _} = mock:mock(dmerkle),
+  {ok, _} = mock:mock(dets_storage),
+  mock:expects(dmerkle, open, fun(_) -> true end, {ok, pid}),
+  mock:expects(dets_storage, open, fun(_) -> true end, {ok, table}),
+  Bits = 10000 * 8,
+  Bin = <<0:Bits>>,
+  mock:expects(dets_storage, put, fun({_, _, [Val], table}) -> Val == Bin end, {ok, table}),
+  mock:expects(dets_storage, get, fun({Key, Table}) -> Key == "key" end, {ok, not_found}),
+  mock:expects(dmerkle, update, fun(_) -> true end, fun(_, _) -> self() end),
+  {ok, Pid} = storage_server:start_link(dets_storage, db_key(merkle_test), store6, 0, (2 bsl 31), 4096),
+  Result = stream(Pid, "key", ctx, Bin),
+  ?debugFmt("~p", [Result]),
+  ?assertEqual(ok, Result),
+  mock:verify(dmerkle),
+  mock:verify(dets_storage),
+  mock:stop(dmerkle),
+  mock:stop(dets_storage),
+  storage_server:close(Pid).
+  
 %   
 % local_fs_storage_test() ->
 %   {ok, State} = fs_storage:open("/Users/cliff/data/storage_test", storage_test),

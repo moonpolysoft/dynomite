@@ -241,7 +241,9 @@ handle_call({streaming_put, Ref}, {RemotePid, _Tag}, State) ->
   SS = self(),
   LocalPid = spawn_link(fun() -> 
       case stream:recv(RemotePid, Ref, 200) of
-        {ok, {{Key, Context}, Values}} -> storage_server:put(SS, Key, Context, Values);
+        {ok, {{Key, Context}, Values}} -> 
+          Result = storage_server:put(SS, Key, Context, Values),
+          RemotePid ! {Ref, put_result, Result};
         {error, timeout} -> {error, timeout}
       end
     end),
@@ -321,7 +323,11 @@ stream(Name, Key, Context, Value) ->
   Ref = make_ref(),
   Pid = gen_server:call(Name, {streaming_put, Ref}),
   stream:send(Pid, Ref, {{Key, Context}, lib_misc:listify(Value)}),
-  ok.
+  receive
+    {Ref, put_result, Result} -> Result
+  after 1000 ->
+    {error, timeout}
+  end.
 
 internal_put(Key, Context, Values, Tree, Table, Module, State) ->
   TreeFun = fun() ->
