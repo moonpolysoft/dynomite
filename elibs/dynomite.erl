@@ -2,6 +2,8 @@
 
 -export([start/0]).
 
+-include("common.hrl").
+
 start() ->
   application:load(os_mon),
   application:start(os_mon),
@@ -10,8 +12,8 @@ start() ->
   application:load(dynomite),
   %spawn(fun() -> collect_loop() end),
   crypto:start(),
-  murmur:start(),
-  fnv:start(),
+  % murmur:start(),
+  % P = fnv:start(),
   application:start(dynomite).
   
 collect_loop() ->

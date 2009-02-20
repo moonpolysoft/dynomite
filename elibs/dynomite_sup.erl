@@ -51,6 +51,10 @@ init(ConfigFile) ->
     Node = node(),
     Nodes = nodes([this,visible]),
     Children = [
+                {fnv,
+                 {fnv,start,[]},
+                 permanent, 1000, worker,
+                 [fnv, fnv_drv]},
                 {configuration, 
                  {configuration, start_link, [ConfigFile]}, 
                  permanent, 1000, worker, 

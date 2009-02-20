@@ -76,8 +76,7 @@ ceiling(X) ->
   end.
     
 shuffle(List) when is_list(List) ->
-  {_, Shuffled} = lists:unzip(lists:keysort(1, [[ {random:uniform(),X} || X <- List ]])),
-  Shuffled.
+  [ N || {R,N} <- lists:keysort(1, [{random:uniform(),X} || X <- List]) ].
 
 pmap(Fun, List, ReturnNum) ->
   N = if

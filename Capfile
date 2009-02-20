@@ -21,6 +21,7 @@ namespace :dynomite do
     deploy.rsync
     deploy.compile
     deploy.data_reset
+    deploy.config
     deploy.start
   end
   
@@ -54,7 +55,13 @@ namespace :dynomite do
       run "mkdir dyn-int-log"
     end
     
-    task :start, :roles => :dyn, :depends => [:data_reset] do
+    task :config, :roles => :dyn do
+      configuration = ENV["CONFIG"] || "dist_config.json"
+      contents = File.read(configuration)
+      put(contents, "./dynomite/config.json")
+    end
+    
+    task :start, :roles => :dyn, :depends => [:data_reset, :config] do
       execute_on_servers(options) do |servers|
         first_server = servers.shift
         shortname = first_server.to_s.split('.').first
@@ -64,9 +71,9 @@ namespace :dynomite do
         if ENV["SERVERS"]
           rest = rest[0...(ENV["SERVERS"].to_i-1)]
         end
-        Command.process("./dynomite/bin/dynomite start -s #{storage} -m ~/dyn-int-data -n 3 -r 2 -w 2 -q 6 -l ~/dyn-int-log -d", [first], options.merge(:logger => logger))
+        Command.process("./dynomite/bin/dynomite start -c config.json -l ~/dyn-int-log -d", [first], options.merge(:logger => logger))
         sleep(3)
-        Command.process("./dynomite/bin/dynomite start -s #{storage} -m ~/dyn-int-data -j dynomite@#{shortname} -l ~/dyn-int-log -d", rest, options.merge(:logger => logger))
+        Command.process("./dynomite/bin/dynomite start -c config.json -j dynomite@#{shortname} -l ~/dyn-int-log -d", rest, options.merge(:logger => logger))
       end
     end
     
@@ -75,4 +82,16 @@ namespace :dynomite do
     end
   end
   
+end
+
+def put_file(path, remote_path, options = {})
+  execute_on_servers(options) do |servers|
+    servers.each do |server|
+      logger.info "uploading #{File.basename(path)} to #{server}"
+      sftp = sessions[server].sftp
+      sftp.connect unless sftp.state == :open
+      sftp.put_file path, remote_path
+      logger.debug "done uploading #{File.basename(path)} to #{server}"
+    end
+  end
 end

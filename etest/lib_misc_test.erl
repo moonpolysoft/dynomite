@@ -61,6 +61,14 @@ fnv_native_compat_test() ->
   ?assertEqual(fnv(<<"blah">>), fnv:hash(<<"blah">>)),
   ?assertEqual(fnv([<<"blah">>, "bleg"]), fnv:hash([<<"blah">>, "bleg"])).
   
+shuffle_test() ->
+  %we can really only test that they aren't equals, which won't even always work, weak
+  A = [a, b, c, d, e, f, g],
+  B = shuffle(A),
+  ?debugFmt("shuffled: ~p", [B]),
+  ?assertEqual(7, length(B)),
+  ?assert(A =/= B).
+  
 rm_rf_test() ->
   lists:foldl(fun(N, Dir) ->
       NewDir = filename:join(Dir, N),

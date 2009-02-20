@@ -27,7 +27,13 @@
 %%--------------------------------------------------------------------
 start() ->
   case load_driver() of
-    ok -> open();
+    ok ->
+      Pid = spawn_link(fun() ->
+          P = open(),
+          register(fnv_drv, P),
+          loop(P)
+        end),
+      {ok, Pid};
     {error, Err} ->
       Msg = erl_ddll:format_error(Err),
       {error, Msg}
@@ -58,20 +64,21 @@ hash(Thing, Seed) ->
 %%====================================================================
 %% Internal functions
 %%====================================================================
+loop(P) ->
+  receive _ -> loop(P) end.
+
 convert(List) ->
   <<Hash:32/unsigned-integer>> = list_to_binary(List),
   Hash.
 
 get_or_open() ->
   case whereis(fnv_drv) of
-    undefined -> start();
+    undefined -> open();
     P -> P
   end.
 
 open() ->
-  P = open_port({spawn, fnv_drv}, [binary]),
-  register(fnv_drv, P),
-  P.
+  open_port({spawn, fnv_drv}, [binary]).
 
 load_driver() ->
   Dir = filename:join([filename:dirname(code:which(?MODULE)), "..", "lib"]),

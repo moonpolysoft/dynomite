@@ -149,6 +149,7 @@ pick_node_and_merge(Config, Nodes) ->
   [Node|_] = lib_misc:shuffle(Nodes),
   case (catch configuration:get_config(Node)) of
     {'EXIT', _, _} -> Config;
+    {'EXIT',_} -> Config;
     Remote -> merge_configs(Remote, Config)
   end.
 
