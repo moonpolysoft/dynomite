@@ -1,15 +1,18 @@
 -module(dynomite_pb).
 
--export([start/0, start/0, dispatch/1]).
+-export([start_link/0, stop/0, dispatch/1]).
 
 -include("config.hrl").
 -include("common.hrl").
 -include("dynomite_types.hrl").
 
 %%%%% EXTERNAL INTERFACE %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-start() ->
+start_link() ->
   Config = configuration:get_config(),
-  mochiweb_http:start([{name, ?MODULE}, {loop, fun dispatch/1}, {port, Config#config.pb_port}]).
+  case Config#config.pb_port of
+    undefined -> dummy_server:start_link(?MODULE);
+    Port -> mochiweb_http:start([{name, ?MODULE}, {loop, fun dispatch/1}, {port, Port}])
+  end.
 
 stop() ->
     mochiweb_http:stop(?MODULE).

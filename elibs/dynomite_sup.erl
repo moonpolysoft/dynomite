@@ -97,11 +97,10 @@ init(ConfigFile) ->
                  {dynomite_web, start_link, []}, 
                  permanent, 1000, worker, 
                  [dynomite_web]},
-                 {dynomite_pb,
-                  {dynomite_pb, start, []},
-                  permanent, 1000, worker,
-                  [dynomite_pb]
-                 }
+                {dynomite_pb,
+                 {dynomite_pb, start_link, []},
+                 permanent, 1000, worker,
+                 [dynomite_pb]}
                ],   
     {ok,{{one_for_one,10,1}, Children}}.
 
