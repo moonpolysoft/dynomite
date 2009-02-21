@@ -131,6 +131,8 @@ close(Name, Timeout) ->
 %%--------------------------------------------------------------------
 init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
     %% ?debugMsg("storage_server init"),
+    Config = configuration:get_config(),
+    load_config_into_dict(Config),
     process_flag(trap_exit, true),  % need to trap exits to deal with merkle issues. gotta do shit the hard way.
     {ok, Table} = StorageModule:open(DbKey,Name),
     %% ?debugFmt("storage table ~p", [Table]),
@@ -189,22 +191,7 @@ handle_call({get, Key}, {RemotePid, _Tag}, State = #storage{module=Module,table=
   end;
 	
 handle_call({put, Key, Context, ValIn}, _From, State = #storage{module=Module,table=Table,tree=Tree}) ->
-    %% ?debugFmt("handle_call put ~p", [Key]),
-  Values = lib_misc:listify(ValIn),
-  ?prof(outer_put),
-  R = case Context of
-    {clobber, Context2} -> internal_put(Key, Context2, Values, Tree, Table, Module, State);
-    _ ->
-      case (catch Module:get(sanitize_key(Key), Table)) of
-        {ok, {ReadContext, ReadValues}} ->
-          {ResolvedContext, ResolvedValues} = vector_clock:resolve({ReadContext, ReadValues}, {Context, Values}),
-          internal_put(Key, ResolvedContext, ResolvedValues, Tree, Table, Module, State);
-        {ok, not_found} -> internal_put(Key, Context, Values, Tree, Table, Module, State);
-        Failure -> {reply, Failure, State}
-      end
-  end,
-  ?forp(outer_put),
-  R;
+  inside_process_put();
 	
 handle_call({has_key, Key}, _From, State = #storage{module=Module,table=Table}) ->
 	{reply, catch Module:has_key(sanitize_key(Key),Table), State};
@@ -314,8 +301,32 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%--------------------------------------------------------------------
 
+load_config_into_dict(#config{buffered_writes=BufferedWrites}) ->
+  put(buffered_writes, BufferedWrites).
+
 int_put(Name, Key, Context, Value, Timeout) ->
-  gen_server:call(Name, {put, Key, Context, Value}, Timeout).
+  case get(buffered_writes) of
+    true -> gen_server:cast(Name, {put, Key, Context, Value}, Timeout);
+    undefined -> gen_server:call(Name, {put, Key, Context, Value}, Timeout)
+  end.
+  
+inside_process_put() ->
+    %% ?debugFmt("handle_call put ~p", [Key]),
+  Values = lib_misc:listify(ValIn),
+  ?prof(outer_put),
+  R = case Context of
+    {clobber, Context2} -> internal_put(Key, Context2, Values, Tree, Table, Module, State);
+    _ ->
+      case (catch Module:get(sanitize_key(Key), Table)) of
+        {ok, {ReadContext, ReadValues}} ->
+          {ResolvedContext, ResolvedValues} = vector_clock:resolve({ReadContext, ReadValues}, {Context, Values}),
+          internal_put(Key, ResolvedContext, ResolvedValues, Tree, Table, Module, State);
+        {ok, not_found} -> internal_put(Key, Context, Values, Tree, Table, Module, State);
+        Failure -> {reply, Failure, State}
+      end
+  end,
+  ?forp(outer_put),
+  R;
   
 % we want to pre-arrange a rendevous so as to not block the storage server
 % blocking whomever is local is perfectly ok
