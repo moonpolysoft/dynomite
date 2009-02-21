@@ -17,10 +17,6 @@
 -include("config.hrl").
 -include("common.hrl").
 
--behavior(gen_server).
-%% gen_server callbacks
--export([init/1, handle_call/3, handle_cast/2, handle_info/2,
-         terminate/2, code_change/3]).
 
 %%====================================================================
 %% API
@@ -34,7 +30,7 @@
 start_link() ->
   Config = configuration:get_config(),
   case Config#config.web_port of
-    undefined -> gen_server:start_link({local, dynomite_web}, ?MODULE, [], []);
+    undefined -> dummy_server:start_link(dynomite_web);
     Port ->
       Loop = fun(Req) ->
           ?MODULE:loop(Req, "web")
@@ -69,28 +65,6 @@ loop(Req, DocRoot) ->
     _ ->
       Req:not_found()
   end.
-
-
-%%================ gen server ============
-
-init([]) ->
-  {ok, undefined}.
-  
-handle_call(Req, _From, State) ->
-  {reply, Req, State}.
-  
-handle_cast(_Req, State) ->
-  {noreply, State}.
-  
-handle_info(_Msg, State) ->
-  {noreply, State}.
-  
-terminate(_Reason, State) ->
-  ok.
-  
-code_change(_OldVsn, State, _Extra) ->
-  {ok, State}.
-
 %%====================================================================
 %% Internal functions
 %%====================================================================
