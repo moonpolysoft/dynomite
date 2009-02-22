@@ -54,7 +54,8 @@ set_config(Config) ->
   gen_server:call(configuration, {set_config, Config}).
 
 stop() ->
-    gen_server:cast(configuration, stop).
+  erase(config),
+  gen_server:cast(configuration, stop).
 
 
 %%====================================================================
@@ -155,7 +156,7 @@ pick_node_and_merge(Config, Nodes) ->
 
 merge_configs(Remote, Local) ->
   %we need to merge in any cluster invariants
-  merge_configs([n, r, w, q, storage_mod, blocksize], Remote, Local).
+  merge_configs([n, r, w, q, storage_mod, blocksize, buffered_writes], Remote, Local).
   
 merge_configs([], Remote, Merged) -> Merged;
 

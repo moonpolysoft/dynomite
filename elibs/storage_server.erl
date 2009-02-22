@@ -24,6 +24,7 @@
 
 -include("chunk_size.hrl").
 -include("common.hrl").
+-include("config.hrl").
 
 -ifdef(TEST).
 -include("etest/storage_server_test.erl").
@@ -130,12 +131,10 @@ close(Name, Timeout) ->
 %% @end 
 %%--------------------------------------------------------------------
 init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
-    %% ?debugMsg("storage_server init"),
     Config = configuration:get_config(),
     load_config_into_dict(Config),
     process_flag(trap_exit, true),  % need to trap exits to deal with merkle issues. gotta do shit the hard way.
     {ok, Table} = StorageModule:open(DbKey,Name),
-    %% ?debugFmt("storage table ~p", [Table]),
     DMName = filename:join([DbKey, "dmerkle.idx"]),
     V = if
       BlockSize == undefined -> {ok, undefined};
@@ -155,8 +154,6 @@ init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
           end),
         T
     end,
-    
-    %% ?debugFmt("dmerkle tree ~p", [Tree]),
     {ok, #storage{module=StorageModule,dbkey=DbKey,blocksize=BlockSize,table=Table,name=Name,tree=Tree}}.
 
 %%--------------------------------------------------------------------
@@ -191,7 +188,8 @@ handle_call({get, Key}, {RemotePid, _Tag}, State = #storage{module=Module,table=
   end;
 	
 handle_call({put, Key, Context, ValIn}, _From, State = #storage{module=Module,table=Table,tree=Tree}) ->
-  inside_process_put();
+  {Reply, NewState} = inside_process_put(Key, Context, ValIn, State),
+  {reply, Reply, NewState};
 	
 handle_call({has_key, Key}, _From, State = #storage{module=Module,table=Table}) ->
 	{reply, catch Module:has_key(sanitize_key(Key),Table), State};
@@ -261,6 +259,10 @@ handle_call(close, _From, State) ->
 %% @doc Handling cast messages
 %% @end 
 %%--------------------------------------------------------------------
+handle_cast({put, Key, Context, ValIn}, State) ->
+  {_, NewState} = inside_process_put(Key, Context, ValIn, State),
+  {noreply, NewState};
+
 handle_cast(_Msg, State) ->
   {noreply, State}.
 
@@ -305,13 +307,14 @@ load_config_into_dict(#config{buffered_writes=BufferedWrites}) ->
   put(buffered_writes, BufferedWrites).
 
 int_put(Name, Key, Context, Value, Timeout) ->
-  case get(buffered_writes) of
-    true -> gen_server:cast(Name, {put, Key, Context, Value}, Timeout);
+  Config = configuration:get_config(),
+  case Config#config.buffered_writes of
+    true -> 
+      gen_server:cast(Name, {put, Key, Context, Value});
     undefined -> gen_server:call(Name, {put, Key, Context, Value}, Timeout)
   end.
   
-inside_process_put() ->
-    %% ?debugFmt("handle_call put ~p", [Key]),
+inside_process_put(Key, Context, ValIn, State = #storage{module=Module,table=Table,tree=Tree}) ->
   Values = lib_misc:listify(ValIn),
   ?prof(outer_put),
   R = case Context of
@@ -322,15 +325,16 @@ inside_process_put() ->
           {ResolvedContext, ResolvedValues} = vector_clock:resolve({ReadContext, ReadValues}, {Context, Values}),
           internal_put(Key, ResolvedContext, ResolvedValues, Tree, Table, Module, State);
         {ok, not_found} -> internal_put(Key, Context, Values, Tree, Table, Module, State);
-        Failure -> {reply, Failure, State}
+        Failure -> {Failure, State}
       end
   end,
   ?forp(outer_put),
-  R;
+  R.
   
 % we want to pre-arrange a rendevous so as to not block the storage server
 % blocking whomever is local is perfectly ok
 stream(Name, Key, Context, Value) ->
+  Config = configuration:get_config(),
   Ref = make_ref(),
   Pid = gen_server:call(Name, {streaming_put, Ref}),
   stream:send(Pid, Ref, {{Key, Context}, lib_misc:listify(Value)}),
@@ -351,7 +355,7 @@ internal_put(Key, Context, Values, Tree, Table, Module, State) ->
       ?forp(dmerkle_update),
       T
     end,
-  TableFun = fun() -> 
+  TableFun = fun() ->
       ?prof(put),
       T = Module:put(sanitize_key(Key), vector_clock:truncate(Context), Values, Table),
       ?forp(put),
@@ -361,8 +365,8 @@ internal_put(Key, Context, Values, Tree, Table, Module, State) ->
   case TableResult of
     {ok, ModifiedTable} ->
       stats_server:request(put, iolist_size(Values)),
-      {reply, ok, State#storage{table=ModifiedTable,tree=UpdatedTree}};
-    Failure -> {reply, Failure, State}
+      {ok, State#storage{table=ModifiedTable,tree=UpdatedTree}};
+    Failure -> {Failure, State}
   end.
 
 sanitize_key(Key) when is_atom(Key) -> atom_to_list(Key);
