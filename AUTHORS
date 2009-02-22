@@ -3,6 +3,7 @@ Authors of dynomite.
  Cliff Moon <cliff@powerset.com>
  Todd Lipcon <todd@lipcon.org>
  Jason Pellerin <jpellerin@gmail.com>
+ Nick Gerakines <nick@gerakines.net>
 
 The plumbing for the couch storage engine is from the couchdb project: http://incubator.apache.org/couchdb/
 
