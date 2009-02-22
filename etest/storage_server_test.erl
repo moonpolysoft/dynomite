@@ -1,15 +1,19 @@
 -include_lib("eunit.hrl").
 
 store_conflicting_versions_test() ->
+  configuration:start_link(#config{}),
   {ok, Pid} = storage_server:start_link(dets_storage, db_key(confl), store, 0, (2 bsl 31), 4096),
   A = vector_clock:create(a),
   B = vector_clock:create(b),
   storage_server:put(Pid, "key", A, ["blah"]),
   storage_server:put(Pid, "key", B, ["blah2"]),
   ?assertMatch({ok, {_, ["blah", "blah2"]}}, storage_server:get(Pid, "key")),
+  configuration:stop(),
+  timer:sleep(1),
   storage_server:close(Pid).
 
 couch_storage_test() ->
+    configuration:start_link(#config{}),
     CouchFile = filename:join(priv_dir(), "couch"),
     {ok, State} = couch_storage:open(CouchFile, storage_test),
     {ok, St2} = couch_storage:put("key_one", context, <<"value one">>, State),
@@ -24,9 +28,12 @@ couch_storage_test() ->
     {ok, false} = couch_storage:has_key("key_one", St5),
     {ok, true} = couch_storage:has_key("key_two", St5),
     {ok, St6} = couch_storage:delete("key_two", St5),
+    configuration:stop(),
+    timer:sleep(1),
     couch_storage:close(St6).
 
 dict_storage_test() ->
+    configuration:start_link(#config{}),
     {ok, Pid} = storage_server:start_link(
                   dict_storage, db_key(dict), store, 0, (2 bsl 31), 4096),
     ?debugFmt("storage server at ~p", [Pid]),
@@ -39,9 +46,12 @@ dict_storage_test() ->
     storage_server:delete(store, "key"),
     {ok, false} = storage_server:has_key(store, "key"),
     storage_server:close(store),
+    configuration:stop(),
+    timer:sleep(1),
     receive _ -> true end.
 
 mnesia_storage_test() ->
+    configuration:start_link(#config{}),
     mnesia:stop(),
     application:set_env(mnesia, dir, priv_dir()),
     {ok, Pid} = storage_server:start_link(mnesia_storage, db_key(mnesia), store2, 0, (2 bsl 31), 4096),
@@ -63,16 +73,21 @@ mnesia_storage_test() ->
     {ok,true} = storage_server:has_key(store2, "key_two"),
     storage_server:delete(store2, "key_two"),
     exit(Pid, shutdown),
+    configuration:stop(),
+    timer:sleep(1),
     receive _ -> true end.
 
 mnesia_large_value_test() ->
+    configuration:start_link(#config{}),
     crypto:start(), %% filename generation uses crypto:sha
     mnesia:stop(),
     application:set_env(mnesia, dir, priv_dir()),
     {ok, Pid} = storage_server:start_link(mnesia_storage, db_key(mnesia), store3, 0, (2 bsl 31), 4096),
     Val = big_val(2048),
     ok = storage_server:put(store3, "key_one", [], Val),
-    {ok, {_Context, [Val]}} = storage_server:get(store3, "key_one").
+    {ok, {_Context, [Val]}} = storage_server:get(store3, "key_one"),
+    configuration:stop(),
+    timer:sleep(1).
 
 % concurrent_update_test() ->
 %   process_flag(trap_exit, true),
@@ -93,6 +108,7 @@ mnesia_large_value_test() ->
 %   receive {'EXIT', P2, _} -> ok end.
   
 rebuild_merkle_trees_test() ->
+  configuration:start_link(#config{}),
   {ok, _} = mock:mock(dmerkle),
   {ok, _} = mock:mock(dets_storage),
   mock:expects(dmerkle, open, fun(_) -> true end, {error, "Poop, fart. Balls."}),
@@ -108,9 +124,12 @@ rebuild_merkle_trees_test() ->
   mock:verify(dets_storage),
   mock:stop(dmerkle),
   mock:stop(dets_storage),
+  configuration:stop(),
+  timer:sleep(1),
   storage_server:close(Pid).
   
 streaming_put_test() ->
+  configuration:start_link(#config{}),
   {ok, _} = mock:mock(dmerkle),
   {ok, _} = mock:mock(dets_storage),
   mock:expects(dmerkle, open, fun(_) -> true end, {ok, pid}),
@@ -128,8 +147,84 @@ streaming_put_test() ->
   mock:verify(dets_storage),
   mock:stop(dmerkle),
   mock:stop(dets_storage),
+  configuration:stop(),
+  timer:sleep(1),
   storage_server:close(Pid).
   
+buffered_test_loop(Called) ->
+  receive
+    put -> buffered_test_loop(true);
+    {called, Pid} -> 
+      Pid ! {called, Called},
+      buffered_test_loop(Called)
+  end.
+  
+interrogate_test_loop(Pid) ->
+  Pid ! {called, self()},
+  receive
+    {called, Called} -> Called
+  end.
+  
+buffered_small_write_test() ->
+  configuration:start_link(#config{buffered_writes=true}),
+  {ok, _} = mock:mock(dmerkle),
+  {ok, _} = mock:mock(dets_storage),
+  mock:expects(dmerkle, open, fun(_) -> true end, {ok, pid}),
+  mock:expects(dets_storage, open, fun(_) -> true end, {ok, table}),
+  Bits = 10 * 8,
+  Bin = <<0:Bits>>,
+  % race conditions ahoy cap'n
+  Pid = spawn(fun() -> buffered_test_loop(false) end),
+  mock:expects(dets_storage, put, fun({_, _, [Val], table}) -> Val == Bin end, fun(_, _) -> 
+      timer:sleep(200), %we sleep to simulate a long write so we can test that shit returns b4 write is complete
+      ?debugMsg("processing put"),
+      Pid ! put,        %hence a buffered write.  hopefully this won't cause the cluster to explode
+      {ok, table}
+    end),
+  mock:expects(dets_storage, get, fun({Key, Table}) -> Key == "key" end, {ok, not_found}),
+  mock:expects(dmerkle, update, fun(_) -> true end, fun(_, _) -> self() end),
+  {ok, Store} = storage_server:start_link(dets_storage, db_key(buff_test), store7, 0, (2 bsl 31), 4096),
+  int_put(Store, "key", ctx, Bin, 1000),
+  ?assertEqual(false, interrogate_test_loop(Pid)),
+  timer:sleep(100), %this should work, yes?  icky.
+  mock:verify_and_stop(dmerkle),
+  mock:verify_and_stop(dets_storage),
+  ?assertEqual(true, interrogate_test_loop(Pid)),
+  exit(Pid, shutdown),
+  configuration:stop(),
+  timer:sleep(1),
+  storage_server:close(Store).
+  
+buffered_stream_write_test() ->
+  configuration:start_link(#config{buffered_writes=true}),
+  {ok, _} = mock:mock(dmerkle),
+  {ok, _} = mock:mock(dets_storage),
+  mock:expects(dmerkle, open, fun(_) -> true end, {ok, pid}),
+  mock:expects(dets_storage, open, fun(_) -> true end, {ok, table}),
+  Bits = 10000 * 8,
+  Bin = <<0:Bits>>,
+  % race conditions ahoy cap'n
+  Pid = spawn(fun() -> buffered_test_loop(false) end),
+  mock:expects(dets_storage, put, fun({_, _, [Val], table}) -> Val == Bin end, fun(_, _) -> 
+      timer:sleep(200), %we sleep to simulate a long write so we can test that shit returns b4 write is complete
+      ?debugMsg("processing put"),
+      Pid ! put,        %hence a buffered write.  hopefully this won't cause the cluster to explode
+      {ok, table}
+    end),
+  mock:expects(dets_storage, get, fun({Key, Table}) -> Key == "key" end, {ok, not_found}),
+  mock:expects(dmerkle, update, fun(_) -> true end, fun(_, _) -> self() end),
+  {ok, Store} = storage_server:start_link(dets_storage, db_key(buff_test), store7, 0, (2 bsl 31), 4096),
+  stream(Store, "key", ctx, Bin),
+  ?debugHere,
+  ?assertEqual(false, interrogate_test_loop(Pid)),
+  timer:sleep(100), %this should work, yes?  icky.
+  mock:verify_and_stop(dmerkle),
+  mock:verify_and_stop(dets_storage),
+  ?assertEqual(true, interrogate_test_loop(Pid)),
+  exit(Pid, shutdown),
+  configuration:stop(),
+  timer:sleep(1),
+  storage_server:close(Store).
 %   
 % local_fs_storage_test() ->
 %   {ok, State} = fs_storage:open("/Users/cliff/data/storage_test", storage_test),

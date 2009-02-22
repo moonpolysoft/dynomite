@@ -12,7 +12,7 @@
 -author('cliff@powerset.com').
 
 %% API
--export([mock/1, proxy_call/2, proxy_call/3, expects/4, expects/5, verify/1, stub_proxy_call/3, stub_function/4, stop/1]).
+-export([mock/1, proxy_call/2, proxy_call/3, expects/4, expects/5, verify_and_stop/1, verify/1, stub_proxy_call/3, stub_function/4, stop/1]).
 
 -include("common.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -78,6 +78,10 @@ expects(Module, Function, Args, Ret, Times) ->
   
 stub(Module, Function, Args, Ret) ->
   gen_server:call(mod_to_name(Module), {stub, Function, Args, Ret}).
+  
+verify_and_stop(Module) ->
+  verify(Module),
+  stop(Module).
   
 verify(Module) ->
   ?assertEqual(ok, gen_server:call(mod_to_name(Module), verify)).
