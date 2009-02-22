@@ -76,22 +76,27 @@ static void send_hash(ErlDrvPort port, unsigned long hash) {
 }
 
 static ErlDrvEntry fnv_driver_entry = {
-    NULL,                     /* init */
+    NULL,                             /* init */
     init, 
     stop, 
-    NULL,                     /* output */
-    NULL,                     /* ready_input */
-    NULL,                     /* ready_output */ 
-    "fnv_drv",             /* the name of the driver */
-    NULL,                     /* finish */
-    NULL,                     /* handle */
-    control,                     /* control */
-    NULL,                     /* timeout */
-    outputv,                  /* outputv */
-    NULL,                     /* ready_async */
-    NULL,                     /* flush */
-    NULL,                     /* call */
-    NULL                      /* event */
+    NULL,                             /* output */
+    NULL,                             /* ready_input */
+    NULL,                             /* ready_output */ 
+    "fnv_drv",                        /* the name of the driver */
+    NULL,                             /* finish */
+    NULL,                             /* handle */
+    control,                          /* control */
+    NULL,                             /* timeout */
+    outputv,                          /* outputv */
+    NULL,                             /* ready_async */
+    NULL,                             /* flush */
+    NULL,                             /* call */
+    NULL,                             /* event */
+    ERL_DRV_EXTENDED_MARKER,          /* ERL_DRV_EXTENDED_MARKER */
+    ERL_DRV_EXTENDED_MAJOR_VERSION,   /* ERL_DRV_EXTENDED_MAJOR_VERSION */
+    ERL_DRV_EXTENDED_MAJOR_VERSION,   /* ERL_DRV_EXTENDED_MINOR_VERSION */
+    ERL_DRV_FLAG_USE_PORT_LOCKING     /* ERL_DRV_FLAGs */
+    
 };
 
 DRIVER_INIT(fnv_driver) {

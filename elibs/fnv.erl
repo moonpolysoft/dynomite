@@ -54,12 +54,12 @@ hash(Thing) ->
   
 hash(Thing, Seed) when is_binary(Thing) ->
   P = get_or_open(),
-  convert(port_control(fnv_drv, Seed, Thing));
+  convert(port_control(P, Seed, Thing));
   % recv(P);
   
 hash(Thing, Seed) ->
   P = get_or_open(),
-  convert(port_control(fnv_drv, Seed, term_to_binary(Thing))).
+  convert(port_control(P, Seed, term_to_binary(Thing))).
   % recv(P).
 
 %%====================================================================
@@ -73,8 +73,11 @@ convert(List) ->
   Hash.
 
 get_or_open() ->
-  case whereis(fnv_drv) of
-    undefined -> {ok, P} = start(),
+  case get(fnv_drv) of
+    undefined ->
+      load_driver(),
+      P = open(),
+      put(fnv_drv, P),
       P;
     P -> P
   end.
