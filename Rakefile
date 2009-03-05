@@ -4,6 +4,8 @@ require 'rubygems'
 require 'rake'
 require 'rake/clean'
 
+VERSION = "0.5.0"
+
 ERLC_TEST_FLAGS = "-pa deps/eunit/ebin -I deps/eunit/include -DTEST"
 ERLC_FLAGS = "+debug_info -W0 -I include -pa deps/mochiweb/ebin -I deps/mochiweb/include -pa deps/rfc4627/ebin -I deps/rfc4627/include -I gen-erl/ -o ebin"
 
@@ -47,10 +49,33 @@ task :build_dist => [:build_deps] do
   # end
 end
 
+
 task :thrift_clients do
   sh "thrift --gen rb if/dynomite.thrift"
   sh "thrift -erl if/dynomite.thrift"
 end 
+
+task :release => [:default] do
+  release = "releases/dynomite-#{VERSION}"
+  puts "preparing release #{release.inspect}"
+  %w(ebin lib src include).each do |dir|
+    FileUtils.mkdir_p("#{release}/#{dir}")
+  end
+  sh "cp -r elibs/* #{release}/src" rescue nil
+  sh "cp -r ebin/* #{release}/ebin" rescue nil
+  sh "cp -r lib/* #{release}/lib" rescue nil
+  sh "cp -r include/* #{release}/include" rescue nil
+  sh "cp -r deps/thrift/src/* #{release}/src" rescue nil
+  sh "cp -r deps/thrift/ebin/* #{release}/ebin" rescue nil
+  sh "cp -r deps/thrift/include/* #{release}/include" rescue nil
+  sh "cp -r deps/thrift/priv/* #{release}/priv" rescue nil
+  sh "cp -r deps/mochiweb/src/* #{release}/src" rescue nil
+  sh "cp -r deps/mochiweb/ebin/* #{release}/ebin" rescue nil
+  sh "cp -r deps/mochiweb/include/* #{release}/include" rescue nil
+  sh "cp -r deps/mochiweb/priv/* #{release}/priv" rescue nil
+  
+  sh %Q(cd #{release} && erl -pa ebin -eval "systools:make_script(\\"dynomite_rel-#{VERSION}\\", [local])." -s init stop)
+end
 
 task :econsole do
   sh "erl +Bc +K true -smp enable -pz ./ebin -pz ./etest -pa ./deps/eunit/ebin -pa deps/rfc4627/ebin -pa deps/mochiweb/ebin -sname local_console_#{$$} -kernel"
