@@ -11,7 +11,7 @@ ERLC_FLAGS = "+debug_info -W0 -I include -pa deps/mochiweb/ebin -I deps/mochiweb
 
 CLEAN.include("ebin/*.beam")
 CLEAN.include("c/*.o")
-CLEAN.include("lib/*.so")
+CLEAN.include("priv/*.so")
 
 task :default => [:build_deps, :build_c_drivers] do
   puts "building #{ENV['TEST']}"
@@ -58,12 +58,12 @@ end
 task :release => [:default] do
   release = "releases/dynomite-#{VERSION}"
   puts "preparing release #{release.inspect}"
-  %w(ebin lib src include).each do |dir|
+  %w(ebin priv src include).each do |dir|
     FileUtils.mkdir_p("#{release}/#{dir}")
   end
   sh "cp -r elibs/* #{release}/src" rescue nil
   sh "cp -r ebin/* #{release}/ebin" rescue nil
-  sh "cp -r lib/* #{release}/lib" rescue nil
+  sh "cp -r priv/* #{release}/priv" rescue nil
   sh "cp -r include/* #{release}/include" rescue nil
   sh "cp -r deps/thrift/src/* #{release}/src" rescue nil
   sh "cp -r deps/thrift/ebin/* #{release}/ebin" rescue nil
@@ -190,14 +190,18 @@ def priv_dir
   return priv
 end
 
-DRIVERS = FileList['c/*_drv.c'].pathmap("%{c,lib}X.so")
+DRIVERS = FileList['c/*_drv.c'].pathmap("%{c,priv}X.so")
 
+<<<<<<< HEAD:Rakefile
 directory "lib"
 directory "build"
+=======
+directory "priv"
+>>>>>>> lib -> priv:Rakefile
 
-# task "lib/murmur_drv.c" => ["c/murmur.o"]
+# task "priv/murmur_drv.c" => ["c/murmur.o"]
 
-rule ".so" => ['%{lib,c}X.o', 'c/murmur.o', 'c/fnv.o'] do |t|
+rule ".so" => ['%{priv,c}X.o', 'c/murmur.o', 'c/fnv.o'] do |t|
   puts "cc #{CPPFLAGS} #{LDFLAGS} -o #{t.name} #{t.prerequisites.join(' ')} #{LIBEI}"
   sh "cc #{CPPFLAGS} #{LDFLAGS} -o #{t.name} #{t.prerequisites.join(' ')} #{LIBEI}"
 end
@@ -208,5 +212,5 @@ rule ".o" => ".c" do |t|
 end
 
 
+task :build_c_drivers => [:c_env, "priv"] + DRIVERS
 
-task :build_c_drivers => [:c_env, "lib"] + DRIVERS

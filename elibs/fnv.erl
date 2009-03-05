@@ -86,7 +86,7 @@ open() ->
   open_port({spawn, fnv_drv}, [binary]).
 
 load_driver() ->
-  Dir = filename:join([filename:dirname(code:which(?MODULE)), "..", "lib"]),
+  Dir = filename:join([filename:dirname(code:which(?MODULE)), "..", "priv"]),
   erl_ddll:load(Dir, "fnv_drv").
 
 recv(P) ->

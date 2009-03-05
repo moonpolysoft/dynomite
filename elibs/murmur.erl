@@ -68,7 +68,7 @@ open() ->
   P.
 
 load_driver() ->
-  Dir = filename:join([filename:dirname(code:which(?MODULE)), "..", "lib"]),
+  Dir = filename:join([filename:dirname(code:which(?MODULE)), "..", "priv"]),
   erl_ddll:load(Dir, "murmur_drv").
 
 recv(P) ->
