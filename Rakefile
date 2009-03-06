@@ -4,7 +4,7 @@ require 'rubygems'
 require 'rake'
 require 'rake/clean'
 
-VERSION = "0.5.0"
+VERSION = ENV["VERSION"]
 
 ERLC_TEST_FLAGS = "-pa deps/eunit/ebin -I deps/eunit/include -DTEST"
 ERLC_FLAGS = "+debug_info -W0 -I include -pa deps/mochiweb/ebin -I deps/mochiweb/include -pa deps/rfc4627/ebin -I deps/rfc4627/include -I gen-erl/ -o ebin"
@@ -56,10 +56,16 @@ task :thrift_clients do
 end 
 
 task :release => [:default] do
+  rel_file_contents = File.read("releases/dynomite.rel").gsub(/\?VERSION/, VERSION)
+
   release = "releases/dynomite-#{VERSION}"
+  rel_file = "#{release}/dynomite_rel-#{VERSION}.rel"
   puts "preparing release #{release.inspect}"
   %w(ebin priv src include).each do |dir|
     FileUtils.mkdir_p("#{release}/#{dir}")
+  end
+  File.open(rel_file, 'w') do |f|
+    f.print(rel_file_contents)
   end
   sh "cp -r elibs/* #{release}/src" rescue nil
   sh "cp -r ebin/* #{release}/ebin" rescue nil
@@ -74,7 +80,7 @@ task :release => [:default] do
   sh "cp -r deps/mochiweb/include/* #{release}/include" rescue nil
   sh "cp -r deps/mochiweb/priv/* #{release}/priv" rescue nil
   
-  sh %Q(cd #{release} && erl -pa ebin -eval "systools:make_script(\\"dynomite_rel-#{VERSION}\\", [local])." -s init stop)
+  sh %Q(cd #{release} && erl -pa ./ebin -eval "systools:make_script(\\"dynomite_rel-#{VERSION}\\", [local])." -eval "systools:make_tar(\\"dynomite_rel-#{VERSION}\\")." -s init stop)
 end
 
 task :econsole do

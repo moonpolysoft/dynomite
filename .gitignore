@@ -14,3 +14,4 @@ servers.rb
 priv/*.so
 c/*.o
 build/*
+releases/dynomite-*

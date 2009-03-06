@@ -1,0 +1,11 @@
+{release, 
+  {"dynomite_rel", "?VERSION"},
+  {erts, "5.6.3"},
+  [
+    {kernel, "2.12.3"},
+    {crypto, "1.5.2"},
+    {stdlib, "1.15.3"},
+    {sasl, "2.1.5.3"},
+    {dynomite, "0.6.0"}
+  ]
+}.
