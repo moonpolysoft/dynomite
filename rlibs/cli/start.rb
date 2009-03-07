@@ -52,4 +52,5 @@ str = "erl \
   #{options[:profile]}"
 puts str
 exec str
-  # -run dynomite start \
+
+  #  -boot #{ROOT}/releases/0.5.0/dynomite_rel \
