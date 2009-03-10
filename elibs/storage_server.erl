@@ -20,7 +20,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(storage, {module,table,name,tree,dbkey,blocksize}).
+-record(storage, {module,table,name,tree,dbkey,blocksize,cache}).
 
 -include("chunk_size.hrl").
 -include("common.hrl").
@@ -154,7 +154,17 @@ init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
           end),
         T
     end,
-    {ok, #storage{module=StorageModule,dbkey=DbKey,blocksize=BlockSize,table=Table,name=Name,tree=Tree}}.
+    Storage = #storage{module=StorageModule,dbkey=DbKey,blocksize=BlockSize,table=Table,name=Name,tree=Tree},
+    case Config#config.cache of
+      true ->
+        case (catch cherly:start(Config#config.cache_size)) of
+          {ok, C} -> {ok, Storage#storage{cache=C}};
+          Error -> 
+            ?infoFmt("Cache start failed: ~p~n", [Error]),
+            {ok, Storage}
+        end;
+      _ -> {ok, Storage}
+    end.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -167,9 +177,13 @@ init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
 %% @doc Handling call messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_call({get, Key}, {RemotePid, _Tag}, State = #storage{module=Module,table=Table}) ->
+handle_call({get, Key}, {RemotePid, _Tag}, State = #storage{module=Module,table=Table,cache=C}) ->
   ?prof(get),
-  Result = (catch Module:get(sanitize_key(Key), Table)),
+  Result = case cache_get(C, sanitize_key(Key)) of
+    {ok, [CtxBin|V]} -> {ok, {binary_to_term(CtxBin), V}};
+    _Err -> 
+      (catch Module:get(sanitize_key(Key), Table))
+  end,
   ?forp(get),
   case Result of
     {ok, {Context, Values}} -> 
@@ -191,14 +205,19 @@ handle_call({put, Key, Context, ValIn}, _From, State = #storage{module=Module,ta
   {Reply, NewState} = inside_process_put(Key, Context, ValIn, State),
   {reply, Reply, NewState};
 	
-handle_call({has_key, Key}, _From, State = #storage{module=Module,table=Table}) ->
-	{reply, catch Module:has_key(sanitize_key(Key),Table), State};
+handle_call({has_key, Key}, _From, State = #storage{module=Module,table=Table,cache=C}) ->
+  Reply = case cache_get(C, sanitize_key(Key)) of
+    {ok, Result} -> {ok, true};
+    _ -> (catch Module:has_key(sanitize_key(Key),Table))
+  end,
+	{reply, Reply, State};
 	
-handle_call({delete, Key}, _From, State = #storage{module=Module,table=Table,tree=Tree}) ->
+handle_call({delete, Key}, _From, State = #storage{module=Module,table=Table,tree=Tree,cache=C}) ->
   UpdatedTree = if
     Tree == undefined -> undefined;
     true -> dmerkle:delete(Key, Tree)
   end,
+  cache_remove(C, sanitize_key(Key)),
   case catch Module:delete(sanitize_key(Key), Table) of
     {ok, ModifiedTable} -> 
       {reply, ok, State#storage{table=ModifiedTable,tree=Tree}};
@@ -284,12 +303,13 @@ handle_info(_Info, State) ->
 %% The return value is ignored.
 %% @end 
 %%--------------------------------------------------------------------
-terminate(_Reason, #storage{module=Module,table=Table,tree=Tree}) ->
+terminate(_Reason, #storage{module=Module,table=Table,tree=Tree,cache=C}) ->
   Module:close(Table),
   if
     Tree == undefined -> ok;
     true -> dmerkle:close(Tree)
-  end.
+  end,
+  cache_stop(C).
 
 %%--------------------------------------------------------------------
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
@@ -350,7 +370,7 @@ internal_put(Key, Context, Values, Tree, Table, Module, State) ->
       T = if
         Tree == undefined -> Tree;
         true -> 
-          dmerkle:update(Key, Values, Tree)
+          dmerkle:update(sanitize_key(Key), Values, Tree)
       end,
       ?forp(dmerkle_update),
       T
@@ -361,13 +381,33 @@ internal_put(Key, Context, Values, Tree, Table, Module, State) ->
       ?forp(put),
       T
     end,
-  [UpdatedTree, TableResult] = lib_misc:pmap(fun(F) -> F() end, [TreeFun, TableFun], 2),
+  CacheFun = fun() ->
+      cache_put(State#storage.cache, sanitize_key(Key), [term_to_binary(vector_clock:truncate(Context)), Values])
+    end,
+  [UpdatedTree, TableResult, _] = lib_misc:pmap(fun(F) -> F() end, [TreeFun, TableFun, CacheFun], 3),
   case TableResult of
     {ok, ModifiedTable} ->
       stats_server:request(put, iolist_size(Values)),
       {ok, State#storage{table=ModifiedTable,tree=UpdatedTree}};
     Failure -> {Failure, State}
   end.
+
+cache_put(undefined, _, _) -> ok;
+cache_put(C, Key, Values) ->
+  cherly:put(C, Key, Values).
+
+cache_get(undefined, _) -> not_found;
+cache_get(C, Key) ->
+  cherly:get(C, Key).
+  
+cache_remove(undefined, _) -> ok;
+cache_remove(C, Key) ->
+  cherly:remove(C, Key).
+  
+cache_stop(undefined) -> ok;
+cache_stop(C) ->
+  cherly:stop(C).
+  
 
 sanitize_key(Key) when is_atom(Key) -> atom_to_list(Key);
 sanitize_key(Key) when is_binary(Key) -> binary_to_list(Key);

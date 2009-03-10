@@ -225,6 +225,23 @@ buffered_stream_write_test() ->
   configuration:stop(),
   timer:sleep(1),
   storage_server:close(Store).
+  
+caching_test() ->
+  configuration:start_link(#config{cache=true,cache_size=120}),
+  {ok, _} = mock:mock(dmerkle),
+  {ok, _} = mock:mock(dets_storage),
+  mock:expects(dmerkle, open, fun(_) -> true end, {ok, pid}),
+  mock:expects(dets_storage, open, fun(_) -> true end, {ok, table}),
+  mock:expects(dets_storage, get, fun({Key, Table}) -> Key == "key" end, {ok, not_found}),
+  mock:expects(dets_storage, put, fun({_, _, _, table}) -> true end, {ok, table}),
+  mock:expects(dmerkle, update, fun(_) -> true end, fun(_, _) -> self() end),
+  {ok, Store} = storage_server:start_link(dets_storage, db_key(cache_put_test), store8, 0, (2 bsl 31), 4096),
+  Clock = vector_clock:create(something),
+  storage_server:put(Store, "key", Clock, <<"value">>),
+  Ret = storage_server:get(Store, "key"),
+  ?debugFmt("ret ~p", [Ret]),
+  ?assertEqual({ok, {Clock, [<<"value">>]}}, Ret),
+  storage_server:close(Store).
 %   
 % local_fs_storage_test() ->
 %   {ok, State} = fs_storage:open("/Users/cliff/data/storage_test", storage_test),
