@@ -32,14 +32,14 @@
 partition_range(Q) -> ?power_2(32-Q).
 
 create_partitions(Q, Node, Nodes) ->
-  NodeHashes = lists:map(fun(Name) -> node_hash(Name, Nodes, ?power_2(32)) end, Nodes),
   P = lists:map(fun(P) -> {Node, P} end, lists:seq(1, ?power_2(32), partition_range(Q))),
-  map_partitions(P, NodeHashes, Nodes, []).
+  map_partitions(P, Nodes).
   
 map_partitions(Partitions, Nodes) ->
-  {_, Max} = lists:last(Partitions),
-  NodeHashes = lists:map(fun(Name) -> node_hash(Name, Nodes, Max) end, Nodes),
-  map_partitions(Partitions, NodeHashes, Nodes, []).
+  {_, Parts} = lists:unzip(Partitions),
+  ConsHashMap = hash_map(Nodes),
+  % ?debugFmt("conshashmap ~p", [ConsHashMap]),
+  do_map(ConsHashMap, Parts).
   
 diff(From, To) when length(From) =/= length(To) ->
   throw("Cannot diff partition maps with different length");
@@ -57,6 +57,38 @@ diff([{Node,Part}|PartsA], [{Node,Part}|PartsB], Results) ->
   
 diff([{NodeA,Part}|PartsA], [{NodeB,Part}|PartsB], Results) ->
   diff(PartsA, PartsB, [{NodeA,NodeB,Part}|Results]).
+
+hash_map(List) ->
+  hash_map(List, []).
+  
+hash_map([], Acc) -> lists:keysort(1, Acc);
+
+hash_map([Item|List], Acc) ->
+  hash_map(List, hash_map(500, Item, [{murmur:hash(Item),Item}|Acc])).
+  
+hash_map(0, Item, Acc) ->
+  Acc;
+  
+hash_map(N, Item, [{Seed,Item}|Acc]) ->
+  hash_map(N-1, Item, [{murmur:hash(Item,Seed),Item},{Seed,Item}|Acc]).
+
+do_map([{Hash,Node}|ConsHashMap], Parts) ->
+  do_map({Hash,Node}, [{Hash,Node}|ConsHashMap], Parts, []).
+  
+do_map({Hash,Node}, [], Parts, Mapped) ->
+  lists:keysort(2, lists:map(fun(Part) -> {Node,Part} end, Parts) ++ Mapped);
+  
+do_map(_, _, [], Mapped) ->
+  lists:keysort(2, Mapped);
+  
+do_map(First, ConsHashMap, [Part|Parts], Mapped) ->
+  % ?debugFmt("do_map ~p, ConsHashMap, [~p|~p], ~p", [First, Part, Parts, Mapped]),
+  case ConsHashMap of
+    [{Hash,Node}|Rest] when Part =< Hash ->
+      do_map(First, ConsHashMap, Parts, [{Node,Part}|Mapped]);
+    [_|Rest] ->
+      do_map(First, Rest, [Part|Parts], Mapped)
+  end.
 
 map_partitions([], _, _, Results) ->
   lists:reverse(Results);
