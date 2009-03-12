@@ -50,9 +50,9 @@ namespace :dynomite do
     end
 
     task :data_reset, :roles => :dyn do
-      run "rm -rf dyn-int-data dyn-int-log"
-      run "mkdir dyn-int-data"
-      run "mkdir dyn-int-log"
+      run "rm -rf dyn-int-data dyn-int-log/*"
+      run "mkdir -p dyn-int-data"
+      run "mkdir -p dyn-int-log"
     end
     
     task :config, :roles => :dyn do
