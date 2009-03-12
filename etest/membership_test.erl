@@ -57,8 +57,7 @@ test_join_one_node() ->
   membership:join_node(node(), node_a),
   Partitions = membership:partitions(),
   {A, B} = lists:partition(fun({Node,_}) -> Node == node() end, Partitions),
-  ?assertEqual(32, length(A)),
-  ?assertEqual(32, length(B)),
+  ?assertEqual(64, length(A) + length(B)),
   membership:stop(),
   verify().
 
@@ -67,11 +66,13 @@ test_membership_gossip_cluster_collision() ->
   mock:expects(storage_manager, load, fun({_, _, P}) -> is_list(P) end, ok, 3),
   {ok, _} = membership:start_link(mem_a, a, [a]),
   {ok, _} = membership:start_link(mem_b, b, [b]),
-  gen_server:call(mem_a, {gossip_with, mem_b}),
+  gen_server:cast(mem_a, {gossip_with, mem_b}),
+  timer:sleep(10),
   Partitions = gen_server:call(mem_a, partitions),
   {A, B} = lists:partition(fun({Node,_}) -> Node == a end, Partitions),
-  ?assertEqual(32, length(A)),
-  ?assertEqual(32, length(B)),
+  ?assertEqual(64, length(A) + length(B)),
+  ?assert(length(A) > 0),
+  ?assert(length(B) > 0),
   membership:stop(mem_a),
   membership:stop(mem_b),
   verify().
@@ -86,14 +87,14 @@ test_nodes_for_partition() ->
   C = configuration:get_config(),
   configuration:set_config(C#config{n=3}),
   {ok, _} = membership:start_link(a, [a, b, c, d, e, f]),
-  ?assertEqual([a,b,c], nodes_for_partition(1)).
+  ?assertEqual([d,e,f], nodes_for_partition(1)).
   
 test_servers_for_key() ->
   C = configuration:get_config(),
   configuration:set_config(C#config{n=3}),
   {ok, _} = membership:start_link(a, [a, b, c, d, e, f]),
   % 25110333
-  ?assertEqual([{storage_1, a}, {storage_1, b}, {storage_1, c}], servers_for_key("key")).
+  ?assertEqual([{storage_1, d}, {storage_1, e}, {storage_1, f}], servers_for_key("key")).
   
 test_initial_partition_setup() ->
   {ok, _} = membership:start_link(a, [a, b, c, d, e, f]),
@@ -117,6 +118,9 @@ test_partitions_for_node_master() ->
   {ok, _} = membership:start_link(a, [a,b,c,d,e,f]),
   Parts = partitions_for_node(a, master),
   ?assertEqual(10, length(Parts)).
+  
+test_gossip_server() ->
+  ok.
 
 test_setup() ->
   configuration:start_link(#config{n=1,r=1,w=1,q=6,directory=priv_dir()}),

@@ -37,8 +37,10 @@ test_loadout_change() ->
 test_unload_servers() ->
   P1 = partitions:create_partitions(1, a, [a]),
   P2 = partitions:create_partitions(1, a, [a, b]),
+  ?debugFmt("p1 ~p", [P1]),
+  ?debugFmt("p2 ~p", [P2]),
   expect_start_servers([sync_1,sync_2147483649]),
-  expect_stop_servers([sync_2147483649]),
+  expect_stop_servers([sync_1,sync_2147483649]),
   sync_manager:load(b, P1, p_for_n(a, P1)),
   sync_manager:load(a, P2, p_for_n(a, P2)),
   verify().

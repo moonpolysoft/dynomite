@@ -86,7 +86,7 @@ stop(Server) ->
 
 fire_gossip(Node) when is_atom(Node) ->
   ?infoFmt("firing gossip at ~p~n", [Node]),
-	gen_server:call(membership, {gossip_with, {membership, Node}}).
+	gen_server:cast(membership, {gossip_with, {membership, Node}}).
 
 %%====================================================================
 %% gen_server callbacks
@@ -137,21 +137,6 @@ handle_call({join_node, Node}, {_, _From}, State) ->
   sync_manager:load(Nodes, Parts, int_partitions_for_node(Node1, NewState, all)),
   save_state(NewState),
 	{reply, {ok, NewState}, NewState};
-
-handle_call({gossip_with, Server}, From, State = #membership{nodes = Nodes}) ->
-  % error_logger:info_msg("firing gossip at ~p~n", [Node]),
-
-  % share our state with target node - expects a response back, but we don't
-  % want to wait for it
-  Self = self(),
-  GosFun =
-    fun() ->
-        {ok, RemoteState} = gen_server:call(Server, {share, State}),
-        {ok, ModState} = gen_server:call(Self, {share, RemoteState}),
-        gen_server:reply(From, {ok, ModState})
-    end,
-  spawn_link(GosFun),
-  {noreply, State};
 %%
 % Another node is sharing their state with us. Need to merge them in
 % and reply with the merged state
@@ -201,6 +186,20 @@ handle_call(stop, _From, State) ->
 %% @doc Handling cast messages
 %% @end 
 %%--------------------------------------------------------------------
+handle_cast({gossip_with, Server}, State = #membership{nodes = Nodes}) ->
+  % share our state with target node - expects a response back, but we don't
+  % want to wait for it
+  Self = self(),
+  GosFun =
+    fun() ->
+        ?infoFmt("start gossip at ~p~n", [lib_misc:now_float()]),
+        {ok, RemoteState} = gen_server:call(Server, {share, State}),
+        {ok, ModState} = gen_server:call(Self, {share, RemoteState}),
+        ?infoFmt("end gossip at ~p~n", [lib_misc:now_float()])
+    end,
+  spawn_link(GosFun),
+  {noreply, State};
+  
 handle_cast(stop, State) ->
     {stop, shutdown, State}.
 
@@ -212,7 +211,8 @@ handle_cast(stop, State) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_info(_Info, State) ->
-    {noreply, State}.
+  ?infoFmt("membership server got info ~p~n", [_Info]),
+  {noreply, State}.
 
 %%--------------------------------------------------------------------
 %% @spec terminate(Reason, State) -> void()
@@ -242,14 +242,16 @@ gossip_loop(Server) ->
   case lists:delete(Node, Nodes) of
     [] -> ok; % no other nodes
     Nodes1 when is_list(Nodes1) ->
-      ?infoFmt("nodes1 ~p", [Nodes1]),
       fire_gossip(random_node(Nodes1))
   end,
+  SleepTime = random:uniform(5000) + 5000,
+  ?infoFmt("gossip sleep time ~p~n", [SleepTime]),
   receive
     stop -> gossip_paused(Server);
     _Val -> ok
+  after SleepTime -> 
+    ok
   end,
-  timer:sleep(random:uniform(5000) + 5000),
   gossip_loop(Server).
   
 gossip_paused(Server) ->
