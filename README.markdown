@@ -25,5 +25,5 @@ TL;DR Getting Started
 	git submodule init
 	git submodule update
 	rake
-	./bin/dynomite start -m ~/some/data/dir -n 1 -r 1 -w 1
+	./bin/dynomite start
 	
