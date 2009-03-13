@@ -47,6 +47,10 @@ task :build_dist => [:build_deps] do
   # end
 end
 
+task :build_tarball => [:default, 'build'] do
+  sh "pushd .. && tar czvf dynomite/build/dynomite.tar.tgz --exclude dynomite/build ./dynomite && popd"
+end
+
 task :econsole do
   sh "erl +Bc +K true -smp enable -pz ./ebin -pz ./etest -pa ./deps/eunit/ebin -pa deps/rfc4627/ebin -pa deps/mochiweb/ebin -sname local_console_#{$$} -kernel"
 end
@@ -159,6 +163,7 @@ end
 DRIVERS = FileList['c/*_drv.c'].pathmap("%{c,lib}X.so")
 
 directory "lib"
+directory "build"
 
 # task "lib/murmur_drv.c" => ["c/murmur.o"]
 
