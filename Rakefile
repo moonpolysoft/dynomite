@@ -198,12 +198,8 @@ end
 
 DRIVERS = FileList['c/*_drv.c'].pathmap("%{c,priv}X.so")
 
-<<<<<<< HEAD:Rakefile
-directory "lib"
 directory "build"
-=======
 directory "priv"
->>>>>>> lib -> priv:Rakefile
 
 # task "priv/murmur_drv.c" => ["c/murmur.o"]
 
