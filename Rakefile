@@ -47,10 +47,6 @@ task :build_dist => [:build_deps] do
   # end
 end
 
-task :build_tarball => [:default, 'build'] do
-  sh "pushd .. && tar czvf dynomite/build/dynomite.tar.tgz --exclude dynomite/build ./dynomite && popd"
-end
-
 task :econsole do
   sh "erl +Bc +K true -smp enable -pz ./ebin -pz ./etest -pa ./deps/eunit/ebin -pa deps/rfc4627/ebin -pa deps/mochiweb/ebin -sname local_console_#{$$} -kernel"
 end
@@ -132,6 +128,10 @@ end
 
 task :build_test_deps do
   sh "erlc +debug_info -I include #{ERLC_TEST_FLAGS} -o etest etest/t.erl etest/mock_genserver.erl etest/mock.erl"
+end
+
+task :build_tarball => [:default, 'build'] do
+  sh "pushd .. && tar czvf dynomite/build/dynomite.tar.tgz --exclude dynomite/build ./dynomite && popd"
 end
 
 task :test_config do
