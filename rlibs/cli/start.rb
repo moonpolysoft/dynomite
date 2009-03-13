@@ -13,7 +13,7 @@ OptionParser.new do |opts|
   opts.separator "Specific options:"
   
   opts.on("-c", "--config [CONFIGFILE]", "path to the config file") do |config|
-    options[:config] = %Q(-dynomite config "#{config}")
+    options[:config] = %Q(-dynomite config "\\"#{config}\\"")
   end
   
   opts.on("-l", "--log [LOGFILE]", "error log path") do |log|
@@ -48,6 +48,7 @@ str = "erl \
   #{options[:jointo]} \
   -setcookie #{cookie} \
   -run dynomite start \
-  #{options[:detached]}"
+  #{options[:detached]} \
+  #{options[:profile]}"
 puts str
 exec str
