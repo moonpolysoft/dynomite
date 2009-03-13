@@ -47,6 +47,11 @@ task :build_dist => [:build_deps] do
   # end
 end
 
+task :thrift_clients do
+  sh "thrift --gen rb if/dynomite.thrift"
+  sh "thrift -erl if/dynomite.thrift"
+end 
+
 task :econsole do
   sh "erl +Bc +K true -smp enable -pz ./ebin -pz ./etest -pa ./deps/eunit/ebin -pa deps/rfc4627/ebin -pa deps/mochiweb/ebin -sname local_console_#{$$} -kernel"
 end
