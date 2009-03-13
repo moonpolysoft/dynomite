@@ -25,5 +25,5 @@ TL;DR Getting Started
 	git submodule init
 	git submodule update
 	rake
-	./bin/dynomite start
+	./bin/dynomite start -c config.json
 	
