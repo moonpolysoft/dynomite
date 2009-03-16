@@ -7,6 +7,8 @@ analyze_dynomite <- function(path) {
 		data <- rbind(data, d)
 	}
 	print(summary(data))
+	print("reqs/s")
+	print(length(data$method) / (max(data$time) - min(data$time)))
 	graph_dynomite(data)
 }
 
