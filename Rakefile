@@ -136,7 +136,7 @@ task :build_test_deps do
 end
 
 task :build_tarball => [:default, 'build'] do
-  sh "pushd .. && tar czvf dynomite/build/dynomite.tar.tgz --exclude dynomite/build ./dynomite && popd"
+  sh "wd=$(pwd) && cd ./.. && tar czvf dynomite/build/dynomite.tar.tgz --exclude dynomite/build ./dynomite && (cd \"$wd\")"
 end
 
 task :test_config do
