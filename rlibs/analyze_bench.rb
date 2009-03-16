@@ -65,7 +65,7 @@ def get_stats(dir)
       put_num += 1
     end
   end
-
+  stats.sort! {|a, b| a.first <=> b.first }
 
   get_avg = get_sum.to_f / get_num
   put_avg = put_sum.to_f / put_num
@@ -78,6 +78,8 @@ def get_stats(dir)
   put_999 = puts.percentile(0.999)
   OpenStruct.new(
     :dir => dir,
+    :min_time => stats.first[0].to_f,
+    :max_time => stats.last[0].to_f,
     :get_length => gets.length,
     :get_avg => get_avg,
     :get_median => get_median,
@@ -108,4 +110,5 @@ else
   puts "\tavg: #{stats.put_avg}"
   puts "\tmed: #{stats.put_median}"
   puts "\t99.9:#{stats.put_999}"
+  puts "#{(stats.put_length + stats.get_length) / (stats.max_time - stats.min_time)} reqs/s"
 end
