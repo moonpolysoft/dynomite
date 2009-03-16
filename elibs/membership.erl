@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/3, start_link/2, join_node/2, nodes_for_partition/1, replica_nodes/1, servers_for_key/1, nodes_for_key/1, partitions/0, nodes/0, state/0, partitions_for_node/2, fire_gossip/1, partition_for_key/1, stop/0, stop/1, range/1]).
+-export([start_link/3, start_link/2, join_node/2, nodes_for_partition/1, replica_nodes/1, servers_for_key/1, nodes_for_key/1, partitions/0, nodes/0, state/0, partitions_for_node/2, fire_gossip/1, partition_for_key/1, stop/0, stop/1, range/1, status/0, stop_gossip/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -85,8 +85,14 @@ stop(Server) ->
   gen_server:cast(Server, stop).
 
 fire_gossip(Node) when is_atom(Node) ->
-  ?infoFmt("firing gossip at ~p~n", [Node]),
+  % ?infoFmt("firing gossip at ~p~n", [Node]),
 	gen_server:cast(membership, {gossip_with, {membership, Node}}).
+	
+status() ->
+  gen_server:call(membership, status).
+  
+stop_gossip() ->
+  gossip ! stop.
 
 %%====================================================================
 %% gen_server callbacks
@@ -107,12 +113,14 @@ init([Node, Nodes]) ->
   ?infoMsg("Saving membership data.~n"),
   save_state(State),
   ?infoMsg("Loading storage servers.~n"),
-  storage_manager:load(Node, Nodes, int_partitions_for_node(Node, State, all)),
+  storage_manager:load(Nodes, State#membership.partitions, int_partitions_for_node(Node, State, all)),
   ?infoMsg("Loading sync servers.~n"),
-  sync_manager:load(Node, Nodes, int_partitions_for_node(Node, State, all)),
+  sync_manager:load(Nodes, State#membership.partitions, int_partitions_for_node(Node, State, all)),
   ?infoMsg("Starting membership gossip.~n"),
   Self = self(),
   GossipPid = spawn_link(fun() -> gossip_loop(Self) end),
+  % register(gossip, GossipPid),
+  % GossipPid = ok,
   % timer:apply_after(random:uniform(1000) + 1000, membership, fire_gossip, [random:seed()]),
   ?infoMsg("Initialized.~n"),
   {ok, State#membership{gossip=GossipPid}}.
@@ -175,6 +183,10 @@ handle_call({partitions_for_node, Node, Option}, _From, State) ->
   
 handle_call({partition_for_key, Key}, _From, State) ->
   {reply, int_partition_for_key(Key, State), State};
+  
+handle_call(status, _From, State = #membership{node = Node, nodes=Nodes, partitions=Partitions, version=Version}) ->
+  Reply = [{node,Node},{nodes,Nodes},{distribution, partitions:sizes(Nodes, Partitions)},{version,Version},{storage_servers,storage_manager:loaded()}],
+  {reply, Reply, State};
 	
 handle_call(stop, _From, State) ->
   {stop, shutdown, ok, State}.
@@ -186,16 +198,27 @@ handle_call(stop, _From, State) ->
 %% @doc Handling cast messages
 %% @end 
 %%--------------------------------------------------------------------
+handle_cast({state, NewState = #membership{node=Node,nodes=Nodes}}, State) ->
+  %straight up replace our state
+  Merged = NewState#membership{node=State#membership.node,gossip=State#membership.gossip},
+  storage_manager:load(Nodes, Merged#membership.partitions, int_partitions_for_node(State#membership.node, Merged, all)),
+  sync_manager:load(Nodes, Merged#membership.partitions, int_partitions_for_node(State#membership.node, Merged, all)),
+  save_state(Merged),
+  {noreply, Merged};
+
 handle_cast({gossip_with, Server}, State = #membership{nodes = Nodes}) ->
-  % share our state with target node - expects a response back, but we don't
-  % want to wait for it
   Self = self(),
   GosFun =
     fun() ->
-        ?infoFmt("start gossip at ~p~n", [lib_misc:now_float()]),
-        {ok, RemoteState} = gen_server:call(Server, {share, State}),
-        {ok, ModState} = gen_server:call(Self, {share, RemoteState}),
-        ?infoFmt("end gossip at ~p~n", [lib_misc:now_float()])
+        RemoteState = gen_server:call(Server, state),
+        case vector_clock:compare(RemoteState#membership.version, State#membership.version) of
+          equal -> %no gossip needed
+            ok;
+          _ -> % we should merge the results here.
+            Merged = merge_states(State, RemoteState),
+            gen_server:cast(Server, {state, Merged}),
+            gen_server:cast(Self, {state, Merged})
+        end
     end,
   spawn_link(GosFun),
   {noreply, State};
@@ -211,7 +234,6 @@ handle_cast(stop, State) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_info(_Info, State) ->
-  ?infoFmt("membership server got info ~p~n", [_Info]),
   {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -245,7 +267,6 @@ gossip_loop(Server) ->
       fire_gossip(random_node(Nodes1))
   end,
   SleepTime = random:uniform(5000) + 5000,
-  ?infoFmt("gossip sleep time ~p~n", [SleepTime]),
   receive
     stop -> gossip_paused(Server);
     _Val -> ok
@@ -334,20 +355,28 @@ create_initial_state(Node, Nodes, Config) ->
 	  nodes=Nodes}.
 
 merge_states(StateA, StateB) ->
-  PartA = StateA#membership.partitions,
-  PartB = StateB#membership.partitions,
-  Config = configuration:get_config(),
-  Nodes = lists:usort(StateA#membership.nodes ++ StateB#membership.nodes),
-  Partitions = partitions:map_partitions(PartA, Nodes),
-  % error_logger:info_msg("Merged nodes ~p and partitions ~p~n", [Nodes, length(Partitions)]),
-  ?infoFmt("merge states setting node to ~p", [StateA#membership.node]),
-  #membership{
-    version=vector_clock:merge(StateA#membership.version, StateB#membership.version),
-    nodes=Nodes,
-    node=StateA#membership.node,
-    partitions=Partitions,
-    gossip=StateA#membership.gossip
-  }.
+  Merged =
+    case vector_clock:compare(StateA#membership.version, StateB#membership.version) of
+      less -> % remote state is strictly newer than ours
+        StateB;
+      greater -> % remote state is strictly older
+        StateA;
+      equal -> % same vector clock
+        StateA;
+      concurrent -> % must merge
+        PartA = StateA#membership.partitions,
+        PartB = StateB#membership.partitions,
+        Config = configuration:get_config(),
+        Nodes = lists:usort(StateA#membership.nodes ++ StateB#membership.nodes),
+        Partitions = partitions:map_partitions(PartA, Nodes),
+        #membership{
+          version=vector_clock:merge(StateA#membership.version, StateB#membership.version),
+          nodes=Nodes,
+          node=StateA#membership.node,
+          partitions=Partitions,
+          gossip=StateA#membership.gossip
+        }
+  end.
 
 % Merges in another state, reloads any storage
 % and sync servers that changed, saves state
@@ -367,8 +396,8 @@ merge_and_save_state(RemoteState, State) ->
         merge_states(RemoteState, State)
   end,
   #membership{node=Node,nodes=Nodes,partitions=Parts} = Merged,
-  storage_manager:load(Node, Nodes, int_partitions_for_node(Node, Merged, all)),
-  sync_manager:load(Node, Nodes, int_partitions_for_node(Node, Merged, all)),
+  storage_manager:load(Nodes, Parts, int_partitions_for_node(Node, Merged, all)),
+  sync_manager:load(Nodes, Parts, int_partitions_for_node(Node, Merged, all)),
   save_state(Merged),
   {ok, Merged}.
 
