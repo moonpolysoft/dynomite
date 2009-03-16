@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, load/3, stop/0]).
+-export([start_link/0, load/3, loaded/0, stop/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -40,8 +40,11 @@
 start_link() ->
   gen_server:start_link({local, storage_manager}, ?MODULE, [], []).
   
-load(Node, Partitions, PartsForNode) ->
-  gen_server:call(storage_manager, {load, Node, Partitions, PartsForNode}).
+load(Nodes, Partitions, PartsForNode) ->
+  gen_server:call(storage_manager, {load, Nodes, Partitions, PartsForNode}).
+  
+loaded() ->
+  gen_server:call(storage_manager, loaded).
   
 stop() ->
   gen_server:cast(storage_manager, stop).
@@ -72,6 +75,9 @@ init([]) ->
 %% @doc Handling call messages
 %% @end 
 %%--------------------------------------------------------------------
+handle_call(loaded, _From, State) ->
+  {reply, [Name || {registered_name, Name} <- [erlang:process_info(Pid, registered_name) || Pid <- storage_server_sup:storage_servers()]], State};
+
 handle_call({load, Nodes, Partitions, PartsForNode}, _From, #state{partitions=OldPartitions,parts_for_node=OldPartsForNode}) ->
   Partitions1 = lists:filter(fun(E) ->
       not lists:member(E, OldPartsForNode)
