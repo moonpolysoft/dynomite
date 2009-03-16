@@ -3,7 +3,7 @@
 %%! +K true +A 128 +P 60000 -smp enable -sname benchmark -pa ./ebin -pa ./deps/thrift/ebin
 -mode(compile).
 
--record(config, {hosts=[],concurrency=20,ratio=0.5,logdir="bench_log",size=100,keyspace=100000}).
+-record(config, {hosts=[],concurrency=20,ratio=0.5,logdir="bench_log",size=100,keyspace=100000,method=thrift}).
 
 main(Options) ->
   code:add_pathsa(["./ebin", "./deps/thrift/ebin"]),
@@ -34,7 +34,7 @@ spawn_workers(Data, Config, [Host|Hosts], N) ->
     end),
   spawn_workers(Data, Config, Hosts, N-1).
   
-worker(#config{logdir=Logdir,ratio=Ratio}, Host, Data) ->
+worker(#config{logdir=Logdir,ratio=Ratio,method=Method}, Host, Data) ->
   io:format("starting worker for ~p~n", [Host]),
   {Mega, Sec, Micro} = now(),
   random:seed(Mega, Sec, Micro),
@@ -42,8 +42,11 @@ worker(#config{logdir=Logdir,ratio=Ratio}, Host, Data) ->
   {ok, File} = file:open(Filename, [write, raw]),
   [Hostname, StrPort] = string:tokens(Host, ":"),
   Port = list_to_integer(StrPort),
-  {ok, Client} = dynomite_thrift_client:start_link(Hostname, Port),
-  worker_loop(Client, File, Data, Ratio, Host).
+  {ok, Client} = case Method of
+    thrift -> dynomite_thrift_client:start_link(Hostname, Port);
+    rpc -> {ok, list_to_atom("dynomite@" ++ Hostname)}
+  end,
+  worker_loop(Method, Client, File, Data, Ratio, Host).
   
 generate_test_data(Keyspace, Size) ->
   A = array:new(Keyspace),
@@ -65,22 +68,30 @@ duplicate(N, E, A) -> duplicate(N-1, E, [E|A]).
 new_bytes(Size) ->
   << << N:8 >> || N <- lists:map(fun(_) -> random:uniform(256) end, lists:seq(1,Size)) >>.
   
-worker_loop(Client, File, Data, Ratio, Host) ->
+worker_loop(Method, Client, File, Data, Ratio, Host) ->
   {Key,Value} = array:get(random:uniform(array:size(Data))-1, Data),
   Start = lib_misc:now_float(),
-  Result = (catch call_server(random:uniform(), Ratio, Client, Key, Value)),
+  Result = (catch call_server(Method, random:uniform(), Ratio, Client, Key, Value)),
   End = lib_misc:now_float(),
   case Result of
-    {ok, Method} -> file:write(File, io_lib:format("~p\t~s\t~p\t~s\t~s~n", [End, Method, End - Start, Key, Host]));
+    {ok, Type} -> file:write(File, io_lib:format("~p\t~s\t~p\t~s\t~s~n", [End, Type, End - Start, Key, Host]));
     {'EXIT', _} -> file:write(File, io_lib:format("~p\terror\t~p\t~s\t~s~n", [End, End - Start, Key, Host]))
   end,
-  worker_loop(Client, File, Data, Ratio, Host).
+  worker_loop(Method, Client, File, Data, Ratio, Host).
 
-call_server(Rand, Ratio, Client, Key, Value) when Rand < Ratio ->
+call_server(rpc, Rand, Ratio, Host, Key, Value) when Rand < Ratio ->
+  rpc:call(Host, mediator, put, [Key, undefined, Value]),
+  {ok, "put"};
+  
+call_server(rpc, _, _, Host, Key, _) ->
+  rpc:call(Host, mediator, get, [Key]),
+  {ok, "get"};
+
+call_server(thrift, Rand, Ratio, Client, Key, Value) when Rand < Ratio ->
   dynomite_thrift_client:put(Client, Key, undefined, Value),
   {ok, "put"};
   
-call_server(_, _, Client, Key, _) ->
+call_server(thrift, _, _, Client, Key, _) ->
   dynomite_thrift_client:get(Client, Key),
   {ok, "get"}.
 
@@ -101,6 +112,7 @@ longform("-r") -> "--ratio";
 longform("-l") -> "--log";
 longform("-s") -> "--size";
 longform("-k") -> "--keyspace";
+longform("-m") -> "--method";
 longform(N) -> N.
   
 set_option("--host", Arg, Config = #config{hosts=Hosts}) ->
@@ -119,7 +131,10 @@ set_option("--size", Arg, Config) ->
   Config#config{size=list_to_integer(Arg)};
   
 set_option("--keyspace", Arg, Config) ->
-  Config#config{keyspace=list_to_integer(Arg)}.
+  Config#config{keyspace=list_to_integer(Arg)};
+  
+set_option("--method", Arg, Config) ->
+  Config#config{method=list_to_atom(Arg)}.
 
 usage(Msg) ->
   io:format("error: ~p", [Msg]),
@@ -130,4 +145,5 @@ usage(Msg) ->
   io:format("    -l, --log [LOGDIR]               Where the instances should log their raw performance data.~n"),
   io:format("    -s, --size [SIZE]                The size of the values to use, in bytes.~n"),
   io:format("    -k, --keyspace [KEYSPACE]        The integer size of the keyspace.~n"),
+  io:format("    -m, --method [METHOD]            The method of contacting the server (thrift, rpc).~n"),
   halt(1).
