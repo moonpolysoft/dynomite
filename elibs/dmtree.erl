@@ -103,7 +103,7 @@ state(Pid) ->
 %%--------------------------------------------------------------------
 init([FileName, BlockSize]) ->
   filelib:ensure_dir(FileName),
-  {ok, File} = file:open(FileName, [raw, read, write, binary]),
+  {ok, File} = file:open(FileName, [raw, read, write, binary, delayed_write, read_ahead]),
   {ok, FileInfo} = file:read_file_info(FileName),
   FileSize = FileInfo#file_info.size,
   case read_header(File) of
