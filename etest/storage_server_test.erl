@@ -11,6 +11,28 @@ store_conflicting_versions_test() ->
   configuration:stop(),
   timer:sleep(1),
   storage_server:close(Pid).
+  
+storage_server_throughput_test_() ->
+  {timeout, 500, {?LINE, fun() -> test_storage_server_throughput() end}}.
+  
+test_storage_server_throughput() ->
+  configuration:start_link(#config{}),
+  {ok, Pid} = storage_server:start_link(dets_storage, db_key(throughput), through, 0, (2 bsl 31), 4096),
+  {Keys, _} = lib_misc:fast_acc(fun({List, Str}) -> 
+      Mod = lib_misc:succ(Str),
+      {[Mod|List], Mod}
+    end, {[], "aaaaaaaa"}, 10000),
+  Vector = vector_clock:create(a),
+  Start = lib_misc:now_float(),
+  lists:foreach(fun(Key) ->
+      storage_server:put(Pid, Key, Vector, Key)
+    end, Keys),
+  lists:foreach(fun(Key) ->
+      storage_server:get(Pid, Key)
+    end, Keys),
+  End = lib_misc:now_float(),
+  ?debugFmt("storage server can do ~p reqs/s", [20000/(End-Start)]),
+  storage_server:close(Pid).
 
 couch_storage_test() ->
     configuration:start_link(#config{}),

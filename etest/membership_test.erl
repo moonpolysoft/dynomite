@@ -15,7 +15,8 @@ all_test_() ->
     {"test_servers_for_key", ?_test(test_servers_for_key())},
     {"test_partitions_for_node_all", ?_test(test_partitions_for_node_all())},
     {"test_initial_partition_setup", ?_test(test_initial_partition_setup())},
-    {"test_recover_from_old_membership_read", ?_test(test_recover_from_old_membership_read())}
+    {"test_recover_from_old_membership_read", ?_test(test_recover_from_old_membership_read())},
+    {"test_membership_server_throughput", test_membership_server_throughput()}
   ]}.
 
 test_write_membership_to_disk() ->
@@ -118,6 +119,21 @@ test_partitions_for_node_master() ->
   {ok, _} = membership:start_link(a, [a,b,c,d,e,f]),
   Parts = partitions_for_node(a, master),
   ?assertEqual(10, length(Parts)).
+  
+test_membership_server_throughput() ->
+  {timeout, 500, {?LINE, fun() ->
+      {ok, _} = membership:start_link(a, [a,b,c,d,e,f]),
+      {Keys, _} = lib_misc:fast_acc(fun({List, Str}) -> 
+          Mod = lib_misc:succ(Str),
+          {[Mod|List], Mod}
+        end, {[], "aaaaaaaa"}, 10000),
+      Start = lib_misc:now_float(),
+      lists:foreach(fun(Str) ->
+          membership:servers_for_key(Str)
+        end, Keys),
+      End = lib_misc:now_float(),
+      ?debugFmt("membership can do ~p reqs/s", [10000/(End-Start)])
+    end}}.
   
 test_gossip_server() ->
   ok.
