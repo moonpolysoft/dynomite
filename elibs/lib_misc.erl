@@ -4,7 +4,7 @@
 -define(OFFSET_BASIS, 2166136261).
 -define(FNV_PRIME, 16777619).
 
--export([rm_rf/1, pmap/3, hash/1, hash/2, fnv/1, nthdelete/2, zero_split/1, nthreplace/3, rand_str/1, position/2, shuffle/1, floor/1, ceiling/1, time_to_epoch_int/1, time_to_epoch_float/1, now_int/0, now_float/0, byte_size/1, listify/1, reverse_bits/1]).
+-export([rm_rf/1, pmap/3, succ/1, fast_acc/3, hash/1, hash/2, fnv/1, nthdelete/2, zero_split/1, nthreplace/3, rand_str/1, position/2, shuffle/1, floor/1, ceiling/1, time_to_epoch_int/1, time_to_epoch_float/1, now_int/0, now_float/0, byte_size/1, listify/1, reverse_bits/1]).
 
 -include("profile.hrl").
 
@@ -74,6 +74,23 @@ ceiling(X) ->
     Pos when Pos > 0 -> T + 1;
     _ -> T
   end.
+    
+succ([]) ->
+  [];
+
+succ(Str) ->
+  succ_int(lists:reverse(Str), []).
+
+succ_int([Char|Str], Acc) ->
+  if
+    Char >= $z -> succ_int(Str, [$a|Acc]);
+    true -> lists:reverse(lists:reverse([Char+1|Acc]) ++ Str)
+  end.
+    
+fast_acc(_, Acc, 0) -> Acc;
+
+fast_acc(Fun, Acc, N) ->
+  fast_acc(Fun, Fun(Acc), N-1).
     
 shuffle(List) when is_list(List) ->
   [ N || {R,N} <- lists:keysort(1, [{random:uniform(),X} || X <- List]) ].
