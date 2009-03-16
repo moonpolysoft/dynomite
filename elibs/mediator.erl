@@ -85,7 +85,9 @@ internal_get(Key, #mediator{config=Config}) ->
   
 internal_has_key(Key, #mediator{config=Config}) ->
   {N,R,W} = unpack_config(Config),
+  ?prof(membership),
   Servers = membership:servers_for_key(Key),
+  ?forp(membership),
   MapFun = fun(Server) ->
     storage_server:has_key(Server, Key)
   end,
@@ -97,9 +99,11 @@ internal_has_key(Key, #mediator{config=Config}) ->
   
 internal_delete(Key, #mediator{config=Config}) ->
   {N,R,W} = unpack_config(Config),
+  ?prof(membership),
   Servers = membership:servers_for_key(Key),
+  ?forp(membership),
   MapFun = fun(Server) ->
-    storage_server:delete(Server, Key, 10000)
+    storage_server:delete(Server, Key)
   end,
   {Good, Bad} = pcall(MapFun, Servers, W),
   if
