@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, stop/0, load/3, sync/5, done/1, running/0, running/1, diffs/0, diffs/1]).
+-export([start_link/0, stop/0, load/3, loaded/0, sync/5, done/1, running/0, running/1, diffs/0, diffs/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -60,6 +60,9 @@ diffs() ->
   
 diffs(Node) ->
   gen_server:call({sync_manager, Node}, diffs).
+  
+loaded() ->
+  gen_server:call(sync_manager, loaded).
 
 %%====================================================================
 %% gen_server callbacks
@@ -87,6 +90,9 @@ init([]) ->
 %% @doc Handling call messages
 %% @end 
 %%--------------------------------------------------------------------
+handle_call(loaded, _From, State) ->
+  {reply, sync_server_sup:sync_servers(), State};
+
 handle_call(running, _From, State = #state{running=Running}) ->
   {reply, Running, State};
   
