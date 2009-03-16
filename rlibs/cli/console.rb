@@ -4,7 +4,7 @@ options[:databases] = ''
 options[:config] = ''
 
 OptionParser.new do |opts|
-  opts.banner = "Usage: dynomite start [options]"
+  opts.banner = "Usage: dynomite console [options]"
 
   contents =  File.read(File.dirname(__FILE__) + "/shared/common.rb")
   eval contents
