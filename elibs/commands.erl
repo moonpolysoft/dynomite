@@ -26,7 +26,8 @@
 start() ->
   {Node, Module, Function, Arguments} = process_arguments([node, m, f, a]),
   Result = rpc:call(Node, Module, Function, Arguments),
-  io:format("~p~n", [Result]).
+  io:format("~p~n", [Result]),
+  timer:sleep(10).
   
 process_arguments(Args) ->
   process_arguments([], Args).
