@@ -46,12 +46,12 @@ namespace :dynomite do
     end
     
     task :compile do
-      run "cd dynomite && rake clean && rake native default"
+      run "cd dynomite && rake clean && rake native profile default"
     end
 
     task :data_reset, :roles => :dyn do
-      run "rm -rf dyn-int-data dyn-int-log/*"
-      run "mkdir -p dyn-int-data"
+      run "rm -rf /bfd/dyn-int-data dyn-int-log/*"
+      run "mkdir -p /bfd/dyn-int-data"
       run "mkdir -p dyn-int-log"
     end
     
