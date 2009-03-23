@@ -171,13 +171,10 @@ handle_call({nodes_for_partition, Partition}, _From, State) ->
 	
 handle_call({servers_for_key, Key}, From, State) ->
   Config = configuration:get_config(),
-  spawn_link(fun() ->
-    Nodes = int_nodes_for_key(Key, State, Config),
-    Part = int_partition_for_key(Key, State, Config),
-    MapFun = fun(Node) -> {list_to_atom(lists:concat([storage_, Part])), Node} end,
-    gen_server:reply(From, lists:map(MapFun, Nodes))
-  end),
-  {noreply, State};
+  Nodes = int_nodes_for_key(Key, State, Config),
+  Part = int_partition_for_key(Key, State, Config),
+  MapFun = fun(Node) -> {list_to_atom(lists:concat([storage_, Part])), Node} end,
+  {reply, lists:map(MapFun, Nodes), State};
 	
 handle_call({nodes_for_key, Key}, _From, State) ->
 	{reply, int_nodes_for_key(Key, State, configuration:get_config()), State};
