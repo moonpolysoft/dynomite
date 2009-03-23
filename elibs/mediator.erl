@@ -51,10 +51,14 @@ delete(Key) ->
 %%--------------------------------------------------------------------
 
 internal_put(Key, Context, Value, #mediator{config=Config}) ->
-  ?prof(internal_put),
+  ?prof(mediator_put),
   {N,R,W} = unpack_config(Config),
+  ?prof(membership),
   Servers = membership:servers_for_key(Key),
+  ?forp(membership),
+  ?prof(increment),
   Incremented = increment(Context),
+  ?forp(increment),
   MapFun = fun(Server) ->
     storage_server:put(Server, Key, Incremented, Value)
   end,
@@ -63,13 +67,15 @@ internal_put(Key, Context, Value, #mediator{config=Config}) ->
     length(Good) >= W -> {ok, length(Good)};
     true -> {failure, error_message(Good, Bad, N, W)}
   end,
-  ?forp(internal_put),
+  ?forp(mediator_put),
   Final.
   
 internal_get(Key, #mediator{config=Config}) ->
-  ?prof(internal_get),
+  ?prof(mediator_get),
   {N,R,W} = unpack_config(Config),
+  ?prof(membership),
   Servers = membership:servers_for_key(Key),
+  ?forp(membership),
   MapFun = fun(Server) ->
     storage_server:get(Server, Key)
   end,
@@ -80,7 +86,7 @@ internal_get(Key, #mediator{config=Config}) ->
     NotFound -> {ok, not_found};
     true -> {failure, error_message(Good, Bad, N, R)}
   end,
-  ?forp(internal_get),
+  ?forp(mediator_get),
   Final.
   
 internal_has_key(Key, #mediator{config=Config}) ->
@@ -168,5 +174,8 @@ increment({Pid, Context}) when is_pid(Pid) ->
 increment({Ref, Context}) ->
   vector_clock:increment(Ref, Context);
   
+increment(undefined) ->
+  vector_clock:create(pid_to_list(self()));
+  
 increment(Context) ->
-  vector_clock:increment(node(), Context).
+  vector_clock:increment(self(), Context).
