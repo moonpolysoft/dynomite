@@ -169,20 +169,24 @@ handle_call({range, Partition}, _From, State) ->
 handle_call({nodes_for_partition, Partition}, _From, State) ->
   {reply, int_nodes_for_partition(Partition, State), State};
 	
-handle_call({servers_for_key, Key}, _From, State) ->
-  Nodes = int_nodes_for_key(Key, State),
-  Part = int_partition_for_key(Key, State),
-  MapFun = fun(Node) -> {list_to_atom(lists:concat([storage_, Part])), Node} end,
-  {reply, lists:map(MapFun, Nodes), State};
+handle_call({servers_for_key, Key}, From, State) ->
+  Config = configuration:get_config(),
+  spawn_link(fun() ->
+    Nodes = int_nodes_for_key(Key, State, Config),
+    Part = int_partition_for_key(Key, State, Config),
+    MapFun = fun(Node) -> {list_to_atom(lists:concat([storage_, Part])), Node} end,
+    gen_server:reply(From, lists:map(MapFun, Nodes))
+  end),
+  {noreply, State};
 	
 handle_call({nodes_for_key, Key}, _From, State) ->
-	{reply, int_nodes_for_key(Key, State), State};
+	{reply, int_nodes_for_key(Key, State, configuration:get_config()), State};
 	
 handle_call({partitions_for_node, Node, Option}, _From, State) ->
   {reply, int_partitions_for_node(Node, State, Option), State};
   
 handle_call({partition_for_key, Key}, _From, State) ->
-  {reply, int_partition_for_key(Key, State), State};
+  {reply, int_partition_for_key(Key, State, configuration:get_config()), State};
   
 handle_call(status, _From, State = #membership{node = Node, nodes=Nodes, partitions=Partitions, version=Version}) ->
   Reply = [{node,Node},{nodes,Nodes},{distribution, partitions:sizes(Nodes, Partitions)},{version,Version},{storage_servers,storage_manager:loaded()}],
@@ -432,10 +436,9 @@ int_replica_nodes(Node, State) ->
   Config = configuration:get_config(),
   n_nodes(Node, Config#config.n, State#membership.nodes).
   
-int_nodes_for_key(Key, State) ->
+int_nodes_for_key(Key, State, Config) ->
   % error_logger:info_msg("inside int_nodes_for_key~n", []),
   KeyHash = lib_misc:hash(Key),
-  Config = configuration:get_config(),
   Q = Config#config.q,
   Partition = find_partition(KeyHash, Q),
   % error_logger:info_msg("found partition ~w for key ~p~n", [Partition, Key]),
@@ -450,9 +453,8 @@ int_nodes_for_partition(Partition, State) ->
   % error_logger:info_msg("Node ~w Partition ~w N ~w~n", [Node, Partition, N]),
   int_replica_nodes(Node, State).
   
-int_partition_for_key(Key, State) ->
+int_partition_for_key(Key, State, Config) ->
   KeyHash = lib_misc:hash(Key),
-  Config = configuration:get_config(),
   Q = Config#config.q,
   find_partition(KeyHash, Q).
   
