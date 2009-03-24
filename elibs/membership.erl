@@ -22,7 +22,7 @@
 
 -define(VERSION, 1).
 
--record(membership, {header=?VERSION, partitions, version, nodes, node, gossip}).
+-record(membership, {header=?VERSION, partitions, version, nodes, node, gossip, ptable}).
 
 -include("config.hrl").
 -include("common.hrl").
@@ -119,11 +119,13 @@ init([Node, Nodes]) ->
   ?infoMsg("Starting membership gossip.~n"),
   Self = self(),
   GossipPid = spawn_link(fun() -> gossip_loop(Self) end),
+  Table = ets:new(partitions, [set, protected]),
+  partition_list_into_ptable(State#membership.partitions, Table),
   % register(gossip, GossipPid),
   % GossipPid = ok,
   % timer:apply_after(random:uniform(1000) + 1000, membership, fire_gossip, [random:seed()]),
   ?infoMsg("Initialized.~n"),
-  {ok, State#membership{gossip=GossipPid}}.
+  {ok, State#membership{gossip=GossipPid,ptable=Table}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -137,22 +139,17 @@ init([Node, Nodes]) ->
 %% @end 
 %%--------------------------------------------------------------------
 
-handle_call({join_node, Node}, {_, _From}, State) ->
+handle_call({join_node, Node}, {_, _From}, State = #membership{ptable=Table}) ->
+  ets:delete_all_objects(Table),
   error_logger:info_msg("~p is joining the cluster.~n", [node(_From)]),
   NewState = int_join_node(Node, State),
   #membership{node=Node1,nodes=Nodes,partitions=Parts} = NewState,
   storage_manager:load(Nodes, Parts, int_partitions_for_node(Node1, NewState, all)),
   sync_manager:load(Nodes, Parts, int_partitions_for_node(Node1, NewState, all)),
   save_state(NewState),
-	{reply, {ok, NewState}, NewState};
-%%
-% Another node is sharing their state with us. Need to merge them in
-% and reply with the merged state
-%%
-handle_call({share, RemoteState}, _From, State) ->
-  {ok, Merged} = merge_and_save_state(RemoteState, State),
-  {reply, {ok, Merged}, Merged};
-	
+  partition_list_into_ptable(Parts, Table),
+  {reply, {ok, NewState}, NewState#membership{ptable=Table}};
+
 handle_call(nodes, _From, State = #membership{nodes=Nodes}) ->
   {reply, Nodes, State};
   
@@ -171,8 +168,8 @@ handle_call({nodes_for_partition, Partition}, _From, State) ->
 	
 handle_call({servers_for_key, Key}, From, State) ->
   Config = configuration:get_config(),
-  Nodes = int_nodes_for_key(Key, State, Config),
   Part = int_partition_for_key(Key, State, Config),
+  Nodes = int_nodes_for_partition(Part, State),
   MapFun = fun(Node) -> {list_to_atom(lists:concat([storage_, Part])), Node} end,
   {reply, lists:map(MapFun, Nodes), State};
 	
@@ -199,13 +196,15 @@ handle_call(stop, _From, State) ->
 %% @doc Handling cast messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_cast({state, NewState = #membership{node=Node,nodes=Nodes}}, State) ->
+handle_cast({state, NewState = #membership{node=Node,nodes=Nodes}}, State = #membership{ptable=Table}) ->
   %straight up replace our state
+  ets:delete_all_objects(Table),
   Merged = NewState#membership{node=State#membership.node,gossip=State#membership.gossip},
   storage_manager:load(Nodes, Merged#membership.partitions, int_partitions_for_node(State#membership.node, Merged, all)),
   sync_manager:load(Nodes, Merged#membership.partitions, int_partitions_for_node(State#membership.node, Merged, all)),
   save_state(Merged),
-  {noreply, Merged};
+  partition_list_into_ptable(Merged#membership.partitions, Table),
+  {noreply, Merged#membership{ptable=Table}};
 
 handle_cast({gossip_with, Server}, State = #membership{nodes = Nodes}) ->
   Self = self(),
@@ -309,11 +308,13 @@ random_node(Nodes) ->
 try_join_into_cluster(Node, State = #membership{nodes=[Node]}) ->
   State;
   
-try_join_into_cluster(Node, State = #membership{nodes=Nodes}) ->
+try_join_into_cluster(Node, State = #membership{nodes=Nodes,ptable=Table}) ->
   JoinTo = random_node(lists:delete(Node, Nodes)),
   error_logger:info_msg("Joining node ~p~n", [JoinTo]),
   case join_node(JoinTo, Node) of
-    {ok, JoinedState} -> JoinedState#membership{node=Node};
+    {ok, JoinedState} -> 
+      partition_list_into_ptable(JoinedState#membership.partitions, Table),
+      JoinedState#membership{node=Node,ptable=Table};
     Other ->
       error_logger:info_msg("Join to ~p failed with ~p~n", [JoinTo, Other]),
       State
@@ -441,12 +442,13 @@ int_nodes_for_key(Key, State, Config) ->
   % error_logger:info_msg("found partition ~w for key ~p~n", [Partition, Key]),
   int_nodes_for_partition(Partition, State).
   
-int_nodes_for_partition(Partition, State) ->
+int_nodes_for_partition(Partition, State = #membership{ptable=Table}) ->
   Config = configuration:get_config(),
-  Partitions = State#membership.partitions,
   Q = Config#config.q,
   N = Config#config.n,
-  {Node,Partition} = lists:nth(index_for_partition(Partition, Q), Partitions),
+  % ?debugFmt("int_nodes_for_partition(~p, _)", [Partition]),
+  [{Partition,Node}] = ets:lookup(Table, Partition),
+  % {Node,Partition} = lists:nth(index_for_partition(Partition, Q), Partitions), %linear scan, we can do better
   % error_logger:info_msg("Node ~w Partition ~w N ~w~n", [Node, Partition, N]),
   int_replica_nodes(Node, State).
   
@@ -488,3 +490,8 @@ n_nodes(StartNode, N, [StartNode|Nodes], Taken, Cycle) ->
 n_nodes(StartNode, N, [_|Nodes], Taken, Cycle) ->
   n_nodes(StartNode, N, Nodes, Taken, Cycle).
   
+partition_list_into_ptable(Partitions, T) ->
+  lists:map(fun({Node,Part}) -> 
+      ets:insert(T, {Part,Node})
+    end, Partitions),
+  T.
