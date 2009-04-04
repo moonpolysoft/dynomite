@@ -14,13 +14,13 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, start_prof/1, stop_prof/1, stats/1, averages/0]).
+-export([start_link/0, start_prof/1, stop_prof/1, stats/1, averages/0, balance_prof/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {ets}).
+-record(state, {ets,balance}).
 
 -record(profile, {name, count, sum}).
 
@@ -37,6 +37,9 @@ start_link() ->
     
 stats(Id) ->
   gen_server:call(dynomite_prof, {stats, Id}).
+  
+balance_prof() ->
+  gen_server:cast(dynomite_prof, {balance, self(), lib_misc:now_float()}).
   
 start_prof(Id) ->
   gen_server:cast(dynomite_prof, {start, self(), Id, lib_misc:now_float()}).
@@ -61,7 +64,8 @@ averages() ->
 %%--------------------------------------------------------------------
 init([]) ->
   Tid = ets:new(profiling, [set, {keypos, 2}]),
-  {ok, #state{ets=Tid}}.
+  Bal = ets:new(balance, [set]),
+  {ok, #state{ets=Tid, balance=Bal}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -81,11 +85,18 @@ handle_call({stats, Id}, _From, State = #state{ets=Ets}) ->
 handle_call(table, _From, State = #state{ets=Ets}) ->
   {reply, Ets, State};
   
-handle_call(averages, _From, State = #state{ets=Ets}) ->
-  List = ets:foldl(fun(#profile{name=Name,count=Count,sum=Sum}, List) ->
+handle_call(averages, _From, State = #state{ets=Ets,balance=Bal}) ->
+  Avgs = ets:foldl(fun(#profile{name=Name,count=Count,sum=Sum}, List) ->
       [{Name, Sum/Count}|List]
     end, [], Ets),
-  {reply, List, State}.
+  {_, MaxCount} = ets:foldl(fun
+      ({Pid, Count}, {P, M}) when Count > M -> {Pid, Count};
+      (_, {P, M}) -> {P, M}
+    end, {pid, 0}, Bal),
+  Balances = ets:foldl(fun({Pid, Count}, List) ->
+      [{Pid, Count / MaxCount} | List]
+    end, [], Bal),
+  {reply, [Balances, Avgs], State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -94,6 +105,13 @@ handle_call(averages, _From, State = #state{ets=Ets}) ->
 %% @doc Handling cast messages
 %% @end 
 %%--------------------------------------------------------------------
+handle_cast({balance, Pid, Time}, State = #state{balance=Ets}) ->
+  case ets:lookup(Ets, Pid) of
+    [] -> ets:insert(Ets, {Pid, 1});
+    [{Pid, Count}] -> ets:insert(Ets, {Pid, Count+1})
+  end,
+  {noreply, State};
+
 handle_cast({start, Pid, Id, Time}, State = #state{ets=Ets}) ->
   put({Pid,Id}, Time),
   {noreply, State};
