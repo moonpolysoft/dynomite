@@ -179,8 +179,10 @@ init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
 %%--------------------------------------------------------------------
 handle_call({get, Key}, {RemotePid, _Tag}, State = #storage{module=Module,table=Table,cache=C}) ->
   ?prof(get),
+  ?balance_prof,
   Result = case cache_get(C, sanitize_key(Key)) of
-    {ok, [CtxBin|V]} -> {ok, {binary_to_term(CtxBin), V}};
+    {ok, [CtxBin|V]} -> 
+      {ok, {binary_to_term(CtxBin), V}};
     _Err -> 
       (catch Module:get(sanitize_key(Key), Table))
   end,
@@ -331,7 +333,7 @@ int_put(Name, Key, Context, Value, Timeout) ->
   case Config#config.buffered_writes of
     true -> 
       gen_server:cast(Name, {put, Key, Context, Value});
-    undefined -> gen_server:call(Name, {put, Key, Context, Value}, Timeout)
+    _ -> gen_server:call(Name, {put, Key, Context, Value}, Timeout)
   end.
   
 inside_process_put(Key, Context, ValIn, State = #storage{module=Module,table=Table,tree=Tree}) ->
@@ -365,11 +367,12 @@ stream(Name, Key, Context, Value) ->
   end.
 
 internal_put(Key, Context, Values, Tree, Table, Module, State) ->
+  ?balance_prof,
   TreeFun = fun() ->
       ?prof(dmerkle_update),
       T = if
         Tree == undefined -> Tree;
-        true -> 
+        true ->
           dmerkle:update(sanitize_key(Key), Values, Tree)
       end,
       ?forp(dmerkle_update),
