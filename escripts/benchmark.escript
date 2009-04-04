@@ -153,7 +153,7 @@ usage(Msg) ->
   io:format("Usage: distributed_bench [options]~n"),
   io:format("    -h, --host [HOST]                Add another host to test against.  Should add the whole cluster.~n"),
   io:format("    -c, --concurrency [INT]          the concurrency level for the test.  How many clients to start.~n"),
-  io:format("    -r, --ratio [R]                  the ratio of gets to puts.  0.0 means all puts, 1.0 means all gets.~n"),
+  io:format("    -r, --ratio [R]                  the ratio of gets to puts.  0.0 means all gets, 1.0 means all puts.~n"),
   io:format("    -l, --log [LOGDIR]               Where the instances should log their raw performance data.~n"),
   io:format("    -s, --size [SIZE]                The size of the values to use, in bytes.~n"),
   io:format("    -k, --keyspace [KEYSPACE]        The integer size of the keyspace.~n"),
