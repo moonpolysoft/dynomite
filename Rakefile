@@ -47,6 +47,11 @@ task :build_dist => [:build_deps] do
   # end
 end
 
+task :thrift_clients do
+  sh "thrift --gen rb if/dynomite.thrift"
+  sh "thrift -erl if/dynomite.thrift"
+end 
+
 task :econsole do
   sh "erl +Bc +K true -smp enable -pz ./ebin -pz ./etest -pa ./deps/eunit/ebin -pa deps/rfc4627/ebin -pa deps/mochiweb/ebin -sname local_console_#{$$} -kernel"
 end
@@ -130,6 +135,10 @@ task :build_test_deps do
   sh "erlc +debug_info -I include #{ERLC_TEST_FLAGS} -o etest etest/t.erl etest/mock_genserver.erl etest/mock.erl"
 end
 
+task :build_tarball => [:default, 'build'] do
+  sh "wd=$(pwd) && cd ./.. && tar czvf dynomite/build/dynomite.tar.tgz --exclude dynomite/build ./dynomite && (cd \"$wd\")"
+end
+
 task :test_config do
   # ensure the test log dir exists
   priv = priv_dir()
@@ -159,6 +168,7 @@ end
 DRIVERS = FileList['c/*_drv.c'].pathmap("%{c,lib}X.so")
 
 directory "lib"
+directory "build"
 
 # task "lib/murmur_drv.c" => ["c/murmur.o"]
 

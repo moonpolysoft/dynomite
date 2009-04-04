@@ -13,3 +13,4 @@ doc/*_coverage.html
 servers.rb
 lib/*.so
 c/*.o
+build/*
