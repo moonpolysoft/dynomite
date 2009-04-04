@@ -2,6 +2,7 @@ options = {}
 options[:port] = "-dynomite port 11222"
 options[:databases] = ''
 options[:config] = '-dynomite config "config.json"'
+options[:startup] = "-run dynomite start"
 
 OptionParser.new do |opts|
   opts.banner = "Usage: dynomite start [options]"
@@ -11,6 +12,12 @@ OptionParser.new do |opts|
 
   opts.separator ""
   opts.separator "Specific options:"
+  
+  opts
+  
+  opts.on("-r", "--release", "Start from release file.") do
+    options[:startup] = %Q(-boot dynomite_rel)
+  end
   
   opts.on("-c", "--config [CONFIGFILE]", "path to the config file") do |config|
     options[:config] = %Q(-dynomite config "\\"#{config}\\"")
@@ -46,8 +53,7 @@ str = "erl \
   #{options[:config]} \
   #{options[:jointo]} \
   -setcookie #{cookie} \
-  -run dynomite start \
-  -boot #{ROOT}/releases/0.5.0/dynomite_rel \
+  #{options[:startup]} \
   #{options[:detached]} \
   #{options[:profile]}"
 puts str
