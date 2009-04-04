@@ -34,7 +34,7 @@ cookie = Digest::MD5.hexdigest(options[:cluster] + "NomMxnLNUH8suehhFg2fkXQ4HVdL
 str = "erl \
   -boot start_sasl \
   +K true \
-  +A 128 \
+  +A 30 \
   +P 60000 \
   -smp enable \
   -pz #{ROOT}/ebin/ \
