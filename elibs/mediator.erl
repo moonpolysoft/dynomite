@@ -17,6 +17,7 @@
 -export([get/1, put/3, has_key/1, delete/1]).
 
 -include("config.hrl").
+-include("common.hrl").
 -include("profile.hrl").
 
 -record(mediator, {config}).
