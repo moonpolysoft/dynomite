@@ -1,9 +1,10 @@
-Authors of dynomite.
+Authors of and contributors to dynomite.
 
- Cliff Moon <cliff@powerset.com>
- Todd Lipcon <todd@lipcon.org>
- Jason Pellerin <jpellerin@gmail.com>
- Nick Gerakines <nick@gerakines.net>
+ Cliff Moon <cliff at powerset dot com>
+ Todd Lipcon <todd at lipcon dot org>
+ Jason Pellerin <jpellerin at gmail dot com>
+ Nick Gerakines <nick at gerakines dot net>
+ Christopher Brown <cb at opscode dot com>
 
 The plumbing for the couch storage engine is from the couchdb project: http://incubator.apache.org/couchdb/
 
