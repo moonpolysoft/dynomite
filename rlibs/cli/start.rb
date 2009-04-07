@@ -15,10 +15,6 @@ OptionParser.new do |opts|
   
   opts
   
-  opts.on("-r", "--release", "Start from release file.") do
-    options[:startup] = %Q(-boot dynomite_rel)
-  end
-  
   opts.on("-c", "--config [CONFIGFILE]", "path to the config file") do |config|
     options[:config] = %Q(-dynomite config "\\"#{config}\\"")
   end
