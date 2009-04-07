@@ -137,22 +137,14 @@ init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
     {ok, Table} = StorageModule:open(DbKey,Name),
     DMName = filename:join([DbKey, "dmerkle.idx"]),
     V = if
-      BlockSize == undefined -> {ok, undefined};
+      BlockSize == undefined; BlockSize == false -> {ok, undefined};
       true -> dmerkle:open(DMName, BlockSize)
     end,
     Tree = case V of
       {ok, T} -> T;
       {error, Reason} -> 
         ?infoFmt("Opening merkle tree failed due to ~p.  Rebuilding.~n", [Reason]),
-        file:delete(DMName),
-        file:delete(filename:join([DbKey, "dmerkle.keys"])),
-        {ok, T} = dmerkle:open(DMName, BlockSize),
-        spawn_link(fun() ->
-            Result = (catch StorageModule:fold(fun({Key,_,Values}, _) -> 
-                dmerkle:update(Key, Values, T) 
-              end, nil, Table))
-          end),
-        T
+        do_merkle_tree_rebuild(DMName, DbKey, StorageModule, BlockSize, Table)
     end,
     Storage = #storage{module=StorageModule,dbkey=DbKey,blocksize=BlockSize,table=Table,name=Name,tree=Tree},
     case Config#config.cache of
@@ -178,6 +170,7 @@ init({StorageModule,DbKey,Name,Min,Max,BlockSize}) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_call({get, Key}, {RemotePid, _Tag}, State = #storage{module=Module,table=Table,cache=C}) ->
+  % ?infoFmt("get, ~p, ~p~n", [_Tag, lib_misc:now_float()]),
   ?prof(get),
   ?balance_prof,
   Result = case cache_get(C, sanitize_key(Key)) of
@@ -186,11 +179,10 @@ handle_call({get, Key}, {RemotePid, _Tag}, State = #storage{module=Module,table=
     _Err -> 
       (catch Module:get(sanitize_key(Key), Table))
   end,
-  ?forp(get),
-  case Result of
+  R = case Result of
     {ok, {Context, Values}} -> 
       Size = iolist_size(Values),
-      stats_server:request(get, Size),
+      % stats_server:request(get, Size),
       if
         (Size > ?CHUNK_SIZE) and (node(RemotePid) /= node()) ->
           Ref = make_ref(),
@@ -201,9 +193,12 @@ handle_call({get, Key}, {RemotePid, _Tag}, State = #storage{module=Module,table=
         true -> {reply, Result, State}
       end;
     _ -> {reply, Result, State}
-  end;
+  end,
+  ?forp(get),
+  R;
 	
-handle_call({put, Key, Context, ValIn}, _From, State = #storage{module=Module,table=Table,tree=Tree}) ->
+handle_call({put, Key, Context, ValIn}, {_, _Tag}, State = #storage{module=Module,table=Table,tree=Tree}) ->
+  % ?infoFmt("put, ~p, ~p~n", [_Tag, lib_misc:now_float()]),
   {Reply, NewState} = inside_process_put(Key, Context, ValIn, State),
   {reply, Reply, NewState};
 	
@@ -368,30 +363,21 @@ stream(Name, Key, Context, Value) ->
 
 internal_put(Key, Context, Values, Tree, Table, Module, State) ->
   ?balance_prof,
-  TreeFun = fun() ->
-      ?prof(dmerkle_update),
-      T = if
-        Tree == undefined -> Tree;
-        true ->
-          dmerkle:update(sanitize_key(Key), Values, Tree)
-      end,
-      ?forp(dmerkle_update),
-      T
-    end,
-  TableFun = fun() ->
-      ?prof(put),
-      T = Module:put(sanitize_key(Key), vector_clock:truncate(Context), Values, Table),
-      ?forp(put),
-      T
-    end,
-  CacheFun = fun() ->
-      cache_put(State#storage.cache, sanitize_key(Key), [term_to_binary(vector_clock:truncate(Context)), Values])
-    end,
-  [UpdatedTree, TableResult, _] = lib_misc:pmap(fun(F) -> F() end, [TreeFun, TableFun, CacheFun], 3),
+  cache_put(State#storage.cache, sanitize_key(Key), [term_to_binary(vector_clock:truncate(Context)), Values]),
+  ?prof(dmerkle_update),
+  if
+    Tree == undefined -> ok;
+    true ->
+      dmerkle:updatea(sanitize_key(Key), Values, Tree)
+  end,
+  ?forp(dmerkle_update),
+  ?prof(put),
+  TableResult = Module:put(sanitize_key(Key), vector_clock:truncate(Context), Values, Table),
+  ?forp(put),
   case TableResult of
     {ok, ModifiedTable} ->
-      stats_server:request(put, iolist_size(Values)),
-      {ok, State#storage{table=ModifiedTable,tree=UpdatedTree}};
+      % stats_server:request(put, iolist_size(Values)),
+      {ok, State#storage{table=ModifiedTable}};
     Failure -> {Failure, State}
   end.
 
@@ -415,3 +401,14 @@ cache_stop(C) ->
 sanitize_key(Key) when is_atom(Key) -> atom_to_list(Key);
 sanitize_key(Key) when is_binary(Key) -> binary_to_list(Key);
 sanitize_key(Key) -> Key.
+
+do_merkle_tree_rebuild(DMName, DbKey, StorageModule, BlockSize, Table) ->
+  file:delete(DMName),
+  file:delete(filename:join([DbKey, "dmerkle.keys"])),
+  {ok, T} = dmerkle:open(DMName, BlockSize),
+  spawn_link(fun() ->
+      Result = (StorageModule:fold(fun({Key,_,Values}, _) -> 
+          dmerkle:updatea(Key, Values, T) 
+        end, nil, Table))
+    end),
+  T.

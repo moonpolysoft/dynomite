@@ -135,7 +135,7 @@ rebuild_merkle_trees_test() ->
   {ok, _} = mock:mock(dets_storage),
   mock:expects(dmerkle, open, fun(_) -> true end, {error, "Poop, fart. Balls."}),
   mock:expects(dmerkle, open, fun(_) -> true end, {ok, pid}),
-  mock:expects(dmerkle, update, fun({K, V, P}) -> (K == "key") and (V == [<<"values">>]) end, fun({_, _, P}, _) -> P end),
+  mock:expects(dmerkle, updatea, fun({K, V, P}) -> (K == "key") and (V == [<<"values">>]) end, fun({_, _, P}, _) -> P end),
   mock:expects(dets_storage, open, fun(_) -> true end, {ok, table}),
   mock:expects(dets_storage, fold, fun({F, A, T}) -> (T == table) and is_function(F) end, fun({F, A, T}, _) ->
       F({"key",ctx,[<<"values">>]}, A)
@@ -160,7 +160,7 @@ streaming_put_test() ->
   Bin = <<0:Bits>>,
   mock:expects(dets_storage, put, fun({_, _, [Val], table}) -> Val == Bin end, {ok, table}),
   mock:expects(dets_storage, get, fun({Key, Table}) -> Key == "key" end, {ok, not_found}),
-  mock:expects(dmerkle, update, fun(_) -> true end, fun(_, _) -> self() end),
+  mock:expects(dmerkle, updatea, fun(_) -> true end, fun(_, _) -> self() end),
   {ok, Pid} = storage_server:start_link(dets_storage, db_key(merkle_test), store6, 0, (2 bsl 31), 4096),
   Result = stream(Pid, "key", ctx, Bin),
   ?debugFmt("~p", [Result]),
@@ -204,7 +204,7 @@ buffered_small_write_test() ->
       {ok, table}
     end),
   mock:expects(dets_storage, get, fun({Key, Table}) -> Key == "key" end, {ok, not_found}),
-  mock:expects(dmerkle, update, fun(_) -> true end, fun(_, _) -> self() end),
+  mock:expects(dmerkle, updatea, fun(_) -> true end, fun(_, _) -> self() end),
   {ok, Store} = storage_server:start_link(dets_storage, db_key(buff_test), store7, 0, (2 bsl 31), 4096),
   int_put(Store, "key", ctx, Bin, 1000),
   ?assertEqual(false, interrogate_test_loop(Pid)),
@@ -234,7 +234,7 @@ buffered_stream_write_test() ->
       {ok, table}
     end),
   mock:expects(dets_storage, get, fun({Key, Table}) -> Key == "key" end, {ok, not_found}),
-  mock:expects(dmerkle, update, fun(_) -> true end, fun(_, _) -> self() end),
+  mock:expects(dmerkle, updatea, fun(_) -> true end, fun(_, _) -> self() end),
   {ok, Store} = storage_server:start_link(dets_storage, db_key(buff_test), store7, 0, (2 bsl 31), 4096),
   stream(Store, "key", ctx, Bin),
   ?debugHere,
@@ -256,7 +256,7 @@ caching_test() ->
   mock:expects(dets_storage, open, fun(_) -> true end, {ok, table}),
   mock:expects(dets_storage, get, fun({Key, Table}) -> Key == "key" end, {ok, not_found}),
   mock:expects(dets_storage, put, fun({_, _, _, table}) -> true end, {ok, table}),
-  mock:expects(dmerkle, update, fun(_) -> true end, fun(_, _) -> self() end),
+  mock:expects(dmerkle, updatea, fun(_) -> true end, fun(_, _) -> self() end),
   {ok, Store} = storage_server:start_link(dets_storage, db_key(cache_put_test), store8, 0, (2 bsl 31), 4096),
   Clock = vector_clock:create(something),
   storage_server:put(Store, "key", Clock, <<"value">>),
