@@ -25,7 +25,7 @@ start_link() ->
       {name, dynomite_thrift},
       {service, dynomite_thrift},
       {handler, ?MODULE},
-      {max, 100},
+      {max, 200},
       {socket_opts, [{recv_timeout, infinity}]}])
   end.
 

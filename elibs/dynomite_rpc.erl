@@ -1,4 +1,4 @@
-%% An interface to dynomite using 
+%% An interface to dynomite
 
 -module(dynomite_rpc).
 -author('cliff@powerset.com').
