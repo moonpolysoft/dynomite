@@ -19,7 +19,7 @@
 -include("dmerkle.hrl").
 
 %% API
--export([open/1, open/2, equals/2, get_tree/1, count/2, count_trace/2, update/3, delete/2, leaves/1, find/2, visualized_find/2, key_diff/2, close/1, scan_for_empty/1, swap_tree/2]).
+-export([open/1, open/2, equals/2, get_tree/1, count/2, count_trace/2, update/3, updatea/3, delete/2, deletea/2, leaves/1, find/2, visualized_find/2, key_diff/2, close/1, scan_for_empty/1, swap_tree/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -50,6 +50,9 @@ leaves(Pid) ->
 
 update(Key, Value, Pid) ->
   gen_server:call(Pid, {update, Key, Value}, infinity).
+  
+updatea(Key, Value, Pid) ->
+  gen_server:cast(Pid, {update, Key, Value}).
 
 equals(A, B) ->
   gen_server:call(A, hash) == gen_server:call(B, hash).
@@ -62,6 +65,9 @@ visualized_find(Key, Tree) ->
 
 delete(Key, Tree) ->
   gen_server:call(Tree, {delete, Key}).
+  
+deletea(Key, Tree) ->
+  gen_server:cast(Tree, {delete, Key}).
 
 key_diff(TreeA, TreeB) ->
   gen_server:call(TreeA, {key_diff, TreeB}).
@@ -208,6 +214,33 @@ handle_call(scan_for_empty, _From, DM = #dmerkle{root=Root,tree=Tree}) ->
 %% @doc Handling cast messages
 %% @end 
 %%--------------------------------------------------------------------
+handle_cast({update, Key, Value}, DM = #dmerkle{tree=Tree,root=Root}) ->
+  % error_logger:info_msg("inserting ~p~n", [Key]),
+  % dmtree:tx_begin(Tree),
+  D = dmtree:d(Tree),
+  M = m(Root),
+  NewTree = if
+    M >= D-1 -> %allocate new root, move old root and split
+      % ?infoMsg("root M is larged than D-1.  splitting.~n"),
+      Root2 = split_child(#node{}, empty, Root, Tree),
+      dmtree:update_root(Root2, Tree),
+      % error_logger:info_msg("found: ~p~n", [visualized_find("key60", Tree#dmerkle{root=FinalRoot})]),
+      Root3 = update(hash(Key), Key, Value, Root2, Tree),
+      DM#dmerkle{root=Root3};
+    true -> 
+      Root2 = update(hash(Key), Key, Value, Root, Tree),
+      % ?infoFmt("updated root ~p~n", [Root2]),
+      DM#dmerkle{root=Root2}
+  end,
+  % dmtree:tx_commit(Tree),
+  {noreply, NewTree};
+  
+handle_cast({delete, Key}, DM = #dmerkle{tree=Tree,root=Root}) ->
+  % dmtree:tx_begin(Tree),
+  RetNode = delete(hash(Key), Key, root, Root, Tree),
+  % dmtree:tx_commit(Tree),
+  {noreply, DM#dmerkle{root=RetNode}};
+
 handle_cast(close, Tree) ->
     {stop, shutdown, Tree}.
 
