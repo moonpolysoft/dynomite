@@ -42,13 +42,22 @@ task :run do
   sh %Q{erl -boot start_sasl +K true +A 128 -smp enable -pz ./ebin/ -sname local_console#{$$} -mnesia dir '"/tmp/mbd"' -noshell -run dynomite start}
 end
 
-task :build_dist => [:build_deps] do
-  sh "erlc #{ERLC_FLAGS} elibs/*.erl"
-  # Dir["templates/*"].each do |template|
-  #   sh %Q(erl -pz ebin -noshell -eval 'erltl:compile("#{template}", [{outdir, "ebin"}, debug_info, show_errors, show_warnings])' -s erlang halt)
-  # end
+task :make_dist => [:clean, :native, :default, :release] do
+  puts "made release version #{VERSION}"
 end
 
+task :install do
+  ERL = `which erl`
+  ERLDIR = `awk -F= '/ROOTDIR=/ { print $2; exit; }' #{ERL}`.chomp
+  sh "cp releases/dynomite-#{VERSION}/dynomite_rel-#{VERSION}.tar.gz #{ERLDIR}/releases/"
+  sh %Q(erl -boot start_sasl -noshell -eval "io:format(\\"~p~n\\", [release_handler:unpack_release(\\"dynomite_rel-#{VERSION}\\")])." -s init stop)
+end
+
+task :uninstall do
+  ERL = `which erl`
+  ERLDIR = `awk -F= '/ROOTDIR=/ { print $2; exit; }' #{ERL}`.chomp
+  sh %Q(erl -boot start_sasl -noshell -eval "io:format(\\"~p~n\\", [release_handler:remove_release(\\"dynomite_#{VERSION}\\")])." -s init stop)
+end
 
 task :thrift_clients do
   sh "thrift --gen rb if/dynomite.thrift"
@@ -80,7 +89,7 @@ task :release => [:default] do
   sh "cp -r deps/mochiweb/include/* #{release}/include" rescue nil
   sh "cp -r deps/mochiweb/priv/* #{release}/priv" rescue nil
   
-  sh %Q(cd #{release} && erl -pa ./ebin -eval "systools:make_script(\\"dynomite_rel-#{VERSION}\\", [local])." -eval "systools:make_tar(\\"dynomite_rel-#{VERSION}\\")." -s init stop)
+  sh %Q(cd #{release} && erl -pa ./ebin -noshell -eval "systools:make_script(\\"dynomite_rel-#{VERSION}\\")." -eval "systools:make_tar(\\"dynomite_rel-#{VERSION}\\")." -s init stop)
 end
 
 task :econsole do
