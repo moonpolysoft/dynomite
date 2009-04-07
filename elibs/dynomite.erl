@@ -5,16 +5,28 @@
 -include("common.hrl").
 
 start() ->
-  application:load(os_mon),
-  application:start(os_mon),
-  application:load(thrift),
-  % application:start(thrift),
-  application:load(dynomite),
-  %spawn(fun() -> collect_loop() end),
   crypto:start(),
-  % murmur:start(),
-  % P = fnv:start(),
-  application:start(dynomite).
+  load_and_start_apps([os_mon, thrift, mochiweb, dynomite]).
+  
+load_and_start_apps([]) ->
+  ok;
+  
+load_and_start_apps([App|Apps]) ->
+  case application:load(App) of
+    ok -> 
+      case application:start(App) of
+        ok -> load_and_start_apps(Apps);
+        Err -> 
+          ?infoFmt("error starting ~p: ~p~n", [App, Err]),
+          timer:sleep(10),
+          halt(1)
+      end;
+    Err -> 
+      ?infoFmt("error loading ~p: ~p~n", [App, Err]), 
+      Err,
+      timer:sleep(10),
+      halt(1)
+  end.
   
 collect_loop() ->
   process_flag(trap_exit, true),
