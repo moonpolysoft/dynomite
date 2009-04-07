@@ -46,7 +46,7 @@ namespace :dynomite do
     end
     
     task :compile do
-      run "cd dynomite && rake clean && rake native profile default"
+      run "cd dynomite && rake clean && rake native default"
     end
 
     task :data_reset, :roles => :dyn do
