@@ -11,5 +11,5 @@
       web_rpc
     ]},
     {registered, []},
-    {applications, [kernel, stdlib, sasl, crypto]}
+    {applications, [kernel, stdlib, sasl, crypto, mochiweb, thrift]}
   ]}.
