@@ -28,7 +28,7 @@ rm_rf(Name) when is_list(Name) ->
 zero_split(Bin) ->
   zero_split(0, Bin).
 
-zero_split(N, Bin) when N > byte_size(Bin) -> Bin;
+zero_split(N, Bin) when N > erlang:byte_size(Bin) -> Bin;
   
 zero_split(N, Bin) ->
   case Bin of
@@ -157,7 +157,7 @@ fnv(Term) when is_binary(Term) ->
 fnv(Term) ->
   fnv_int(?OFFSET_BASIS, 0, term_to_binary(Term)).
   
-fnv_int(Hash, ByteOffset, Bin) when byte_size(Bin) == ByteOffset ->
+fnv_int(Hash, ByteOffset, Bin) when erlang:byte_size(Bin) == ByteOffset ->
   Hash;
   
 fnv_int(Hash, ByteOffset, Bin) ->
@@ -204,7 +204,7 @@ time_to_epoch_float({Mega,Sec,Micro}) ->
   Mega * 1000000 + Sec + Micro / 1000000.
   
 byte_size(List) when is_list(List) ->
-  lists:foldl(fun(El, Acc) -> Acc + byte_size(El) end, 0, List);
+  lists:foldl(fun(El, Acc) -> Acc + lib_misc:byte_size(El) end, 0, List);
   
 byte_size(Term) ->
   erlang:byte_size(Term).
