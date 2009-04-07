@@ -14,6 +14,8 @@
 %% API
 -export([open/2, close/1, get/2, put/4, has_key/2, delete/2, fold/3]).
 
+-include("common.hrl").
+
 -record(row, {key, context, values}).
 
 %%====================================================================
@@ -28,7 +30,9 @@
 open(Directory, Name) ->
   ok = filelib:ensure_dir(Directory ++ "/"),
   TableName = list_to_atom(lists:concat([Name, '/', node()])),
-  ets:new(TableName, [{keypos, 2}]).
+  Tid = ets:new(TableName, [set, public, {keypos, 2}]),
+  % ?infoFmt("table: ~p~n", [Tid]),
+  {ok, Tid}.
   
 close(Table) -> dets:close(Table).
 
@@ -38,10 +42,9 @@ fold(Fun, Table, AccIn) when is_function(Fun) ->
     end, AccIn, Table).
     
 put(Key, Context, Values, Table) ->
-  case ets:insert(Table, [#row{key=Key,context=Context,values=Values}]) of
-    ok -> {ok, Table};
-    Failure -> Failure
-  end.
+  % ?infoFmt("ets:insert(~p, ~p)~n", [Table, #row{key=Key,context=Context,values=Values}]),
+  ets:insert(Table, #row{key=Key,context=Context,values=Values}),
+  {ok, Table}.
   
 get(Key, Table) ->
   case ets:lookup(Table, Key) of
