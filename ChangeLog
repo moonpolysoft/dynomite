@@ -1,0 +1,499 @@
+2009-04-04 Version 0.6.0 (cliff)
+	* (Cliff Moon) ac3adce configure whether or not to start from an installed release file
+	* (Cliff Moon) d18351e escaped quotes to force config file to be a string instead of an atom [#3 tagged:committed responsible:cliff state:resolved]
+	* (Cliff Moon) 38ea4f3 take boot script out of normal startup for now
+	* (Cliff Moon) 3c61f49 a stab at a production start script
+	* (Cliff Moon) 3d4b511 rake task based off of VERSION env variable
+	* (Cliff Moon) 1ebbf56 remove thrift app since it does not start
+	* (Cliff Moon) a16e540 lib -> priv
+	* (Cliff Moon) acd2d45 remove these old ones
+	* (Cliff Moon) b3cdf8b rake target to make a release
+	* (Cliff Moon) edbe38d releases suuuuuuuuck;
+	* (Cliff Moon) e0d1ad7 fixed app file
+	* (Cliff Moon) fb09f62 Merge commit 'skeptomai/skeptomai-deployment' into integration
+	* (Cliff Moon) bef4b27 config changes
+	* (Cliff Moon) 4ab039b an rpc module for people to use
+	* (Cliff Moon) 6b1b0ce non-persistent ets storage engine
+	* (Cliff Moon) 21af3dd +A 128 to +A 30.  128 seems extreme
+	* (Cliff Moon) b65767a load balancing profiling
+	* (Cliff Moon) f8ceee4 small change from false to undefined
+	* (Cliff Moon) 7a018c8 changing benchmark usage to reflect reality
+	* (Cliff Moon) d33e1ef balance calls for profiling
+	* (Cliff Moon) 032b471 load balancing
+	* (Cliff Moon) 3c03361 micro optimization
+	* (Cliff Moon) abdf6d7 apparently spawning off at that point is a really terrible idea
+	* (Cliff Moon) 881e0d9 some attempts at fixing performance
+	* (Cliff Moon) 004cb66 more meaningful profiling
+	* (Cliff Moon) 28d7526 fix the escript so it will work in rpc mode
+	* (Cliff Moon) 74a587d single node testing;
+	* (Cliff Moon) 6bc1357 compiler warning
+	* (Cliff Moon) 12e05c9 add proile
+	* (Cliff Moon) 6c62f97 option for rpc benching
+	* (Christopher Brown) 6255f68 removed bash-isms from tarball task
+	* (Cliff Moon) b7aad6d status command
+	* (Cliff Moon) 6f90181 an erlang benchmark script instead of the ruby one
+	* (Cliff Moon) 2e38f6f throughput tests
+	* (Cliff Moon) 49e4b80 copypasta
+	* (Cliff Moon) 9c3c0e4 calculate throughput
+	* (Cliff Moon) 5363911 loaded function
+	* (Cliff Moon) 369fcf3 loaded function
+	* (Cliff Moon) ebd2018 a thrift client in erlang
+	* (Cliff Moon) bca1eef fix gossiping
+	* (Cliff Moon) 9649a33 membership profiling
+	* (Cliff Moon) 2c2bb9c more utility functions
+	* (Cliff Moon) bdc4e0d buffering
+	* (Cliff Moon) ca2250c sleep for printing command output
+	* (Cliff Moon) 51c01d7 print reqs/s
+	* (Christopher Brown) c497af3 Merge branch 'fix-rake-clienttask' into skeptomai-deployment
+	* (Christopher Brown) 24e8c00 Merge branch 'fix-commandline' into skeptomai-deployment
+	* (Christopher Brown) 33e2c2c moved the task
+	* (Christopher Brown) 1aefb97 added build_tarball task
+	* (Christopher Brown) 6ddae59 added the 'rebuild thrift clients' task
+	* (Christopher Brown) 39b8fd1 added -c config.json to README.markdown changed -c to -n for cluster name (conflicted with -c for config file)
+	* (Cliff Moon) 2e74d1d escaped quotes to force config file to be a string instead of an atom [#3 tagged:committed responsible:cliff state:resolved]
+	* (Cliff Moon) 4f6666b update readme with new startup instructions
+	* (Cliff Moon) 72f93c4 R script for making purty graphs out of dist_bench data
+	* (Cliff Moon) fb24fc4 R friendly data
+	* (Cliff Moon) 315cb17 fix the gossip server
+	* (Cliff Moon) 88a6bda traditional consistent hashing.  i have reservations, but at least it displays monotonicity
+	* (Cliff Moon) 643cf98 hash with seed
+	* (Cliff Moon) fe15a5d add caching to the configs
+	* (Cliff Moon) 68d1a28 remove log files, not the directory
+	* (Cliff Moon) 0202891 add caching to the config file
+	* (Cliff Moon) 3da6d2a caching and tests
+	* (Cliff Moon) 62d5d52 i cannot believe i did not know about port locking.  thats how i assumed it all worked.
+	* (Cliff Moon) 949e404 Merge branch 'buffered_writes'
+	* (Cliff Moon) 4fabb7c adding nick to the authors list for his protobuffs contribution
+	* (Cliff Moon) 97b3431 buffered writes
+	* (Cliff Moon) 57db1b7 buffered writes
+	* (Cliff Moon) a701295 merging in changes from nick
+	* (Nick Gerakines) 22167f7 Adding better documentation and getting a few misc todos out of the way.
+	* (Nick Gerakines) 029590a Fixing merge conflict
+	* (Nick Gerakines) 890bb49 Adding license info, adding documentation.
+	* (Cliff Moon) bb8fcb5 cleaning up the protocol buffers server a little bit
+	* (Cliff Moon) dd6b6f8 cleaning up the protocol buffers server a little bit
+	* (Nick Gerakines) 681ded2 Adding a protocol buffers interface.
+	* (Cliff Moon) 6df06b0 fix streaming to block when we want it to be blocking
+	* (Cliff Moon) bc1e3c3 sigh, why do port drivers have bust balls like this
+	* (Cliff Moon) b4a8be4 cleaned up issues with shuffle and fnv from the last commit
+	* (Cliff Moon) 0ee41d2 configuration sharing
+	* (Cliff Moon) 6e79e59 changed to using a config file.  still need to make sure that config sharing is behaving
+	* (Cliff Moon) c777939 fixed the issue with adjacent blocks of differing sizes. [#2 tagged:committed responsible:cliff state:resolved]
+	* (Cliff Moon) ac02f75 profiling
+	* (Cliff Moon) 8c0db6e adding dynomite_prof to supervisor
+	* (Cliff Moon) 5a10ff5 profiling server
+	* (Cliff Moon) f8cccd1 remove prints
+	* (Cliff Moon) ff02860 move fnv hash over to port_control
+	* (Cliff Moon) 740a5f6 add hostname to the file name
+	* (Cliff Moon) 182201b mediator is moved into a library
+	* (Cliff Moon) 3e08118 dmtree should not timeout
+	* (Cliff Moon) 7b7e9fd cache the configuration since its a bad idea to change it in a running cluster
+	* (Cliff Moon) 33ca088 fixed storage server to rebuild its merkle trees if they error out
+	* (Cliff Moon) 1d2b4a5 check that folding operations wont block and that concurrent updates dont shit the bed
+	* (Cliff Moon) 4d52895 fix membership servers to load legacy partition maps
+	* (Cliff Moon) 778f56f fixing integration issues in membership
+	* (Cliff Moon) 4580bec get rid of errant debug
+	* (Cliff Moon) 47e6bee sync manager
+	* (Cliff Moon) 29c77cb ensure the home dir
+	* (Cliff Moon) e6f0871 this lol
+	* (Cliff Moon) 18786a0 storage manager implementation
+	* (Cliff Moon) 604a051 changes in partition library to support new storage_manager
+	* (Cliff Moon) 8e4a01c membership integration with new storage_manager
+	* (Cliff Moon) b71ee27 adding new storage manager to the startup
+	* (Cliff Moon) d65c27c getting rid of the live hack in config
+	* (Cliff Moon) 48566f4 stubbing functions
+	* (Cliff Moon) 2aef8c2 remove unused stuff
+	* (Cliff Moon) 020d827 more work on the refactored membership server.
+	* (Cliff Moon) 92acb9d get rid of race condition for everyone
+	* (Cliff Moon) 9b78be4 race condition in bootstrap
+	* (Cliff Moon) 3ff13ce partitions will now consistently hash to a node.
+	* (Cliff Moon) dbddc43 refactoring of the membership server
+	* (Cliff Moon) 57ebae8 sweet jesus why did i comment out the membership tests.  lazy.
+	* (Cliff Moon) dfa2745 persnikity formatting
+	* (Cliff Moon) dec1de1 fixed issue with restarting dmtree servers from disk.  how did i miss this?
+	* (Cliff Moon) 3145da1 got rid of stupid config wrapping and fixed the stop function
+	* (Cliff Moon) 87153ca fixed completion in bootstrapping
+	* (Cliff Moon) 259bd41 number of servers to deploy to
+	* (Cliff Moon) dfcf03d bootstrap server
+	* (Cliff Moon) 467fdd4 analyze can spit out a csv file for import into spreadsheets
+	* (Cliff Moon) c778bfe enough with the gossip log messages
+	* (Cliff Moon) fa62fe4 fixed a really evil and subtle bug that would cause nodes to spiral out of control
+	* (Cliff Moon) 192dd6d get rid of spurious stuff
+	* (Cliff Moon) e246d34 fixed timeouts
+	* (Cliff Moon) 8a8fd5a this timeout has got to go
+	* (Cliff Moon) 48e97aa cleanup
+	* (Cliff Moon) 2d54e96 was missing thrift service
+	* (Cliff Moon) 6c0807a split truncation out into its own method so that it does not interfere with conflict resolution
+	* (Cliff Moon) 4581c07 lolgit
+	* (Cliff Moon) 30e3008 nil context clobbers the value
+	* (Cliff Moon) 11da43e changes to vector clock notation to deal with concurrent clients
+	* (Cliff Moon) 6c43ffd merged from cliffmoon/master
+	* (Cliff Moon) b39d4e1 1024 partitions isnt great for perf testing
+	* (Cliff Moon) f308c15 fixed default port option
+	* (Cliff Moon) dfab0d3 fixed dmerkle error during hash conflicts
+	* (Cliff Moon) fecb101 added native murmur and fnv hashing.
+	* (Cliff Moon) 7a41a65 do not need this
+	* (Cliff Moon) c1b4409 lol
+	* (Cliff Moon) 65fa277 Merge branch 'ulimit'
+	* (Cliff Moon) d33770e 1024 partitions?
+	* (Cliff Moon) 5fd7f15 ulimit driver that can dynamically fiddle with the fd soft limits
+	* (cliffmoon) fe20ba9 Whoops, left that in there by mistake.
+	* (Cliff Moon) 3f23ac8 changes to vector clock notation to deal with concurrent clients
+	* (Cliff Moon) 9cdad0c test for put operations w/ conflicting version numbers
+	* (Cliff Moon) 0535966 factor out lib_misc:byte_size.  we should be using erlang:iolist_size instead.
+	* (Cliff Moon) 64d2753 stuff
+	* (Cliff Moon) 4b82ba2 adding c extensions to deal with ulimit
+	* (Cliff Moon) ef7ce45 Merge branch 'dmerkle_refact'
+	* (Cliff Moon) 2ab74d4 refactoring complete for now
+	* (Cliff Moon) 72b77c3 variable header size with freelists
+	* (Cliff Moon) 1929c1c batching up disk ops was a mistake.  raw mode is not.
+	* (Cliff Moon) fd44703 replaced a ton of packing/unpacking code with bit string comprehensions
+	* (Cliff Moon) 2eadab5 batched disk operations
+	* (Cliff Moon) f586ec8 all the tests pass again, oh yes
+	* (Cliff Moon) 186e178 all the tests pass again, oh yes
+	* (Cliff Moon) 98306b8 lolformatting
+	* (Cliff Moon) d0636de codahale wants moar docs, codahale gets moar docs
+	* (Cliff Moon) 48b019d good refactoring checkpoint
+	* (Cliff Moon) 344fc5e refactoring is good
+	* (Cliff Moon) 409c5d5 refactoring dmerkle
+	* (Cliff Moon) c01a657 lolsmp
+	* (Cliff Moon) 763a88a split out server definitions so other folks can use it too
+	* (Cliff Moon) ed0d24a added native compilation to the load testing deployment
+	* (Cliff Moon) de5858b stopping point before wrecking shop
+	* (Cliff Moon) 6682793 deleting and reinserting will reuse blocks from the free list.
+	* (Cliff Moon) 2e095af allocate from the block freelist
+	* (Cliff Moon) 320cfb3 fixed mediator tests for coverage
+	* (Cliff Moon) 2dcf62b ignore all the code coverage gen files
+	* (Cliff Moon) ff36d92 code coverage analysis
+	* (Cliff Moon) 49fe217 adding rand_str to the burgeoning mess that is lib_misc
+	* (Cliff Moon) 736f1b0 moar tests
+	* (Cliff Moon) f2e07e4 fixed freelist maintenance
+	* (Cliff Moon) e78c79d simple deletion tests now run to completion.
+	* (Cliff Moon) 2ce556a tests now pass for header format change
+	* (Cliff Moon) 1cf4bc9 starting the arduous dmerkle deletion code.  will break file compatibility
+	* (Cliff Moon) 8cdd91b common header from the backups branch
+	* (Cliff Moon) 0bcd4bf performance testing and deployment stuff.
+	* (Cliff Moon) 2dd334e reap pmap processes when it is all done
+	* (Cliff Moon) ba7245f use queues instead of lists for O(1) operations
+	* (Cliff Moon) 043f5bc more accurate rate server
+	* (Cliff Moon) c88b268 added tests and fixed some serious performance issues with the rate server.
+	* (Cliff Moon) 593f064 generated ruby bindings for the thrift iface
+	* (Cliff Moon) 04fe900 athors credit to jason
+	* (Cliff Moon) 8299c8d fixed up the stop command
+	* (Cliff Moon) 72e28f6 split off dmerkle handling into its own gen_server
+	* (Cliff Moon) 9a59bc9 cleanup
+	* (Cliff Moon) 215cfc3 fixed up the mediator tests to not use slave nodes
+	* (Cliff Moon) 7b93bf6 Merge branch 'streaming' of git://github.com/cliffmoon/dynomite into master
+	* (Cliff Moon) 22d0f9f adding a reference to the streaming module so that it will not get confused with long running processes
+	* (Cliff Moon) 38b003d adding etest/log and test.config to ignore
+	* (Cliff Moon) 3d740b2 putting back the deps.  please do not delete these in the future.
+	* (Cliff Moon) 95c4029 merkle is obsolete
+	* (Cliff Moon) 97368ca ext listener is obsolete
+	* (Cliff Moon) d3b98c1 xhash isn't ready
+	* (Cliff Moon) 2e9f91b merge branch master from jpellerin/master
+	* (Cliff Moon) 76e7d07 moving streaming into the storage server
+	* (Cliff Moon) b75fee3 adding link to the mailing list
+	* (Cliff Moon) 0eee060 streaming put
+	* (Cliff Moon) 7413064 simple implementation of streaming with support for get operations
+	* (Cliff Moon) b3279fb fix link
+	* (Cliff Moon) 302bafd move readme to markdown
+	* (Cliff Moon) 48292ff update the table and tree in parallel
+	* (Cliff Moon) c72b9c6 mediator now deals with stripped pmap results
+	* (Cliff Moon) ac7d396 sorting for the pmap results
+	* (Cliff Moon) bfb7381 Merge branch 'master' of git://github.com/jpellerin/dynomite into jpellerin/master
+	* (Jason Pellerin) de2e806 Added profile include; profile server not yet implemented
+	* (Jason Pellerin) 7a70e0e Merged from cliffmoon master
+	* (Jason Pellerin) ef595bf Started on ec2 load test
+	* (Jason Pellerin) 43825b9 Fixed bug
+	* (Jason Pellerin) 345e050 Added first cut at basic load tester
+	* (Jason Pellerin) 34e0f61 Removed old gen-py dir
+	* (Jason Pellerin) c9d5f9a Reorganized python client code, added convenience wrapper for thrift client
+	* (Jason Pellerin) dc12307 Moved dbench to pylibs, renamed to dbench_thrift, to clean up root dir and make space for non-thrift benchmark script
+	* (Jason Pellerin) 30e451b Added stop command
+	* (Jason Pellerin) 3892f42 Added more unit tests and a functional test for python client, implemented basic client functionality
+	* (Jason Pellerin) 9b8ee55 Added .pyc, .egg and .egg-info to .gitignore
+	* (Jason Pellerin) 6488913 Started work on non-thrift python client
+	* (Jason Pellerin) d6154cb Added --profile switch to support running under fprof
+	* (Jason Pellerin) f5823ec Use lib_misc:byte_size in mnesia_storage (DRY)
+	* (Jason Pellerin) 4e0dac6 Fixed bug in vector_clock:resolve: when a new node is joining, resolve may get not_found as an argument instead of one of the pairs of {Clock, Values}. In that case, it always picks the {Clock, Values} pair.
+	* (Cliff Moon) 9bb61c2 Merge branch 'master' of git://github.com/jpellerin/dynomite into jpellerin/master
+	* (Jason Pellerin) aadb477 Fixed incorrect change to membership
+	* (Jason Pellerin) 7e20ebc Added mnesia storage handler. Stores metadata and small values in mnesia disc_copies table, large values in separate files on disc.
+	* (Cliff Moon) 87717fa Merge branch 'master' of git://github.com/jpellerin/dynomite into jpellerin/master
+	* (Jason Pellerin) 6c34266 Reworked ext_listener test to use eunit fixtures and macros updated it so all asserts pass. Increased wait time in mediator test. All unit tests now pass (overlooking occasional timing-related failures).
+	* (Jason Pellerin) 24fe74b Substantially refactored mediator test. Now spawns sets of slave nodes, instead of sets of storage servers on local node. Also uses eunit macros and fixtures. A few other scattered fixes, cleanups.
+	* (Cliff Moon) a748c51 merged changes from jpellerin
+	* (Cliff Moon) ccc7759 starting point for xhash storage
+	* (Cliff Moon) d6c089f add reverse bits to the exports
+	* (Jason Pellerin) 3abb5ca Corrected notes, expanded benchmark script
+	* (Jason Pellerin) 61c709e Monkeying around with starting and connecting nodes
+	* (Jason Pellerin) 1b0c195 Added python thrift client files
+	* (Jason Pellerin) bf03872 Working on fixing mediator, ext_listener tests. Changed name of thrift_service module to dynomite_thrift_service to avoid name conflict.
+	* (Jason Pellerin) 751c770 Finished cleanup of dmerkle test: all passing
+	* (Jason Pellerin) ceae03c Rakefile now sets priv dir, and generates test.config that puts kernel and sasl log output into priv dir, to make console test output more readable
+	* (Jason Pellerin) 990fa31 Changed Rakefile to run all selected module tests as unified test run
+	* (Jason Pellerin) f76ab1e Improved dmerkle test somewhat, still some failures
+	* (Jason Pellerin) ae6010e Added test lib module, fixed storage server test to use priv dir instead of hard-coded dir.
+	* (Cliff Moon) b815f42 function to reverse the bits in a 32bit number
+	* (Cliff Moon) efc7b5e stats document from perf testing
+	* (Cliff Moon) e51e821 fixed initialization for results
+	* (Cliff Moon) 4c2cfd7 benchmark both get and put
+	* (Cliff Moon) ef4cba2 i need to rethink the storage server tests
+	* (Cliff Moon) cdabea1 slight fix, doesnt actually change anything
+	* (Cliff Moon) 30c2e9d added dets storage
+	* (Cliff Moon) 985d882 fixed up some stuff in the benchmarking suite
+	* (Cliff Moon) 26eaf50 benchmarking suite
+	* (Cliff Moon) c400420 credit for the couch engine
+	* (Cliff Moon) a09445d fixed api compliance for fs store and tc store
+	* (Cliff Moon) 91e8ae3 added a storage engine powered by the couchdb internal format
+	* (Cliff Moon) 26b86ea fixing put behavior and compile error
+	* (Cliff Moon) 0a9a70e removing errant logging
+	* (Cliff Moon) 64b88b5 fixed sync behavior for distributing conflicted versions.
+	* (Cliff Moon) ca8b7ec fixed put behavior for concurrent updates
+	* (Cliff Moon) 8bf40db adding todd to the authors list
+
+Version 0.5.0 (cliff)
+	* (Cliff Moon) removing format
+	* (Cliff Moon) fixing bug in tc store
+	* (Cliff Moon) added a thrift test script
+	* (Cliff Moon) storage modules handle lists
+	* (Todd Lipcon) Remove beams from repo and add to .gitignore
+	* (Cliff Moon) changed vector clocks to use clock time
+	* (Cliff Moon) if a node calls join and it already appears in the partition table, use its existing entries
+	* (Todd Lipcon) Add gitignore for emacs/vim backups
+	* (Todd Lipcon) Make gossiping more asynchronous - don't block gen_server on responses from other nodes. Also disallow use of join_to when the node
+	* (Todd Lipcon) Add assertion to prevent re-joining a node when it already has partitions
+	* (Todd Lipcon) Make mediator spawn processes to actually handle activity and async reply for better concurrency
+	* (Todd Lipcon) Add thrift and a thrift service
+
+Version 0.4.2 (cliff)
+	* (Cliff Moon) tokyo cabinet storage engine.
+	* (Cliff Moon) tweaking storage server contract
+
+Version 0.4.1 (cliff)
+	* (Cliff Moon) fixed replica nodes issue
+
+Version 0.4.0 (cliff)
+	* (Cliff Moon) lots of new viz stuff for the interface
+	* (Cliff Moon) added robustification to the sync server
+	* (Cliff Moon) configurable port number
+	* (Cliff Moon) cleaned up newlines from the console script
+	* (Cliff Moon) cleaned up data services for viz
+	* (Cliff Moon) added diffing and robustification to the sync_server
+	* (Cliff Moon) the storage server should report stats for LB
+	* (Cliff Moon) add stat server to the startup sequence
+	* (Cliff Moon) refactoring stats from socket server to a standalone server
+	* (Cliff Moon) fixed pmap to ignore errors as bad results
+	* (Cliff Moon) dynomite interface is one hell of steeze
+	* (Cliff Moon) a diff method
+	* (Cliff Moon) a remsh console
+	* (Cliff Moon) sync_manager
+	* (Cliff Moon) added replica nodes function for interface
+	* (Cliff Moon) added some debug methods to dmerkle
+	* (Cliff Moon) refactoring partitions into a library
+	* (Cliff Moon) fixes to the stress test
+	* (Cliff Moon) floor and ceiling for shitzngiggles
+	* (Cliff Moon) support for changing the web port
+
+Version 0.3.1 (cliff)
+	* (Cliff Moon) bigger timeout and start paused
+
+Version 0.3.0 (cliff)
+	* (Cliff Moon) integrated sync servers
+
+Version 0.2.19 (cliff)
+	* (Cliff Moon) fixed sync function
+	* (Cliff Moon) reinstate merkle trees.  thought i did this.
+
+Version 0.2.18 (cliff)
+	* (Cliff Moon) support for sync servers
+	* (Cliff Moon) vast speed improvements to merkle diff operation
+
+Version 0.2.17 (cliff)
+  * (Cliff Moon) fixed foldl bug
+
+Version 0.2.16 (cliff)
+	* (Cliff Moon) minor changes to the storage server
+	* (Cliff Moon) fixed a multitude of merkle issues.  splitting the root node is now fixed.  so is the diff algorithm.  more public functio
+	* (Cliff Moon) getting rid of errant log msg
+	* (Cliff Moon) nicerer rakefile
+
+Version 0.2.15 (cliff)
+	* (Cliff Moon) fixed issue with splitting regular nodes in merkle trees
+	* (Cliff Moon) fix stress test
+	* (Cliff Moon) clarify header
+	* (Cliff Moon) dmerkle stress test
+	* (Cliff Moon) mods to rakefile
+
+Version 0.2.14 (cliff)
+	* (Cliff Moon) safeguard against asking for more results than we can possibly supply
+	* (Cliff Moon) issues with wrong configuration in the mediator
+
+Version 0.2.13 (cliff)
+	* (Cliff Moon) cwd for the start script
+	* (Cliff Moon) fixing symlink
+
+Version 0.2.12 (cliff)
+	* (Cliff Moon) capabilities to rebuild the merkle trees of storage servers
+	* (Cliff Moon) fixed pmap to bank out after the minimum comes back
+	* (Cliff Moon) removing makefile.in
+
+Version 0.2.11 (cliff)
+	* (Cliff Moon) typo
+	* (Cliff Moon) save state on force
+	* (Cliff Moon) fixing symlink
+	* (Cliff Moon) fixed symlinked script
+
+Version 0.2.10 (cliff)
+	* (Cliff Moon) fixed timestamps in datapoints
+
+Version 0.2.9 (cliff)
+	* (Cliff Moon) fixed timestamps in datapoints
+
+Version 0.2.8 (cliff)
+	* (Cliff Moon) interface changes
+	* (Cliff Moon) periodically updating rates
+	* (Cliff Moon) a rate server to calculate request/transfer rates
+	* (Cliff Moon) Merge branch 'master' into socket_server
+	* (Cliff Moon) fixing root splitting in the dmerkle
+
+Version 0.2.7 (cliff)
+	* (Cliff Moon) temporarily disabling merkle trees
+
+Version 0.2.6 (cliff)
+	* (Cliff Moon) fixed a lot of stuff in the ext listener.  resuseaddr.
+
+Version 0.2.5 (cliff)
+	* (Cliff Moon) save state in all cases during share
+	* (Cliff Moon) much more reasonableness in the supervisors
+
+Version 0.2.4 (cliff)
+	* (Cliff Moon) merkle -> dmerkle
+	* (Cliff Moon) sort partitions first
+	* (Cliff Moon) more reasonable restart policy
+
+Version 0.2.3 (cliff)
+	* (Cliff Moon) more reasonable defaults in the client lib
+	* (Cliff Moon) execution flag
+	* (Cliff Moon) readme
+
+Version 0.2.2 (cliff)
+	* (Cliff Moon) membership interface
+	* (Cliff Moon) export set_config
+	* (Cliff Moon) fixed logging output
+	* (Cliff Moon) added set config
+	* (Cliff Moon) better loading of configuration from disk
+	* (Cliff Moon) better timeout/retry logic in ruby library
+
+Version 0.2.1 (cliff)
+	* (Cliff Moon) robustifying the ruby client
+
+Version 0.2.0 (cliff)
+	* (Cliff Moon) stress testing script
+	* (Cliff Moon) integrate disk merkle trees
+	* (Cliff Moon) get rid of annoying warnings.
+	* (Cliff Moon) fixed not_found error.  removed merkle update call.
+	* (Cliff Moon) loading membership info from disk
+	* (Cliff Moon) dmerkle trees are working reasonably well now.
+	* (Cliff Moon) disk based merkle trees
+
+Version 0.1.5 (cliff)
+	* (Cliff Moon) put got boned up. sigh.
+
+Version 0.1.4 (cliff)
+	* (Cliff Moon) fixed issues with the sync function and changed default timeout to infinity
+	* (Cliff Moon) remove extraneous hashing
+	* (Cliff Moon) lessening the memory impact of the hashing function
+	* (Cliff Moon) spawn_opts to give GC hints for external listeners
+	* (Cliff Moon) membership command
+	* (Cliff Moon) commands
+
+Version 0.1.3 (cliff)
+  * (Cliff Moon) fixed up the ruby client library
+	* (Cliff Moon) removed initialization from supervisor
+	* (Cliff Moon) reload storage servers when membership info changes
+	* (Cliff Moon) removing extraneous logging
+	* (Cliff Moon) removed crypto start and stop from fs storage
+	* (Cliff Moon) moved up storage sup init
+	* (Cliff Moon) added live parameter to config
+	* (Cliff Moon) crypto start in the initialization
+	* (Cliff Moon) added get_config/0
+
+Version 0.1.2 (cliff)
+	* (Cliff Moon) rewrote sanitize key for giggles
+	* (Cliff Moon) removing logging
+	* (Cliff Moon) fixed membership tests, node randomization, state accumulation in gossip, and fair partitioning.
+	* (Cliff Moon) keys always need to be lists
+
+Version 0.1.1 (cliff)
+	* (Cliff Moon) af_inet blues
+	* (Cliff Moon) wired up detached to the command line
+
+Version 0.1.0 (cliff)
+	* (Cliff Moon) adding compare to export
+	* (Cliff Moon) storage server synchronization on start
+	* (Cliff Moon) fixed membership gossip
+	* (Cliff Moon) error formatting
+	* (Cliff Moon) synchronization
+	* (Cliff Moon) logging for join events
+	* (Cliff Moon) switched merkle over to fnv hash
+	* (Cliff Moon) fixed startup sequence to include min and max
+	* (Cliff Moon) switching to fnv hash.  phash2 was comically bad.
+	* (Cliff Moon) added support for the new membership format
+	* (Cliff Moon) added default port
+	* (Cliff Moon) refactoring command line to be more like fuzed.  have commands for remote control.
+	* (Cliff Moon) integrated fold to bootstrap merkle trees on start.
+	* (Cliff Moon) better fun syntax
+	* (Cliff Moon) pass through fold for fail storage
+	* (Cliff Moon) adding fold to the storage servers
+	* (Cliff Moon) giving the thread pool cmd line arg.
+	* (Cliff Moon) integrating merkle trees into storage server
+	* (Cliff Moon) added storage module to config
+	* (Cliff Moon) added delete to merkle trees
+	* (Cliff Moon) mediator uses new membership functions and the config records
+	* (Cliff Moon) storage server sup now queries the membership server
+	* (Cliff Moon) fixed some environment options and the startup sequence
+	* (Cliff Moon) fixing issues with node joining
+	* (Cliff Moon) changed signature of storage modules
+	* (Cliff Moon) added merkle trees to the storage server
+	* (Cliff Moon) fixing up command line options
+	* (Cliff Moon) added node tracking
+	* (Cliff Moon) fixes to key_diff
+	* (Cliff Moon) key_diff for merkle trees
+	* (Cliff Moon) merkle trees
+	* (Cliff Moon) decoupling partitioning from placement in the membership server
+	* (Cliff Moon) compile error in ext listener
+	* (Cliff Moon) added config header
+	* (Cliff Moon) argument processing
+	* (Cliff Moon) configuration server
+	* (Cliff Moon) propagating new configuration options
+	* (Cliff Moon) configuration server
+	* (Cliff Moon) beginnings of failure detection in membership
+
+Version 0.0.4 (cliff)
+	* (Cliff Moon) robustify ruby client.  directory params
+	* (Cliff Moon) fixes to delete and logging
+
+Version 0.0.3 (cliff)
+	* (Cliff Moon) not found response for get request
+	* (Cliff Moon) AF_UNSPEC to support ipv6 and ipv4
+	* (Cliff Moon) properly retrieving command line options
+	* (Cliff Moon) logging of membership join events
+	* (Cliff Moon) changing to correct param name
+	* (Cliff Moon) proper escaping of args
+	* (Cliff Moon) note to self: compile before committing
+	* (Cliff Moon) ability to name a node to connect to
+	* (Cliff Moon) enable start when other nodes are there but not running.
+	* (Cliff Moon) setcookie is the correct arg name
+	* (Cliff Moon) dynomite config
+	* (Cliff Moon) merge back from powerset
+	* (Cliff Moon) adding code root directory
+
+Version 0.0.2 (cliff)
+	* fixed bin symlink
+
+Version 0.0.1 (cliff)
+	* proper dependencies
+
+Version 0.0.0 (cliff)
+	* First release of dynomite.
