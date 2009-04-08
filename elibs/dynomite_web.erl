@@ -29,6 +29,7 @@
 
 start_link() ->
   Config = configuration:get_config(),
+  WebDir = find_web_dir(),
   case Config#config.web_port of
     undefined -> dummy_server:start_link(dynomite_web);
     Port ->
@@ -76,4 +77,11 @@ rpc_invoke(Path, Req) ->
   Req:ok({"application/json", mochijson:encode(Result)}).
 
 get_option(Option, Options) ->
-    {proplists:get_value(Option, Options), proplists:delete(Option, Options)}.
+  {proplists:get_value(Option, Options), proplists:delete(Option, Options)}.
+    
+find_web_dir() ->
+  case filelib:is_dir(WebDir1 = filename:join([filename:dirname(code:which(?MODULE)), "..", "web"])) of
+    true -> WebDir1;
+    false -> filename:join([filename:dirname(code:which(?MODULE)), "..", "priv", "web"])
+  end.
+

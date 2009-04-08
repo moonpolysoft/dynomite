@@ -79,6 +79,7 @@ task :release => [:default] do
   sh "cp -r elibs/* #{release}/src" rescue nil
   sh "cp -r ebin/* #{release}/ebin" rescue nil
   sh "cp -r priv/* #{release}/priv" rescue nil
+  sh "cp -r web #{release}/priv/web" rescue nil
   sh "cp -r include/* #{release}/include" rescue nil
   sh "cp -r deps/thrift/src/* #{release}/src" rescue nil
   sh "cp -r deps/thrift/ebin/* #{release}/ebin" rescue nil
