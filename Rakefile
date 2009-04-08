@@ -12,6 +12,7 @@ ERLC_FLAGS = "+debug_info -W0 -I include -pa deps/mochiweb/ebin -I deps/mochiweb
 CLEAN.include("ebin/*.beam")
 CLEAN.include("c/*.o")
 CLEAN.include("priv/*.so")
+CLEAN.include("deps/*/ebin/*.beam")
 
 task :default => [:build_deps, :build_c_drivers] do
   puts "building #{ENV['TEST']}"
