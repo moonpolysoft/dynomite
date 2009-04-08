@@ -24,22 +24,22 @@
 %%--------------------------------------------------------------------
 
 info(stats) ->
-  {obj, [
+  {struct, [
     {node,node()}, 
-    {running_nodes,lists:sort(nodes([this,visible]))},
+    {running_nodes,{array, lists:sort(nodes([this,visible]))}},
     {member_nodes,transform_partitions(lists:keysort(1, membership:partitions()))}
   ]};
   
 info(partitions) ->
-  lists:map(fun({Node, Part}) -> 
-      {obj, [{node,Node},{partition,Part}]}
-    end,   lists:keysort(2, membership:partitions()));
+  {array, lists:map(fun({Node, Part}) -> 
+      {struct, [{node,Node},{partition,Part}]}
+    end, lists:keysort(2, membership:partitions()))};
     
 info(nodes) ->
-  membership:nodes().
+  {array, membership:nodes()}.
 
 rates(cluster) ->
-  {obj, [
+  {struct, [
     {get_rate, lists:foldl(fun(Node, Acc) -> Acc + stats_server:rate(Node, get_rate, 1) end, 0, nodes([this,visible]))},
     {put_rate, lists:foldl(fun(Node, Acc) -> Acc + stats_server:rate(Node, put_rate, 1) end, 0, nodes([this,visible]))},
     {in_rate, lists:foldl(fun(Node, Acc) -> Acc + stats_server:rate(Node, in_rate, 1) end, 0, nodes([this,visible]))},
@@ -48,10 +48,10 @@ rates(cluster) ->
   ]};
 
 rates(nodes) ->
-  lists:map(fun(Node) -> rates(Node) end, membership:nodes());
+  {array, lists:map(fun(Node) -> rates(Node) end, membership:nodes())};
 
 rates(Node) ->
-  {obj, [
+  {struct, [
     {name, Node},
     {get_rate, stats_server:rate(Node, get_rate, 1)},
     {put_rate, stats_server:rate(Node, put_rate, 1)},
@@ -62,20 +62,20 @@ rates(Node) ->
   
 syncs_running(cluster) ->
   {Good,_} = rpc:multicall(sync_manager, running, []),
-  lists:map(fun({Part, NodeA, NodeB}) -> 
-      {obj, [{partition, Part}, {nodes, [NodeA, NodeB]}]}
-    end, lists:flatten(Good));
+  {array, lists:map(fun({Part, NodeA, NodeB}) -> 
+      {struct, [{partition, Part}, {nodes, [NodeA, NodeB]}]}
+    end, lists:flatten(Good))};
   
 syncs_running(Node) ->
-  lists:map(fun({Part, NodeA, NodeB}) -> 
-      {obj, [{partition, Part}, {nodes, [NodeA, NodeB]}]}
-    end, sync_manager:running(Node)).
+  {array, lists:map(fun({Part, NodeA, NodeB}) -> 
+      {struct, [{partition, Part}, {nodes, [NodeA, NodeB]}]}
+    end, sync_manager:running(Node))}.
 
 diff_size(cluster) ->
   {Good,_} = rpc:multicall(sync_manager, diffs, []),
-  {obj,
+  {struct,
       lists:map(fun({Part, Diffs}) ->
-          {integer_to_list(Part), {obj, Diffs}}
+          {integer_to_list(Part), {struct, Diffs}}
         end, lists:flatten(Good))
     }.
 
@@ -84,13 +84,13 @@ diff_size(cluster) ->
 %%====================================================================
 
 transform_partitions(Partitions) ->
-  lists:map(fun([Node,Parts]) -> 
-      {obj, [
+  {array, lists:map(fun([Node,Parts]) -> 
+      {struct, [
         {name, Node},
-        {partitions, Parts},
-        {replicas, membership:replica_nodes(Node)}
+        {partitions, {array, Parts}},
+        {replicas, {array, membership:replica_nodes(Node)}}
       ]}
-    end, transform_partitions([], Partitions)).
+    end, transform_partitions([], Partitions))}.
 
 transform_partitions([], [{Node,Part}|Parts]) ->
   transform_partitions([[Node,[Part]]], Parts);
