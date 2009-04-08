@@ -34,7 +34,7 @@ start_link() ->
     undefined -> dummy_server:start_link(dynomite_web);
     Port ->
       Loop = fun(Req) ->
-          ?MODULE:loop(Req, WebDir)
+          dynomite_web:loop(Req, WebDir)
         end,
       mochiweb_http:start([{name, ?MODULE}, {loop, Loop}, {port, Port}])
   end.
