@@ -119,7 +119,7 @@ init([Node, Nodes]) ->
   ?infoMsg("Starting membership gossip.~n"),
   Self = self(),
   GossipPid = spawn_link(fun() -> gossip_loop(Self) end),
-  Table = ets:new(partitions, [set, protected]),
+  Table = ets:new(partitions, [set, public]),
   partition_list_into_ptable(State#membership.partitions, Table),
   % register(gossip, GossipPid),
   % GossipPid = ok,
