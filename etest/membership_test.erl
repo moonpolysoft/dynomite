@@ -1,4 +1,4 @@
--include_lib("eunit.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 
 all_test_() ->

@@ -1,4 +1,4 @@
--include_lib("eunit.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 -define(assertWithin(Lower, Upper, Expr), 
   	((fun (__X,__Y) ->

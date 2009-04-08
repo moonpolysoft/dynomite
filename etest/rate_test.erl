@@ -1,4 +1,4 @@
--include_lib("eunit.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 basic_rate_test() ->
   {ok, Pid} = rate:start_link(100),

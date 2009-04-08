@@ -1,4 +1,4 @@
--include_lib("eunit.hrl").
+-include_lib("eunit/include/eunit.hrl").
  
 
 init_integrated(Good, Bad, Config) ->

@@ -13,7 +13,7 @@
 
 -behaviour(gen_server).
 
--include_lib("eunit.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 %% API
 -export([start_link/1, stub_call/3, expects_call/3, expects_call/4, stop/1]).

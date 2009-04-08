@@ -1,6 +1,6 @@
 -module(t).
 
--include_lib("eunit.hrl").
+-include_lib("eunit/include/eunit.hrl").
 -export([start/0, config/1]).
 
 start() ->

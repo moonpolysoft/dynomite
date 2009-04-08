@@ -1,4 +1,4 @@
--include_lib("eunit.hrl").
+-include_lib("eunit/include/eunit.hrl").
 
 store_conflicting_versions_test() ->
   configuration:start_link(#config{}),
