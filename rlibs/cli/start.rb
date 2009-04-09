@@ -40,10 +40,10 @@ str = "erl \
   +A 30 \
   +P 60000 \
   -smp enable \
-  -pz #{ROOT}/ebin/ \
-  -pz #{ROOT}/deps/mochiweb/ebin \
-  -pz #{ROOT}/deps/rfc4627/ebin \
-  -pz #{ROOT}/deps/thrift/ebin \
+  -pa #{ROOT}/ebin/ \
+  -pa #{ROOT}/deps/mochiweb/ebin \
+  -pa #{ROOT}/deps/rfc4627/ebin \
+  -pa #{ROOT}/deps/thrift/ebin \
   -sname #{options[:name]} \
   #{options[:log]} \
   #{options[:config]} \
