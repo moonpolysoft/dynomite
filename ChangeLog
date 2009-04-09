@@ -1,4 +1,43 @@
 2009-04-04 Version 0.6.0 (cliff)
+	* (Cliff Moon) a40206d once more with gusto
+	* (Cliff Moon) 08170e3 use local libs if we are in dev mode
+	* (Cliff Moon) eb55094 show args on command line
+	* (Cliff Moon) 9f564d2 better symlinking
+	* (Cliff Moon) b219311 refactored the build a bit and turned off native for mochiweb modules
+	* (Cliff Moon) 2ca1d11 add dummy server
+	* (Cliff Moon) 9faa2db add protocol buffs
+	* (Cliff Moon) 1b7141c remove warning
+	* (Cliff Moon) 3a2121c better versioning
+	* (Cliff Moon) f73522a tweak
+	* (Cliff Moon) 8682c7a fix relative symlink issue
+	* (Cliff Moon) 9a89e65 add releases to clean
+	* (Cliff Moon) 2c365f6 clustering was broken.  thats bad.
+	* (Cliff Moon) 3548ae9 protected tables are fucking up on my linux boxes
+	* (Cliff Moon) 6da7b7b this was apparently causing errors
+	* (Cliff Moon) 80f7194 fix json to mochiweb format
+	* (Cliff Moon) f02e1f2 use webdir
+	* (Cliff Moon) a5bd42f adding deps to clean
+	* (Cliff Moon) 49e7fe6 get outta here
+	* (Cliff Moon) a378506 copy the web directory to priv for releases
+	* (Cliff Moon) abfe0b1 add dynomite_prof to the list.  very DRY
+	* (Cliff Moon) aca8fd9 fix eunit includes
+	* (Cliff Moon) c7311d9 default single node
+	* (Cliff Moon) 8b4e8e4 a proper changelog
+	* (Cliff Moon) c5338f7 use dmerkle async methods for great speedups.
+	* (Cliff Moon) 9369bf5 include common.hrl
+	* (Cliff Moon) 1a41567 asynchronous update methods
+	* (Cliff Moon) 7a7ae54 get rid of boot function
+	* (Cliff Moon) dcb937f package mochiweb and thrift
+	* (Cliff Moon) bdd932a move load gen into a module
+	* (Cliff Moon) 4dc0eeb get rid of errors in R13A
+	* (Cliff Moon) c6ba59f bump the number of thrift conns to 200
+	* (Cliff Moon) 9823967 fix ets storage
+	* (Cliff Moon) cc96f2d load and start mochiweb and thrift
+	* (Cliff Moon) dd281e3 adding mochiweb and thrift to the deps
+	* (Cliff Moon) 72f65d2 make_dist, install, and uninstall tasks
+	* (Cliff Moon) 813e53f remove the profiling stuff
+	* (Cliff Moon) 82dbacb adding chris brown
+	* (Cliff Moon) 97e5cb3 thrift app and supervisor
 	* (Cliff Moon) ac3adce configure whether or not to start from an installed release file
 	* (Cliff Moon) d18351e escaped quotes to force config file to be a string instead of an atom [#3 tagged:committed responsible:cliff state:resolved]
 	* (Cliff Moon) 38ea4f3 take boot script out of normal startup for now
