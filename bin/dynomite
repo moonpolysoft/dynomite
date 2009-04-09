@@ -6,7 +6,7 @@ require 'digest/md5'
 FILE = File.symlink?(__FILE__) ? File.readlink(__FILE__) : __FILE__
 
 unless FILE =~ %r{^\.?/} and File.symlink?(__FILE__)
-  FILE = File.expand_path(File.join(File.dirname(__FILE__), FILE))
+  FILE.replace File.expand_path(File.join(File.dirname(__FILE__), FILE))
 end
 
 ROOT = File.expand_path(File.dirname(FILE) + "/..")
