@@ -15,6 +15,13 @@ CLEAN.include("c/*.o")
 CLEAN.include("priv/*.so")
 CLEAN.include("deps/*/ebin/*.beam")
 
+task :clean do
+  CLEAN.each { |fn| rm_r fn rescue nil }
+  Dir["deps/*"].each do |dir|
+    sh "cd #{dir} && make clean"
+  end
+end
+
 task :default => [:build_deps, :build_c_drivers] do
   puts "building #{ENV['TEST']}"
   sh "erlc  #{ERLC_FLAGS} #{ENV['TEST'] ? ERLC_TEST_FLAGS : ''} elibs/*.erl gen-erl/*.erl"
@@ -68,6 +75,7 @@ end
 
 task :release => [:default] do
   rel_file_contents = File.read("releases/dynomite.rel").gsub(/\?VERSION/, VERSION)
+  app_file_contents = File.read("ebin/dynomite.app").gsub(/\?VERSION/, VERSION)
 
   release = "releases/dynomite-#{VERSION}"
   rel_file = "#{release}/dynomite_rel-#{VERSION}.rel"
@@ -80,6 +88,7 @@ task :release => [:default] do
   end
   sh "cp -r elibs/* #{release}/src" rescue nil
   sh "cp -r ebin/* #{release}/ebin" rescue nil
+  File.open("#{release}/ebin/dynomite.app", 'w') {|f| f.print(app_file_contents) }
   sh "cp -r priv/* #{release}/priv" rescue nil
   sh "cp -r web #{release}/priv/web" rescue nil
   sh "cp -r include/* #{release}/include" rescue nil

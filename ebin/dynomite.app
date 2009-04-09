@@ -1,7 +1,7 @@
 {application, dynomite,
   [{description, "Dynomite Storage Node"},
    {mod, {dynomite_app, []}},
-   {vsn, "0.6.0"},
+   {vsn, "?VERSION"},
    {modules, 
    [
       block_server, bootstrap, commands, configuration, couch_btree, couch_file, dets_storage, dict_storage, dmerkle,

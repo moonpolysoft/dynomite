@@ -8,6 +8,6 @@
     {sasl, "2.1.5.3"},
     {mochiweb, "0.01"},
     {thrift, "0.1"},
-    {dynomite, "0.6.0"}
+    {dynomite, "?VERSION"}
   ]
 }.
