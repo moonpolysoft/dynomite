@@ -109,7 +109,7 @@ stop_gossip() ->
 init([Node, Nodes]) ->
   process_flag(trap_exit, true), % this is for the gossip server which tags along
   Config = configuration:get_config(),
-  State = try_join_into_cluster(Node, create_or_load_state(Node, Nodes, Config)),
+  State = try_join_into_cluster(Node, create_or_load_state(Node, Nodes, Config, ets:new(partitions, [set, public]))),
   ?infoMsg("Saving membership data.~n"),
   save_state(State),
   ?infoMsg("Loading storage servers.~n"),
@@ -119,13 +119,12 @@ init([Node, Nodes]) ->
   ?infoMsg("Starting membership gossip.~n"),
   Self = self(),
   GossipPid = spawn_link(fun() -> gossip_loop(Self) end),
-  Table = ets:new(partitions, [set, public]),
-  partition_list_into_ptable(State#membership.partitions, Table),
+  partition_list_into_ptable(State#membership.partitions, State#membership.ptable),
   % register(gossip, GossipPid),
   % GossipPid = ok,
   % timer:apply_after(random:uniform(1000) + 1000, membership, fire_gossip, [random:seed()]),
   ?infoMsg("Initialized.~n"),
-  {ok, State#membership{gossip=GossipPid,ptable=Table}}.
+  {ok, State#membership{gossip=GossipPid}}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -320,16 +319,16 @@ try_join_into_cluster(Node, State = #membership{nodes=Nodes,ptable=Table}) ->
       State
   end.
 
-create_or_load_state(Node, Nodes, Config) ->
+create_or_load_state(Node, Nodes, Config, Table) ->
   case load_state(Node, Config) of
     {ok, Value = #membership{header=?VERSION,nodes=LoadedNodes}} ->
       error_logger:info_msg("loaded membership from disk~n", []),
-      Value#membership{node=Node,nodes=lists:usort(Nodes ++ LoadedNodes)};
+      Value#membership{node=Node,nodes=lists:usort(Nodes ++ LoadedNodes),ptable=Table};
     {ok, {membership, C, P, Version, LoadedNodes, _}} ->
       ?infoMsg("trying to load a legacy format membership file~n"),
-      #membership{node=Node,nodes=lists:usort(Nodes ++ LoadedNodes),partitions=P,version=Version};
+      #membership{node=Node,nodes=lists:usort(Nodes ++ LoadedNodes),partitions=P,version=Version,ptable=Table};
     _V ->
-      create_initial_state(Node, Nodes, Config)
+      create_initial_state(Node, Nodes, Config, Table)
   end.
 
 load_state(Node, #config{directory=Directory}) ->
@@ -348,13 +347,14 @@ save_state(State) ->
   ok = file:close(File).
 
 %% partitions is a list starting with 1 which defines a partition space.
-create_initial_state(Node, Nodes, Config) ->
+create_initial_state(Node, Nodes, Config, Table) ->
   Q = Config#config.q,
   #membership{
     version=vector_clock:create(pid_to_list(self())),
 	  partitions=partitions:create_partitions(Q, Node, Nodes),
 	  node=Node,
-	  nodes=Nodes}.
+	  nodes=Nodes,
+	  ptable=Table}.
 
 merge_states(StateA, StateB) ->
   Merged =

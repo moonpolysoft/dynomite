@@ -30,7 +30,7 @@ test_write_membership_to_disk() ->
   verify().
 
 test_load_membership_from_disk() ->
-  State = create_initial_state(node(), [node()], configuration:get_config()),
+  State = create_initial_state(node(), [node()], configuration:get_config(), ets:new(partitions, [set, public])),
   NS = State#membership{version=[a,b,c]},
   file:write_file(data_file(), term_to_binary(NS)),
   {ok, _} = membership:start_link(node(), [node()]),
