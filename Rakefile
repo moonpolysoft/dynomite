@@ -10,6 +10,7 @@ ERLC_TEST_FLAGS = "-pa deps/eunit/ebin -I deps/eunit/include -DTEST"
 ERLC_FLAGS = "+debug_info -W0 -I include -pa deps/mochiweb/ebin -I deps/mochiweb/include -pa deps/rfc4627/ebin -I deps/rfc4627/include -I gen-erl/ -o ebin"
 
 CLEAN.include("ebin/*.beam")
+CLEAN.include("releases/dynomite-*")
 CLEAN.include("c/*.o")
 CLEAN.include("priv/*.so")
 CLEAN.include("deps/*/ebin/*.beam")
