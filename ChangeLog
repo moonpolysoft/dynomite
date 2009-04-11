@@ -1,4 +1,7 @@
 2009-04-04 Version 0.6.0 (cliff)
+	* (Cliff Moon) 8d0f34b only add real dynomite nodes to the node list
+	* (Cliff Moon) 1f2e1f3 cleanup test command line
+	* (Cliff Moon) 981b482 update the changelog with release fixes
 	* (Cliff Moon) a40206d once more with gusto
 	* (Cliff Moon) 08170e3 use local libs if we are in dev mode
 	* (Cliff Moon) eb55094 show args on command line
