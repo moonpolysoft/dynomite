@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/3, start_link/2, join_node/2, nodes_for_partition/1, replica_nodes/1, servers_for_key/1, nodes_for_key/1, partitions/0, nodes/0, state/0, partitions_for_node/2, fire_gossip/1, partition_for_key/1, stop/0, stop/1, range/1, status/0, stop_gossip/0]).
+-export([start_link/3, start_link/2, join_node/2, nodes_for_partition/1, replica_nodes/1, servers_for_key/1, nodes_for_key/1, partitions/0, nodes/0, state/0, partitions_for_node/2, fire_gossip/1, partition_for_key/1, stop/0, stop/1, range/1, status/0, stop_gossip/0, remap/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -56,6 +56,9 @@ nodes_for_partition(Partition) ->
 	
 nodes_for_key(Key) ->
   gen_server:call(membership, {nodes_for_key, Key}).
+  
+remap(Partitions) ->
+  gen_server:call(membership, {remap, Partitions}).
   
 nodes() ->
   gen_server:call(membership, nodes).
@@ -155,6 +158,16 @@ handle_call(nodes, _From, State = #membership{nodes=Nodes}) ->
 handle_call(state, _From, State) -> {reply, State, State};
 	
 handle_call(partitions, _From, State) -> {reply, State#membership.partitions, State};
+	
+handle_call({remap, Partitions}, _From, State = #membership{node=Node, ptable=Table}) ->
+  ets:delete_all_objects(Table),
+  error_logger:info_msg("Hard remapping the cluster.~n"),
+  NewState = State#membership{partitions=Partitions},
+  storage_manager:load_no_boot(Node, Partitions, int_partitions_for_node(Node, NewState, all)),
+  sync_manager:load_no_boot(Node, Partitions, int_partitions_for_node(Node, NewState, all)),
+  save_state(NewState),
+  partition_list_into_ptable(Partitions, Table),
+  {reply, {ok, NewState}, NewState};
 	
 handle_call({replica_nodes, Node}, _From, State) ->
   {reply, int_replica_nodes(Node, State), State};
