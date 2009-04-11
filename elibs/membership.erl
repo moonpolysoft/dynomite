@@ -164,7 +164,7 @@ handle_call({remap, Partitions}, _From, State = #membership{node=Node, ptable=Ta
   error_logger:info_msg("Hard remapping the cluster.~n"),
   NewState = State#membership{partitions=Partitions},
   storage_manager:load_no_boot(Node, Partitions, int_partitions_for_node(Node, NewState, all)),
-  sync_manager:load_no_boot(Node, Partitions, int_partitions_for_node(Node, NewState, all)),
+  sync_manager:load(Node, Partitions, int_partitions_for_node(Node, NewState, all)),
   save_state(NewState),
   partition_list_into_ptable(Partitions, Table),
   {reply, {ok, NewState}, NewState};
