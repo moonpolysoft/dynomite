@@ -1,12 +1,24 @@
 -module(dynomite).
 
--export([start/0]).
+-export([start/0, running/1]).
 
 -include("common.hrl").
 
 start() ->
   crypto:start(),
   load_and_start_apps([os_mon, thrift, mochiweb, dynomite]).
+  
+running(Node) when Node == node() ->
+  true;
+  
+running(Node) ->
+  Ref = erlang:monitor(process, {membership, Node}),
+  receive
+    {'DOWN', Ref, _, _, _} -> false
+  after 0 ->
+    erlang:demonitor(Ref),
+    true
+  end.
   
 load_and_start_apps([]) ->
   ok;

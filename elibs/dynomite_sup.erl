@@ -49,7 +49,7 @@ start_link(ConfigFile) ->
 %%--------------------------------------------------------------------
 init(ConfigFile) ->
     Node = node(),
-    Nodes = nodes([this,visible]),
+    Nodes = [Node || Node <- nodes([this,visible]), dynomite:running(Node)],
     Children = [
                 {fnv,
                  {fnv,start,[]},
@@ -101,7 +101,7 @@ init(ConfigFile) ->
                  {dynomite_pb, start_link, []},
                  permanent, 1000, worker,
                  [dynomite_pb]}
-               ],   
+               ],
     {ok,{{one_for_one,10,1}, Children}}.
 
 %%====================================================================
