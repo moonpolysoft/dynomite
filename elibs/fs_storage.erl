@@ -7,24 +7,39 @@
   context
 }).
 
+-record(row, {key, context, values}).
+
 % open with the name of the fs directory
 open(Directory, Name) ->
   ok = filelib:ensure_dir(Directory ++ "/"),
   TableName = list_to_atom(lists:concat([Name, '/', node()])),
-  {ok, Table} = dets:open_file(TableName, [{file, lists:concat([Directory, "/files.dets"])}, {keypos, 2}]),
-  {ok, {Directory, TableName}}.
+  SmallTableName = list_to_atom(lists:concat([Name, "/data/", node()])),
+  {ok, FileTable} = dets:open_file(TableName, [{file, lists:concat([Directory, "/files.dets"])}, {keypos, 2}]),
+  {ok, SmallTable} = dets:open_file(SmallTableName, [{file, lists:concat([Directory, "/small_data.dets"])}, {keypos, 2}]),
+  {ok, {Directory, FileTable, SmallTable}}.
 
 % noop
-close({_Directory, Table}) -> dets:close(Table).
+close({_Directory, FileTable, SmallTable}) -> 
+  dets:close(FileTable),
+  dets:close(SmallTable).
 
-fold(Fun, {_Directory, Table}, AccIn) when is_function(Fun) ->
-  dets:foldl(fun(#file{name=Key,path=Path,context=Context}, Acc) ->
+fold(Fun, {_Directory, FileTable, SmallTable}, AccIn) when is_function(Fun) ->
+  Acc2 = dets:foldl(fun(#file{name=Key,path=Path,context=Context}, Acc) ->
       {ok, Value} = file:read_file(Path),
       Fun({Key, Context, Value}, Acc)
-    end, AccIn, Table).
+    end, AccIn, FileTable),
+  dets:foldl(fun(#row{key=Key,context=Context,values=Values}, Acc) ->
+      Fun({Key, Context, Values}, Acc)
+    end, Acc2, SmallTable).
 
-put(Key, Context, Values, {Directory, Table}) ->
-  case dets:lookup(Table, Key) of
+put(Key, Context, Values, TableStruct) ->
+  case iolist_size(Values) of
+    Size when Size < 10000 -> small_size_put(Key, Context, Values, TableStruct);
+    _ -> big_size_put(Key, Context, Values, TableStruct)
+  end.
+  
+big_size_put(Key, Context, Values, {Directory, FileTable, SmallTable}) ->
+  case dets:lookup(FileTable, Key) of
     [Record] -> #file{path=HashedFilename} = Record;
     [] -> HashedFilename = create_filename(Directory, Key),
       _Record = not_found
@@ -36,12 +51,21 @@ put(Key, Context, Values, {Directory, Table}) ->
   end,
   ok = file:write(Io, ToWrite),
   ok = file:close(Io),
-  dets:insert(Table, [#file{name=Key, path=HashedFilename, context=Context}]),
-  {ok, {Directory, Table}}.
+  ok = dets:insert(FileTable, [#file{name=Key, path=HashedFilename, context=Context}]),
+  {ok, {Directory, FileTable, SmallTable}}.
+  
+small_size_put(Key, Context, Values, {Directory, FileTable, SmallTable}) ->
+  ok = dets:insert(SmallTable, [#row{key=Key,context=Context,values=Values}]),
+  {ok, {Directory, FileTable, SmallTable}}.
 	
-get(Key, {_Directory, Table}) ->
-  case dets:lookup(Table, Key) of
-	  [] -> {ok, not_found};
+get(Key, {_Directory, FileTable, SmallTable}) ->
+  case dets:lookup(FileTable, Key) of
+	  [] ->
+	    case dets:lookup(SmallTable, Key) of
+	      [] -> {ok, not_found};
+	      [#row{key=Key,context=Context,values=Values}] ->
+	        {ok, {Context, Values}}
+      end;
 	  [#file{path=Path,context=Context}] -> 
 	    {ok, Binary} = file:read_file(Path),
 	    Values = case (catch binary_to_term(Binary)) of
@@ -51,19 +75,29 @@ get(Key, {_Directory, Table}) ->
 	    {ok, {Context, Values}}
   end.
 	
-has_key(Key, {_Directory, Table}) ->
-  case dets:lookup(Table, Key) of
-    [] -> {ok, false};
+has_key(Key, {_Directory, FileTable, SmallTable}) ->
+  case dets:lookup(FileTable, Key) of
+    [] ->
+      case dets:lookup(SmallTable, Key) of
+        [] -> {ok, false};
+        _ -> {ok, true}
+      end;
     [_Record] -> {ok, true}
   end.
 	
-delete(Key, {Directory, Table}) ->
-	case dets:lookup(Table, Key) of
-	  [] -> {ok, {Directory, Table}};
+delete(Key, TS = {Directory, FileTable, SmallTable}) ->
+	case dets:lookup(FileTable, Key) of
+	  [] ->
+	    case dets:lookup(SmallTable, Key) of
+	      [] -> {ok, TS};
+	      _ ->
+	        ok = dets:delete(SmallTable, Key),
+	        {ok, TS}
+      end;
 	  [#file{path=Path}] ->
 	    ok = file:delete(Path),
-	    ok = dets:delete(Table, Key),
-	    {ok, {Directory, Table}}
+	    ok = dets:delete(FileTable, Key),
+	    {ok, TS}
   end.
 	
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
