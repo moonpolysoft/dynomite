@@ -12,6 +12,7 @@ ERLC_FLAGS = "+debug_info -W0 -I include -I deps/mochiweb/include -I gen-erl/ -o
 CLEAN.include("ebin/*.beam")
 CLEAN.include("releases/dynomite-*")
 CLEAN.include("c/*.o")
+CLEAN.include("etest/log/*")
 CLEAN.include("priv/*.so")
 CLEAN.include("deps/*/ebin/*.beam")
 
