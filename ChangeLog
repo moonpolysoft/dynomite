@@ -1,4 +1,8 @@
 2009-04-04 Version 0.6.0 (cliff)
+	* (Cliff Moon) b6b73a5 clean log files
+	* (Cliff Moon) 8ae38cc smarter small value handling in the fsstore
+	* (Cliff Moon) e35b312 no boot does not exist for sync mgr
+	* (Cliff Moon) 004fa1d emergency remap feature
 	* (Cliff Moon) 8d0f34b only add real dynomite nodes to the node list
 	* (Cliff Moon) 1f2e1f3 cleanup test command line
 	* (Cliff Moon) 981b482 update the changelog with release fixes
