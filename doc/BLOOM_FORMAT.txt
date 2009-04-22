@@ -1,0 +1,8 @@
+BIG ENDIAN
+
+
+VERSION:8/integer, N:64/integer, E:64/float, 
+M:32/integer, K:32/integer, Keys:64/integer, 
+Seed:32/integer, reserved:64 bytes,
+
+BITS
