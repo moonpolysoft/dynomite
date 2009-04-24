@@ -14,7 +14,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/3, start_link/2, join_node/2, nodes_for_partition/1, replica_nodes/1, servers_for_key/1, nodes_for_key/1, partitions/0, nodes/0, state/0, partitions_for_node/2, fire_gossip/1, partition_for_key/1, stop/0, stop/1, range/1, status/0, stop_gossip/0, remap/1]).
+-export([start_link/3, start_link/2, join_node/2, remove_node/1, nodes_for_partition/1, replica_nodes/1, servers_for_key/1, nodes_for_key/1, partitions/0, nodes/0, state/0, partitions_for_node/2, fire_gossip/1, partition_for_key/1, stop/0, stop/1, range/1, status/0, stop_gossip/0, remap/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -53,6 +53,9 @@ servers_for_key(Key) ->
 	
 nodes_for_partition(Partition) ->
   gen_server:call(membership, {nodes_for_partition, Partition}).
+	
+remove_node(Node) ->
+  gen_server:call(membership, {remove_node, Node}).
 	
 nodes_for_key(Key) ->
   gen_server:call(membership, {nodes_for_key, Key}).
@@ -112,7 +115,10 @@ stop_gossip() ->
 init([Node, Nodes]) ->
   process_flag(trap_exit, true), % this is for the gossip server which tags along
   Config = configuration:get_config(),
-  State = try_join_into_cluster(Node, create_or_load_state(Node, Nodes, Config, ets:new(partitions, [set, public]))),
+  State = case create_or_load_state(Node, Nodes, Config, ets:new(partitions, [set, public])) of
+    {loaded, S} -> S;
+    {new, S} -> try_join_into_cluster(Node, S)
+  end,
   ?infoMsg("Saving membership data.~n"),
   save_state(State),
   ?infoMsg("Loading storage servers.~n"),
@@ -168,6 +174,16 @@ handle_call({remap, Partitions}, _From, State = #membership{node=Node, ptable=Ta
   save_state(NewState),
   partition_list_into_ptable(Partitions, Table),
   {reply, {ok, NewState}, NewState};
+	
+handle_call({remove_node, Node}, _From, State = #membership{ptable=Table}) ->
+  ets:delete_all_objects(Table),
+  NewState = int_remove_node(Node, State),
+  #membership{node=Node1,nodes=Nodes,partitions=Parts} = NewState,
+  storage_manager:load(Nodes, Parts, int_partitions_for_node(Node1, NewState, all)),
+  sync_manager:load(Nodes, Parts, int_partitions_for_node(Node1, NewState, all)),
+  save_state(NewState),
+  partition_list_into_ptable(Parts, Table),
+  {reply, {ok, NewState}, NewState#membership{ptable=Table}};
 	
 handle_call({replica_nodes, Node}, _From, State) ->
   {reply, int_replica_nodes(Node, State), State};
@@ -336,12 +352,13 @@ create_or_load_state(Node, Nodes, Config, Table) ->
   case load_state(Node, Config) of
     {ok, Value = #membership{header=?VERSION,nodes=LoadedNodes}} ->
       error_logger:info_msg("loaded membership from disk~n", []),
-      Value#membership{node=Node,nodes=lists:usort(Nodes ++ LoadedNodes),ptable=Table};
+      {loaded, Value#membership{node=Node,nodes=lists:usort(Nodes ++ LoadedNodes),ptable=Table}};
     {ok, {membership, C, P, Version, LoadedNodes, _}} ->
       ?infoMsg("trying to load a legacy format membership file~n"),
-      #membership{node=Node,nodes=lists:usort(Nodes ++ LoadedNodes),partitions=P,version=Version,ptable=Table};
+      {loaded, #membership{node=Node,nodes=lists:usort(Nodes ++ LoadedNodes),partitions=P,version=Version,ptable=Table}};
     _V ->
-      create_initial_state(Node, Nodes, Config, Table)
+      ?infoMsg("created new state.~n"),
+      {new, create_initial_state(Node, Nodes, Config, Table)}
   end.
 
 load_state(Node, #config{directory=Directory}) ->
@@ -426,6 +443,18 @@ int_join_node(NewNode, #membership{node=Node,partitions=Partitions,version=Versi
     node=Node,
     nodes=Nodes,
     gossip=Gossip}.
+    
+int_remove_node(OldNode, #membership{node=Node,partitions=Partitions,version=Version,nodes=OldNodes,gossip=Gossip}) ->
+  Nodes = lists:delete(OldNode, OldNodes),
+  P = partitions:map_partitions(Partitions, Nodes),
+  ?infoFmt("removing node ~p~n", [OldNode]),
+  #membership{
+    partitions=P,
+    version = vector_clock:increment(pid_to_list(self()), Version),
+    node=Node,
+    nodes=Nodes,
+    gossip=Gossip
+  }.
   
 int_partitions_for_node(Node, State, master) ->
   Partitions = State#membership.partitions,
