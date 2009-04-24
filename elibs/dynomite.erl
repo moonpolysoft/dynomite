@@ -1,6 +1,6 @@
 -module(dynomite).
 
--export([start/0, running/1]).
+-export([start/0, running/1, running_nodes/0, pause_all_sync/0, start_all_sync/0]).
 
 -include("common.hrl").
 
@@ -15,10 +15,31 @@ running(Node) ->
   Ref = erlang:monitor(process, {membership, Node}),
   receive
     {'DOWN', Ref, _, _, _} -> false
-  after 0 ->
+  after 1 ->
     erlang:demonitor(Ref),
     true
   end.
+  
+running_nodes() ->
+  [Node || Node <- nodes([this,visible]), dynomite:running(Node)].
+  
+pause_all_sync() ->
+  SyncServers = lists:flatten(lists:map(fun(Node) ->
+      rpc:call(Node, sync_manager, loaded, [])
+    end, running_nodes())),
+  lists:foreach(fun(Server) ->
+      sync_server:pause(Server)
+    end, SyncServers).
+  
+start_all_sync() ->
+  SyncServers = lists:flatten(lists:map(fun(Node) ->
+      rpc:call(Node, sync_manager, loaded, [])
+    end, running_nodes())),
+  lists:foreach(fun(Server) ->
+      sync_server:play(Server)
+    end, SyncServers).
+
+%%==============================================================
   
 load_and_start_apps([]) ->
   ok;
