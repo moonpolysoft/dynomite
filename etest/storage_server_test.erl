@@ -13,7 +13,7 @@ store_conflicting_versions_test() ->
   storage_server:close(Pid).
   
 storage_server_throughput_test_() ->
-  {timeout, 500, {?LINE, fun() -> test_storage_server_throughput() end}}.
+  {timeout, 500, ?_test(test_storage_server_throughput())}.
   
 test_storage_server_throughput() ->
   configuration:start_link(#config{}),

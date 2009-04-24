@@ -192,18 +192,19 @@ empty_diff_test() ->
   500 = length(key_diff(TreeA, TreeB)).
   
 live_test_() ->
-  {timeout, 120, [{?LINE, fun() ->
-    {ok, TreeA} = open(data_file(410), 4096),
-    {ok, TreeB} = open(data_file(42), 4096),
-    KeyDiff = key_diff(TreeA, TreeB),
-    error_logger:info_msg("key_diff: ~p~n", [KeyDiff]),
-    LeavesA = leaves(TreeA),
-    LeavesB = leaves(TreeB),
-    LeafDiff = LeavesA -- LeavesB,
-    error_logger:info_msg("leaf_diff: ~p~n", [LeafDiff]),
-    timer:sleep(100),
-    KeyDiff = LeafDiff
-  end}]}.
+  {timeout, 120, ?_test(test_live())}.
+  
+test_live() ->
+  {ok, TreeA} = open(data_file(410), 4096),
+  {ok, TreeB} = open(data_file(42), 4096),
+  KeyDiff = key_diff(TreeA, TreeB),
+  error_logger:info_msg("key_diff: ~p~n", [KeyDiff]),
+  LeavesA = leaves(TreeA),
+  LeavesB = leaves(TreeB),
+  LeafDiff = LeavesA -- LeavesB,
+  error_logger:info_msg("leaf_diff: ~p~n", [LeafDiff]),
+  timer:sleep(100),
+  KeyDiff = LeafDiff.
   
 insert_variable_keys_under_block_size_test() ->
   test_cleanup(),
@@ -274,46 +275,48 @@ compare_trees_with_delete_test() ->
   close(PidB).
   
 full_deletion_with_multiple_split_test_() ->
-  {timeout, 120, [{?LINE, fun() ->
-    test_cleanup(),
-    {ok, Pid} = open(data_file(), 256),
-    lists:foldl(fun(N, Tree) ->
-        update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
-      end, Pid, lists:seq(1,300)),
-    lists:foldl(fun(N, Tree) ->
-        Key = lists:concat(["key", N]),
-        % ?infoFmt("deleting ~p~n", [Key]),
-        delete(Key, Tree),
-        ?assertEqual(300-N, length(leaves(Tree))),
-        Tree
-      end, Pid, lists:seq(1,300)),
-    Tree = get_state(Pid),
-    Root = Tree#dmerkle.root,
-    ?infoFmt("root: ~p~n", [Tree#dmerkle.root]),
-    ?assertMatch(#leaf{}, Root),
-    ?assertEqual(0, Root#leaf.m),
-    close(Pid)
-  end}]}.
+  {timeout, 120, ?_test(test_full_deletion_with_multiple_split())}.
+  
+test_full_deletion_with_multiple_split() ->
+  test_cleanup(),
+  {ok, Pid} = open(data_file(), 256),
+  lists:foldl(fun(N, Tree) ->
+      update(lists:concat(["key", N]), lists:concat(["value", N]), Tree)
+    end, Pid, lists:seq(1,300)),
+  lists:foldl(fun(N, Tree) ->
+      Key = lists:concat(["key", N]),
+      % ?infoFmt("deleting ~p~n", [Key]),
+      delete(Key, Tree),
+      ?assertEqual(300-N, length(leaves(Tree))),
+      Tree
+    end, Pid, lists:seq(1,300)),
+  Tree = get_state(Pid),
+  Root = Tree#dmerkle.root,
+  ?infoFmt("root: ~p~n", [Tree#dmerkle.root]),
+  ?assertMatch(#leaf{}, Root),
+  ?assertEqual(0, Root#leaf.m),
+  close(Pid).
   
 partial_deletion_with_multiple_split_test_() ->
-  {timeout, 120, [{?LINE, fun() ->
-    test_cleanup(),
-    {ok, Pid1} = open(data_file(), 256),
-    {ok, Pid2} = open(data_file(1), 256),
-    Keys = lists:map(fun(I) ->
-        lib_misc:rand_str(10)
-      end, lists:seq(1,300)),
-    lists:foreach(fun(Key) ->
-        update(Key, "vallllllueeee" ++ Key, Pid1),
-        update(Key, "vallllllueeee" ++ Key, Pid2)
-      end, Keys),
-    lists:foreach(fun(Key) ->
-        delete(Key, Pid2)
-      end, lists:sublist(Keys, 50)),
-    ?assertEqual(lists:sort(lists:sublist(Keys, 50)), key_diff(Pid1, Pid2)),
-    close(Pid1),
-    close(Pid2)
-  end}]}.
+  {timeout, 120, ?_test(test_partial_deletion_with_multiple_split())}.
+  
+test_partial_deletion_with_multiple_split() ->
+  test_cleanup(),
+  {ok, Pid1} = open(data_file(), 256),
+  {ok, Pid2} = open(data_file(1), 256),
+  Keys = lists:map(fun(I) ->
+      lib_misc:rand_str(10)
+    end, lists:seq(1,300)),
+  lists:foreach(fun(Key) ->
+      update(Key, "vallllllueeee" ++ Key, Pid1),
+      update(Key, "vallllllueeee" ++ Key, Pid2)
+    end, Keys),
+  lists:foreach(fun(Key) ->
+      delete(Key, Pid2)
+    end, lists:sublist(Keys, 50)),
+  ?assertEqual(lists:sort(lists:sublist(Keys, 50)), key_diff(Pid1, Pid2)),
+  close(Pid1),
+  close(Pid2).
 
 partial_deletion_and_rebuild_test() ->
   test_cleanup(),
