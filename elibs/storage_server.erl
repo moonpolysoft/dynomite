@@ -253,15 +253,18 @@ handle_call({streaming_put, Ref}, {RemotePid, _Tag}, State) ->
 handle_call({swap_tree, NewDmerkle}, _From, State = #storage{tree=Dmerkle}) ->
   {reply, ok, State#storage{tree=dmerkle:swap_tree(Dmerkle, NewDmerkle)}};
 	
-handle_call(rebuild_tree, {FromPid, _Tag}, State = #storage{dbkey=DbKey,table=Table,blocksize=BlockSize,module=Module}) ->
+handle_call(rebuild_tree, {FromPid, _Tag}, State = #storage{dbkey=DbKey,table=Table,blocksize=BlockSize,module=Module,tree=Tree,name=Name}) ->
   Parent = self(),
-  spawn(fun() -> 
-      {ok, NewDmerkle} = dmerkle:open(lists:concat([DbKey, "/dmerkle_new"]), BlockSize),
-      FoldFun = fun({Key, Context, Value}, Dmerkle) ->
-        dmerkle:update(Key, Value, Dmerkle)
+  DMFile = filename:join([DbKey, "dmerkle.idx"]),
+  dmerkle:close(Tree),
+  file:delete(DMFile),
+  {ok, NewTree} = dmerkle:open(DMFile, BlockSize),
+  spawn(fun() ->
+      FoldFun = fun({Key, Context, Value}, _) ->
+        dmerkle:update(Key, Value, NewTree)
       end,
-      FinalDmerkle = Module:fold(FoldFun, Table, NewDmerkle),
-      gen_server:call(Parent, {swap_tree, FinalDmerkle})
+      FinalDmerkle = Module:fold(FoldFun, Table, whatever),
+      ?infoFmt("Finished rebuilding merkle trees for ~p~n", [Name])
     end),
   {reply, ok, State};
 	
