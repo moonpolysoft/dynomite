@@ -121,19 +121,20 @@ test_partitions_for_node_master() ->
   ?assertEqual(10, length(Parts)).
   
 test_membership_server_throughput() ->
-  {timeout, 500, {?LINE, fun() ->
-      {ok, _} = membership:start_link(a, [a,b,c,d,e,f]),
-      {Keys, _} = lib_misc:fast_acc(fun({List, Str}) -> 
-          Mod = lib_misc:succ(Str),
-          {[Mod|List], Mod}
-        end, {[], "aaaaaaaa"}, 10000),
-      Start = lib_misc:now_float(),
-      lists:foreach(fun(Str) ->
-          membership:servers_for_key(Str)
-        end, Keys),
-      End = lib_misc:now_float(),
-      ?debugFmt("membership can do ~p reqs/s", [10000/(End-Start)])
-    end}}.
+  {timeout, 500, ?_test(membership_server_throughput_test())}.
+  
+membership_server_throughput_test() ->
+  {ok, _} = membership:start_link(a, [a,b,c,d,e,f]),
+  {Keys, _} = lib_misc:fast_acc(fun({List, Str}) -> 
+      Mod = lib_misc:succ(Str),
+      {[Mod|List], Mod}
+    end, {[], "aaaaaaaa"}, 10000),
+  Start = lib_misc:now_float(),
+  lists:foreach(fun(Str) ->
+      membership:servers_for_key(Str)
+    end, Keys),
+  End = lib_misc:now_float(),
+  ?debugFmt("membership can do ~p reqs/s", [10000/(End-Start)]).
   
 test_gossip_server() ->
   ok.
