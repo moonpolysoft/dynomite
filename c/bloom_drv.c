@@ -1,4 +1,5 @@
-
+#include <stdint.h>
+#include <sys/types.h>
 #include "bloom.h"
 #include <erl_driver.h>
 #include <ei.h>

@@ -1,21 +1,26 @@
 
+typedef struct _bloom_data_t {
+  uint32_t version;
+  uint32_t m;
+  uint64_t n;
+  double e;
+  uint32_t k;
+  uint64_t keys;
+  uint32_t seed;
+  char reserved[64];
+  char bits[1];
+} bloom_data_t;
+
 typedef struct _bloom_t {
   char *filename;
-  FILE *file;
-  char * bits;
-  unsigned long n;
-  double e;
-  unsigned int m;
-  unsigned int k;
-  unsigned long keys;
-  unsigned int seed;
+  int file;
+  bloom_data_t data;
 } bloom_t;
 
-bloom_t *bloom_open(char *filename);
-bloom_t *bloom_create(char *filename, long n, double e);
+bloom_t *bloom_open(char *filename, long n, double e);
 void bloom_put(bloom_t* bloom, char *buff, int len);
 int bloom_has(bloom_t* bloom, char *buff, int len);
 void bloom_destroy(bloom_t* bloom);
 
-#define bloom_key_size(bloom) ((bloom)->keys)
-#define bloom_mem_size(bloom) ((bloom)->m / 8)
+#define bloom_key_size(bloom) ((bloom)->data.keys)
+#define bloom_mem_size(bloom) ((bloom)->data.m / 8)
