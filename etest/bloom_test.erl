@@ -1,14 +1,16 @@
 -include_lib("eunit/include/eunit.hrl").
 
 simple_bloom_test() ->
-  {ok, Bloom} = bloom:start(10000, 0.001),
+  file:delete(data_file()),
+  {ok, Bloom} = bloom:start(data_file(), 10000, 0.001),
   bloom:put(Bloom, "wut"),
   ?assertEqual(true, bloom:has(Bloom, "wut")),
   ?assertEqual(false, bloom:has(Bloom, "fuck")),
   bloom:stop(Bloom).
 
 insert_many_things_test() ->
-  {ok, Bloom} = bloom:start(10000, 0.001),
+  file:delete(data_file()),
+  {ok, Bloom} = bloom:start(data_file(), 10000, 0.001),
   Keys = lists:map(fun(N) ->
       Key = "Key" ++ float_to_list(random:uniform()),
       bloom:put(Bloom, Key),
@@ -20,7 +22,8 @@ insert_many_things_test() ->
   bloom:stop(Bloom).
 
 false_positive_error_rate_test() ->
-  {ok, Bloom} = bloom:start(10000, 0.001),
+  file:delete(data_file()),
+  {ok, Bloom} = bloom:start(data_file(), 10000, 0.001),
   lists:foreach(fun(N) ->
       Key = "Key" ++ float_to_list(random:uniform()),
       bloom:put(Bloom, Key)
@@ -34,3 +37,13 @@ false_positive_error_rate_test() ->
   ?assertEqual(10000, bloom:key_size(Bloom)),
   bloom:stop(Bloom).
   
+priv_dir() ->
+  Dir = filename:join(t:config(priv_dir), "data"),
+  filelib:ensure_dir(filename:join(Dir, "bloom")),
+  Dir.
+
+data_file() ->
+  filename:join(priv_dir(), "bloom").
+
+data_file(N) ->
+  filename:join(priv_dir(), "bloom" ++ integer_to_list(N)).

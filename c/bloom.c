@@ -31,6 +31,7 @@ bloom_t *bloom_open(char* filename, long n, double e) {
   
   if (-1 == stat(filename, &file_stat)) {
     //create a new one
+    // printf("creating new file\n");
     if (-1 == (file = open(filename, O_CREAT | O_RDWR, S_IWUSR | S_IRUSR | S_IRGRP | S_IWGRP))) {
       return NULL;
     }
@@ -46,6 +47,7 @@ bloom_t *bloom_open(char* filename, long n, double e) {
     bloom->data.k = (int) round(log(2) * m / n);
     pwrite(file, bloom, sizeof(bloom_t) + BYTE_SIZE(m), 0);
   } else {
+    // printf("opening existing file\n");
     if (-1 == (file = open(filename, O_RDWR))) {
       return NULL;
     }
