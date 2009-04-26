@@ -229,12 +229,7 @@ rule ".o" => ".c" do |t|
   sh "cc #{CPPFLAGS} -c -o #{t.name} #{t.source}"
 end
 
-# rule ".beam" => "%{ebin,etest}X_test.erl" do |t|
-#   puts "erlc  #{ERLC_FLAGS} #{ENV['TEST'] ? ERLC_TEST_FLAGS : ''} #{t.source}"
-#   sh "erlc  #{ERLC_FLAGS} #{ENV['TEST'] ? ERLC_TEST_FLAGS : ''} #{t.source}"
-# end
-
-rule ".beam" => ["%{ebin,elibs}X.erl", "%{ebin,etest}X_test.erl"] do |t|
+def compile(t)
   cmd = "erlc  #{ERLC_FLAGS} #{ENV['TEST'] ? ERLC_TEST_FLAGS : ''} #{t.source}"
   # rude hack
   cmd.gsub!("+native", "") if ["elibs/dynomite_web.erl", "elibs/dynomite_pb.erl"].include?(t.source)
@@ -242,6 +237,17 @@ rule ".beam" => ["%{ebin,elibs}X.erl", "%{ebin,etest}X_test.erl"] do |t|
   sh cmd
 end
 
+rule ".beam" => ["%{ebin,elibs}X.erl", "%{ebin,etest}X_test.erl"] do |t|
+  compile(t)
+end
+
+rule ".beam" => "%{ebin,elibs}X.erl" do |t|
+  compile(t)
+end
+
+rule ".beam" => "%{ebin,etest}X.erl" do |t|
+  compile(t)
+end
 
 task :build_c_drivers => [:c_env, "priv"] + DRIVERS
 task :build_erl => BEAMS + TEST_BEAMS
