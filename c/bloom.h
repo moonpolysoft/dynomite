@@ -1,11 +1,11 @@
 
 typedef struct _bloom_data_t {
-  uint32_t version;
-  uint32_t m;
-  uint64_t n;
-  double e;
-  uint32_t k;
-  uint64_t keys;
+  uint32_t version; //0
+  uint32_t m;       //4
+  uint64_t n;       //8
+  double e;         //
+  uint32_t k;       //
+  uint64_t keys;    //3
   uint32_t seed;
   char reserved[64];
   char bits[1];
