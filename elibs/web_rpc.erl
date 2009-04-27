@@ -63,12 +63,12 @@ rates(Node) ->
 syncs_running(cluster) ->
   {Good,_} = rpc:multicall(sync_manager, running, []),
   {array, lists:map(fun({Part, NodeA, NodeB}) -> 
-      {struct, [{partition, Part}, {nodes, [NodeA, NodeB]}]}
+      {struct, [{partition, Part}, {nodes, {array, [NodeA, NodeB]}}]}
     end, lists:flatten(Good))};
   
 syncs_running(Node) ->
   {array, lists:map(fun({Part, NodeA, NodeB}) -> 
-      {struct, [{partition, Part}, {nodes, [NodeA, NodeB]}]}
+      {struct, [{partition, Part}, {nodes, {array, [NodeA, NodeB]}}]}
     end, sync_manager:running(Node))}.
 
 diff_size(cluster) ->
