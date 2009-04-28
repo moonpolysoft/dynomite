@@ -1,7 +1,7 @@
 options = {}
 
 OptionParser.new do |opts|
-  opts.banner = "Usage: dynomite stop [options]"
+  opts.banner = "Usage: dynomite status [options]"
 
   contents =  File.read(File.dirname(__FILE__) + "/shared/common.rb")
   eval contents
