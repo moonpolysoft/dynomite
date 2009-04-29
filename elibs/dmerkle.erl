@@ -37,7 +37,7 @@ open(FileName) ->
   open(FileName, undefined).
 
 open(FileName, BlockSize) -> 
-  gen_server:start_link(?MODULE, {FileName,BlockSize}, [{spawn_opt, [fullsweep_after, 10]}]).
+  gen_server:start_link(?MODULE, {FileName,BlockSize}, [{spawn_opt, [{fullsweep_after, 10}]}]).
 
 count_trace(Pid, Key) ->
   gen_server:call(Pid, {count_trace, Key}).
