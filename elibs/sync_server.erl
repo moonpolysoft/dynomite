@@ -25,7 +25,7 @@
 %% @end 
 %%--------------------------------------------------------------------
 start_link(Name, Partition) ->
-  Pid = spawn_link(fun() ->
+  Pid = proc_lib:spawn_link(fun() ->
       sync_server:loop(#state{name=Name,partition=Partition,paused=false})
     end),
   register(Name, Pid),
