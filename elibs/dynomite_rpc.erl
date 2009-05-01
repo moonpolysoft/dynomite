@@ -7,32 +7,61 @@
 
 connect(Node) ->
   case net_adm:ping(Node) of
-    pong -> {ok, Node};
+    pong ->
+      {ok, Node};
     pang -> {error, "Cannot connect."}
   end.
   
 get(Node, Key) ->
-  case rpc:call(Node, mediator, get, [Key]) of
-    {badrpc, Reason} -> {failure, Reason};
-    Result -> Result
-  end.
+  GetFun = fun(N) ->
+    case rpc:call(N, mediator, get, [Key]) of
+      {badrpc, Reason} -> {failure, Reason};
+      Result -> Result
+    end
+  end,
+  robustify(Node, GetFun).
   
 put(Node, Key, Context, Value) ->
-  case rpc:call(Node, mediator, put, [Key, Context, Value]) of
-    {badrpc, Reason} -> {failure, Reason};
-    Result -> Result
-  end.
+  PutFun = fun(N) ->
+    case rpc:call(N, mediator, put, [Key, Context, Value]) of
+      {badrpc, Reason} -> {failure, Reason};
+      Result -> Result
+    end
+  end,
+  robustify(Node, PutFun).
   
 has_key(Node, Key) ->
-  case rpc:call(Node, mediator, has_key, [Key]) of
-    {badrpc, Reason} -> {failure, Reason};
-    Result -> Result
-  end.
+  HasFun = fun(N) ->
+    case rpc:call(N, mediator, has_key, [Key]) of
+      {badrpc, Reason} -> {failure, Reason};
+      Result -> Result
+    end
+  end,
+  robustify(Node, HasFun).
   
 delete(Node, Key) ->
-  case rpc:call(Node, mediator, delete, [Key]) of
-    {badrpc, Reason} -> {failure, Reason};
-    Result -> Result
-  end.
+  DelFun = fun(N) ->
+    case rpc:call(N, mediator, delete, [Key]) of
+      {badrpc, Reason} -> {failure, Reason};
+      Result -> Result
+    end
+  end,
+  robustify(Node, DelFun).
   
 close(Node) -> erlang:disconnect(Node).
+
+
+robustify(Node, Fun) ->
+  erlang:monitor_node(Node, true),
+  R = receive
+    {nodedown, Node} ->
+      % io:format("node ~p was down~n", [Node]),
+      case dynomite:running_nodes() of
+        [] -> {failure, "No dynomite nodes available."};
+        [NextNode|_] -> Fun(NextNode)
+      end
+  after 0 ->
+    Fun(Node)
+  end,
+  erlang:monitor_node(Node, false),
+  R.

@@ -49,7 +49,7 @@ start_link(ConfigFile) ->
 %%--------------------------------------------------------------------
 init(ConfigFile) ->
     Node = node(),
-    Nodes = dynomite:running_nodes(),
+    Nodes = dynomite:running_nodes() ++ [node()],
     Children = [
                 {fnv,
                  {fnv,start,[]},
