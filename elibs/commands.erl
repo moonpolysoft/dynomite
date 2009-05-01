@@ -2,9 +2,9 @@
 %%% File:      commands.erl
 %%% @author    Cliff Moon <cliff@powerset.com> []
 %%% @copyright 2008 Cliff Moon
-%%% @doc  
+%%% @doc
 %%%
-%%% @end  
+%%% @end
 %%%
 %%% @since 2008-07-27 by Cliff Moon
 %%%-------------------------------------------------------------------
@@ -18,9 +18,9 @@
 %% API
 %%====================================================================
 %%--------------------------------------------------------------------
-%% @spec 
+%% @spec
 %% @doc
-%% @end 
+%% @end
 %%--------------------------------------------------------------------
 
 start() ->
@@ -28,28 +28,28 @@ start() ->
   Result = rpc:call(Node, Module, Function, Arguments),
   io:format("~p~n", [Result]),
   timer:sleep(10).
-  
+
 process_arguments(Args) ->
   process_arguments([], Args).
-  
+
 process_arguments(Res, []) ->
   list_to_tuple(lists:reverse(Res));
-  
+
 process_arguments(Res, [Arg|Args]) ->
   case init:get_argument(Arg) of
     {ok, Lists} ->
       ArgList = lists:flatten(lists:map(fun atomize/1, Lists)),
       if
-        length(ArgList) == 1 -> 
+        length(ArgList) == 1 ->
           [A] = ArgList,
           process_arguments([A|Res], Args);
         true ->
           process_arguments([ArgList|Res], Args)
       end;
-    error -> 
+    error ->
       process_arguments([[]|Res], Args)
   end.
-  
+
 atomize([E|L]) when is_list(E) ->
   lists:map(fun atomize/1, [E|L]);
 

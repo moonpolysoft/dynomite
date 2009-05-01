@@ -2,15 +2,15 @@
 
 -export([start/0, running/1, running_nodes/0, pause_all_sync/0, start_all_sync/0]).
 
--include("common.hrl").
+-include("../include/common.hrl").
 
 start() ->
   crypto:start(),
   load_and_start_apps([os_mon, thrift, mochiweb, dynomite]).
-  
+
 running(Node) when Node == node() ->
   true;
-  
+
 running(Node) ->
   Ref = erlang:monitor(process, {membership, Node}),
   receive
@@ -19,10 +19,10 @@ running(Node) ->
     erlang:demonitor(Ref),
     true
   end.
-  
+
 running_nodes() ->
   [Node || Node <- nodes([this,visible]), dynomite:running(Node)].
-  
+
 pause_all_sync() ->
   SyncServers = lists:flatten(lists:map(fun(Node) ->
       rpc:call(Node, sync_manager, loaded, [])
@@ -30,7 +30,7 @@ pause_all_sync() ->
   lists:foreach(fun(Server) ->
       sync_server:pause(Server)
     end, SyncServers).
-  
+
 start_all_sync() ->
   SyncServers = lists:flatten(lists:map(fun(Node) ->
       rpc:call(Node, sync_manager, loaded, [])
@@ -40,27 +40,27 @@ start_all_sync() ->
     end, SyncServers).
 
 %%==============================================================
-  
+
 load_and_start_apps([]) ->
   ok;
-  
+
 load_and_start_apps([App|Apps]) ->
   case application:load(App) of
-    ok -> 
+    ok ->
       case application:start(App) of
         ok -> load_and_start_apps(Apps);
-        Err -> 
+        Err ->
           ?infoFmt("error starting ~p: ~p~n", [App, Err]),
           timer:sleep(10),
           halt(1)
       end;
-    Err -> 
-      ?infoFmt("error loading ~p: ~p~n", [App, Err]), 
+    Err ->
+      ?infoFmt("error loading ~p: ~p~n", [App, Err]),
       Err,
       timer:sleep(10),
       halt(1)
   end.
-  
+
 collect_loop() ->
   process_flag(trap_exit, true),
   Filename = io_lib:format("/home/cliff/dumps/~w-dyn.dump", [lib_misc:now_int()]),
@@ -69,7 +69,7 @@ collect_loop() ->
     nothing -> ok
   after 5000 -> collect_loop()
   end.
-  
+
 sys_info(Filename) ->
   {ok, IO} = file:open(Filename, [write]),
   ok = io:format(IO, "count ~p~n", [erlang:system_info(process_count)]),

@@ -2,9 +2,9 @@
 %%% File:      web_rpc.erl
 %%% @author    Cliff Moon <cliff@powerset.com> []
 %%% @copyright 2008 Cliff Moon
-%%% @doc  
+%%% @doc
 %%%
-%%% @end  
+%%% @end
 %%%
 %%% @since 2008-08-14 by Cliff Moon
 %%%-------------------------------------------------------------------
@@ -18,23 +18,23 @@
 %% API
 %%====================================================================
 %%--------------------------------------------------------------------
-%% @spec 
+%% @spec
 %% @doc
-%% @end 
+%% @end
 %%--------------------------------------------------------------------
 
 info(stats) ->
   {struct, [
-    {node,node()}, 
+    {node,node()},
     {running_nodes,{array, lists:sort(nodes([this,visible]))}},
     {member_nodes,transform_partitions(lists:keysort(1, membership:partitions()))}
   ]};
-  
+
 info(partitions) ->
-  {array, lists:map(fun({Node, Part}) -> 
+  {array, lists:map(fun({Node, Part}) ->
       {struct, [{node,Node},{partition,Part}]}
     end, lists:keysort(2, membership:partitions()))};
-    
+
 info(nodes) ->
   {array, membership:nodes()}.
 
@@ -59,15 +59,15 @@ rates(Node) ->
     {out_rate, stats_server:rate(Node, out_rate, 1)},
     {connections, socket_server:connections(Node)}
   ]}.
-  
+
 syncs_running(cluster) ->
   {Good,_} = rpc:multicall(sync_manager, running, []),
-  {array, lists:map(fun({Part, NodeA, NodeB}) -> 
+  {array, lists:map(fun({Part, NodeA, NodeB}) ->
       {struct, [{partition, Part}, {nodes, [NodeA, NodeB]}]}
     end, lists:flatten(Good))};
-  
+
 syncs_running(Node) ->
-  {array, lists:map(fun({Part, NodeA, NodeB}) -> 
+  {array, lists:map(fun({Part, NodeA, NodeB}) ->
       {struct, [{partition, Part}, {nodes, [NodeA, NodeB]}]}
     end, sync_manager:running(Node))}.
 
@@ -84,7 +84,7 @@ diff_size(cluster) ->
 %%====================================================================
 
 transform_partitions(Partitions) ->
-  {array, lists:map(fun([Node,Parts]) -> 
+  {array, lists:map(fun([Node,Parts]) ->
       {struct, [
         {name, Node},
         {partitions, {array, Parts}},
@@ -94,12 +94,12 @@ transform_partitions(Partitions) ->
 
 transform_partitions([], [{Node,Part}|Parts]) ->
   transform_partitions([[Node,[Part]]], Parts);
-  
+
 transform_partitions(NodeParts, []) ->
-  [[Node, lists:sort(Parts)] || [Node, Parts] <- lists:sort(NodeParts)]; 
-  
+  [[Node, lists:sort(Parts)] || [Node, Parts] <- lists:sort(NodeParts)];
+
 transform_partitions([[Node,NodeParts]|Others], [{Node,Part}|Parts]) ->
   transform_partitions([[Node,[Part|NodeParts]]|Others], Parts);
-  
+
 transform_partitions(Others, [{Node,Part}|Parts]) ->
   transform_partitions([[Node,[Part]]|Others], Parts).

@@ -12,21 +12,21 @@ OptionParser.new do |opts|
 
   opts.separator ""
   opts.separator "Specific options:"
-  
+
   opts
-  
+
   opts.on("-c", "--config [CONFIGFILE]", "path to the config file") do |config|
     options[:config] = %Q(-dynomite config "\\"#{config}\\"")
   end
-  
+
   opts.on("-l", "--log [LOGFILE]", "error log path") do |log|
     options[:log] = %Q[-kernel error_logger '{file,"#{File.join(log, 'dynomite.log')}"}' -sasl sasl_error_logger '{file,"#{File.join(log, 'sasl.log')}"}']
   end
-  
+
   opts.on('-j', "--join [NODENAME]", 'node to join with') do |node|
     options[:jointo] = %Q(-dynomite jointo "'#{node}'")
   end
-  
+
   opts.on('-d', "--detached", "run detached from the shell") do |detached|
     options[:detached] = '-detached'
   end

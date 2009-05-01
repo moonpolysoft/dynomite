@@ -12,15 +12,15 @@ truncate(Clock) when length(Clock) > 10 ->
 
 truncate(Clock) -> Clock.
 
-increment(NodeName, [{NodeName, Version}|Clocks]) ->
+increment(NodeName, [{NodeName, _Version}|Clocks]) ->
 	[{NodeName, lib_misc:now_float()}|Clocks];
 
 increment(NodeName, [NodeClock|Clocks]) ->
 	[NodeClock|increment(NodeName, Clocks)];
-	
+
 increment(NodeName, []) ->
 	[{NodeName, lib_misc:now_float()}].
-	
+
 resolve({ClockA, ValuesA}, {ClockB, ValuesB}) ->
   case compare(ClockA, ClockB) of
     less -> {ClockB, ValuesB};
@@ -32,14 +32,14 @@ resolve(not_found, {Clock, Values}) ->
     {Clock, Values};
 resolve({Clock, Values}, not_found) ->
     {Clock, Values}.
-  
+
 merge(ClockA, ClockB) ->
   merge([], ClockA, ClockB).
 
 merge(Merged, [], ClockB) -> lists:keysort(1, Merged ++ ClockB);
 
 merge(Merged, ClockA, []) -> lists:keysort(1, Merged ++ ClockA);
-  
+
 merge(Merged, [{NodeA, VersionA}|ClockA], ClockB) ->
   case lists:keytake(NodeA, 1, ClockB) of
     {value, {NodeA, VersionB}, TrunkClockB} when VersionA > VersionB ->
@@ -49,7 +49,7 @@ merge(Merged, [{NodeA, VersionA}|ClockA], ClockB) ->
     false ->
       merge([{NodeA,VersionA}|Merged],ClockA,ClockB)
   end.
-	
+
 compare(ClockA, ClockB) ->
   AltB = less_than(ClockA, ClockB),
   BltA = less_than(ClockB, ClockA),
@@ -61,7 +61,7 @@ compare(ClockA, ClockB) ->
     AeqB -> equal;
     AccB -> concurrent
   end.
-	
+
 % ClockA is less than ClockB if and only if ClockA[z] <= ClockB[z] for all instances z and there
 % exists an index z' such that ClockA[z'] < ClockB[z']
 less_than(ClockA, ClockB) ->
@@ -79,7 +79,7 @@ less_than(ClockA, ClockB) ->
   end, ClockA),
   %length takes care of the case when clockA is shorter than B
   ForAll and (Exists or (length(ClockA) < length(ClockB))).
-  
+
 equals(ClockA, ClockB) ->
   Equivalent = lists:all(fun({NodeA, VersionA}) ->
     lists:any(fun(NodeClockB) ->
@@ -90,6 +90,6 @@ equals(ClockA, ClockB) ->
     end, ClockB)
   end, ClockA),
   Equivalent and (length(ClockA) == length(ClockB)).
-  
+
 concurrent(ClockA, ClockB) ->
   not (less_than(ClockA, ClockB) or less_than(ClockB, ClockA) or equals(ClockA, ClockB)).
