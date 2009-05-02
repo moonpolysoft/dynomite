@@ -41,7 +41,7 @@
 %% @end 
 %%--------------------------------------------------------------------
 start_link(StorageModule, DbKey, Name, Min, Max, BlockSize) when is_list(StorageModule) ->
-  gen_server:start_link({local, Name}, ?MODULE, {list_to_atom(StorageModule),DbKey,Name,Min,Max, BlockSize}, []);
+  gen_server:start_link({local, Name}, ?MODULE, {list_to_atom(StorageModule),DbKey,Name,Min,Max, BlockSize}, [{spawn_opt, [{fullsweep_after, 10}]}]);
 
 start_link(StorageModule, DbKey, Name, Min, Max, BlockSize) ->
   gen_server:start_link({local, Name}, ?MODULE, {StorageModule,DbKey,Name,Min,Max, BlockSize}, []).

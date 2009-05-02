@@ -7,19 +7,32 @@
 start() ->
   crypto:start(),
   load_and_start_apps([os_mon, thrift, mochiweb, dynomite]).
+<<<<<<< HEAD:elibs/dynomite.erl
 
 running(Node) when Node == node() ->
   true;
 
+=======
+  
+% running(Node) when Node == node() ->
+%   true;
+  
+>>>>>>> cliff/master:elibs/dynomite.erl
 running(Node) ->
   Ref = erlang:monitor(process, {membership, Node}),
-  receive
+  R = receive
     {'DOWN', Ref, _, _, _} -> false
   after 1 ->
-    erlang:demonitor(Ref),
     true
+<<<<<<< HEAD:elibs/dynomite.erl
   end.
 
+=======
+  end,
+  erlang:demonitor(Ref),
+  R.
+  
+>>>>>>> cliff/master:elibs/dynomite.erl
 running_nodes() ->
   [Node || Node <- nodes([this,visible]), dynomite:running(Node)].
 

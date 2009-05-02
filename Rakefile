@@ -213,6 +213,7 @@ end
 DRIVERS = FileList['c/*_drv.c'].pathmap("%{c,priv}X.so")
 BEAMS = FileList['elibs/*.erl'].pathmap("%{elibs,ebin}X.beam")
 TEST_BEAMS = FileList['etest/*.erl'].select {|d| d !~ /^.*_test.erl$/}.pathmap("%{etest,ebin}X.beam")
+THRIFT_BEAMS = FileList['gen-erl/*.erl'].pathmap("%{gen-erl,ebin}X.beam")
 
 directory "build"
 directory "priv"
@@ -249,5 +250,9 @@ rule ".beam" => "%{ebin,etest}X.erl" do |t|
   compile(t)
 end
 
+rule ".beam" => "%{ebin,gen-erl}X.erl" do |t|
+  compile(t)
+end
+
 task :build_c_drivers => [:c_env, "priv"] + DRIVERS
-task :build_erl => BEAMS + TEST_BEAMS
+task :build_erl => BEAMS + TEST_BEAMS + THRIFT_BEAMS

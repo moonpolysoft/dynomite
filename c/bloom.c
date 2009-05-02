@@ -29,8 +29,11 @@ bloom_t *bloom_open(char* filename, long n, double e) {
   uint32_t version;
   struct stat file_stat;
   
+  // printf("sizeof(bloom_data_t) %d\n", sizeof(bloom_data_t));
+  
   if (-1 == stat(filename, &file_stat)) {
     //create a new one
+    // printf("creating new file\n");
     if (-1 == (file = open(filename, O_CREAT | O_RDWR, S_IWUSR | S_IRUSR | S_IRGRP | S_IWGRP))) {
       return NULL;
     }
@@ -44,17 +47,31 @@ bloom_t *bloom_open(char* filename, long n, double e) {
     
     bloom->data.m = m;
     bloom->data.k = (int) round(log(2) * m / n);
-    pwrite(file, bloom, sizeof(bloom_t) + BYTE_SIZE(m), 0);
+    pwrite(file, &bloom->data, sizeof(bloom_data_t) + BYTE_SIZE(m), 0);
   } else {
+    // printf("opening existing file\n");
     if (-1 == (file = open(filename, O_RDWR))) {
       return NULL;
     }
     
     pread(file, &version, sizeof(uint32_t), 0);
-    pread(file, &m, sizeof(uint32_t), sizeof(uint32_t));
+    pread(file, &m, sizeof(uint32_t), 4);
+    
+    // printf("read version of %d\n", version);
+    // printf("read m of %d\n", m);
     bloom = malloc(sizeof(bloom_t) + BYTE_SIZE(m));
     pread(file, &bloom->data, sizeof(bloom_data_t) + BYTE_SIZE(m), 0);
   }
+  // printf("bloom->data %d\n", (int)&bloom->data);
+  // printf("n %d\n", (int)&bloom->data.n);
+  // printf("keys %d\n", (int)&bloom->data.keys);
+  // printf("version = %d %d\n", bloom->data.version, (( int)&(bloom->data.version) - ( int)&(bloom->data)));
+  // printf("m = %d %d\n", bloom->data.m, (( int)&(bloom->data.m) - ( int)&(bloom->data)));
+  // printf("n = %d %d\n", bloom->data.n, (( int)&(bloom->data.n) - ( int)&(bloom->data)));
+  // printf("e = %f %d\n", bloom->data.e, (( int)&(bloom->data.e) - ( int)&(bloom->data)));
+  // printf("k = %d %d\n", bloom->data.k, (( int)&(bloom->data.k) - ( int)&(bloom->data)));
+  // printf("keys = %d %d\n", bloom->data.keys, (( int)&(bloom->data.keys) - ( int)&(bloom->data)));
+  // printf("seed = %d %d\n", bloom->data.seed, (( int)&(bloom->data.seed) - ( int)&(bloom->data)));
   bloom->file = file;
   bloom->filename = malloc(strlen(filename) + 1);
   strcpy(bloom->filename, filename);
@@ -77,11 +94,15 @@ void bloom_put(bloom_t *bloom, char *buff, int len) {
     // printf("byte %d bit %d\n", BYTE_INDEX(index), BIT_INDEX(index));
     byte_index = BYTE_INDEX(index);
     SET_BIT(bloom->data.bits, index);
-    pwrite(bloom->file, &bloom->data.bits[byte_index], 1, sizeof(bloom_t) + byte_index - 1);
+    // if ((sizeof(bloom_data_t) + byte_index - 1) < 108) {
+    //   printf("writing to %d\n", sizeof(bloom_data_t) + byte_index - 1);
+    offset = (unsigned int)&(bloom->data.bits[byte_index]) - (unsigned int)&bloom->data;
+    pwrite(bloom->file, &bloom->data.bits[byte_index], 1, offset);
     // printf("byte %d\n", bloom->bits[BYTE_INDEX(index)]);
   }
   bloom->data.keys++;
-  offset = ((unsigned int)&(bloom->data.keys) - (unsigned int)bloom);
+  offset = ((unsigned int)&(bloom->data.keys) - (unsigned int)&(bloom->data));
+  // printf("writing keys into offset %d\n", offset);
   pwrite(bloom->file, &(bloom->data.keys), sizeof(uint32_t), offset);
 }
 

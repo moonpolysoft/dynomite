@@ -87,14 +87,22 @@ static void output(ErlDrvData handle, char *buf, int len) {
 static void setup(bloom_drv_t *driver, char *buf, int len) {
   long n;
   double e;
+  char *filename;
+  int size;
+  int type;
   int index = 0;
   
   ei_decode_version(buf, &index, NULL);
   ei_decode_tuple_header(buf, &index, NULL);
+  ei_get_type(buf, &index, &type, &size);
+  filename = driver_alloc(size+1);
+  ei_decode_string(buf, &index, filename);
   ei_decode_long(buf, &index, &n);
   ei_decode_double(buf, &index, &e);
   
-  driver->bloom = bloom_create(n, e);
+  driver->bloom = bloom_open(filename, n, e);
+  
+  driver_free(filename);
 }
 
 static void put(bloom_drv_t *driver, char *buf, int len) {

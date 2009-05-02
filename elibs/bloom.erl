@@ -12,7 +12,7 @@
 -author('cliff@powerset.com').
 
 %% API
--export([start/2, put/2, has/2, mem_size/1, key_size/1, stop/1]).
+-export([start/3, put/2, has/2, mem_size/1, key_size/1, stop/1]).
 
 %% COMMANDS
 -define(SETUP, $s).
@@ -34,11 +34,11 @@
 %% @end 
 %%--------------------------------------------------------------------
 
-start(N, E) ->
+start(Filename, N, E) ->
   case load_driver() of
     ok ->
       P = open_port({spawn, 'bloom_drv'}, [binary]),
-      port_command(P, [?SETUP, term_to_binary({N, E})]),
+      port_command(P, [?SETUP, term_to_binary({Filename, N, E})]),
       {ok, {bloom, P}};
     {error, Err} ->
       Msg = erl_ddll:format_error(Err),

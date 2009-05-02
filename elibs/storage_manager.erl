@@ -41,10 +41,10 @@ start_link() ->
   gen_server:start_link({local, storage_manager}, ?MODULE, [], []).
   
 load(Nodes, Partitions, PartsForNode) ->
-  gen_server:call(storage_manager, {load, Nodes, Partitions, PartsForNode, true}).
+  gen_server:call(storage_manager, {load, Nodes, Partitions, PartsForNode, true}, infinity).
   
 load_no_boot(Nodes, Partitions, PartsForNode) ->
-  gen_server:call(storage_manager, {load, Nodes, Partitions, PartsForNode, false}).
+  gen_server:call(storage_manager, {load, Nodes, Partitions, PartsForNode, false}, infinity).
   
 loaded() ->
   gen_server:call(storage_manager, loaded).

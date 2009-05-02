@@ -41,7 +41,7 @@ stop() ->
   gen_server:cast(sync_manager, stop).
 
 load(Nodes, Partitions, PartsForNode) ->
-  gen_server:call(sync_manager, {load, Nodes, Partitions, PartsForNode}).
+  gen_server:call(sync_manager, {load, Nodes, Partitions, PartsForNode}, infinity).
 
 sync(Part, Master, NodeA, NodeB, DiffSize) ->
   gen_server:cast(sync_manager, {sync, Part, Master, NodeA, NodeB, DiffSize}).
