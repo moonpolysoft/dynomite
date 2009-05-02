@@ -3,11 +3,17 @@
 require 'optparse'
 require 'digest/md5'
 
-FILE = File.symlink?(__FILE__) ? File.expand_path(File.join(File.dirname(__FILE__), File.readlink(__FILE__))) : File.expand_path(__FILE__)
+def real_path(filename)
+  if File.symlink?(filename)
+    target = File.readlink(filename)
+    File.expand_path(target[0, 1] == "/" ?
+      target : File.join(File.dirname(filename), target))
+  else
+    File.expand_path(filename)
+  end
+end
 
-# if FILE =~ %r{^/} and !File.symlink?(__FILE__)
-#   FILE.replace File.expand_path(File.join(File.dirname(__FILE__), FILE))
-# end
+FILE = real_path(__FILE__)
 
 ROOT = File.expand_path(File.dirname(FILE) + "/..")
 COMMAND_DIR = File.join(ROOT, 'rlibs', 'cli')
