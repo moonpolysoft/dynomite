@@ -2,9 +2,9 @@
 %%% File:      murmur.erl
 %%% @author    Cliff Moon <> []
 %%% @copyright 2009 Cliff Moon
-%%% @doc  
+%%% @doc
 %%%
-%%% @end  
+%%% @end
 %%%
 %%% @since 2009-01-29 by Cliff Moon
 %%%-------------------------------------------------------------------
@@ -19,9 +19,9 @@
 %% API
 %%====================================================================
 %%--------------------------------------------------------------------
-%% @spec 
+%% @spec
 %% @doc
-%% @end 
+%% @end
 %%--------------------------------------------------------------------
 start() ->
   case load_driver() of
@@ -34,20 +34,20 @@ start() ->
 stop(P) ->
   unlink(P),
   exit(P, die).
-  
+
 hash(Thing) ->
   hash(Thing, ?SEED).
-  
+
 hash(Thing, Seed) when is_list(Thing) -> %assume io_list
   P = get_or_open(),
   port_command(P, [term_to_binary(Seed)] ++ Thing),
   recv(P);
-  
+
 hash(Thing, Seed) when is_binary(Thing) ->
   P = get_or_open(),
   port_command(P, [term_to_binary(Seed), Thing]),
   recv(P);
-  
+
 hash(Thing, Seed) ->
   P = get_or_open(),
   port_command(P, [term_to_binary(Seed), term_to_binary(Thing)]),
@@ -75,5 +75,3 @@ recv(P) ->
   receive
     {P, {data, Bin}} -> binary_to_term(Bin)
   end.
-  
-

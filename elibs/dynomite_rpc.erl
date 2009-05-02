@@ -11,8 +11,34 @@ connect(Node) ->
       {ok, Node};
     pang -> {error, "Cannot connect."}
   end.
-  
+
 get(Node, Key) ->
+<<<<<<< HEAD:elibs/dynomite_rpc.erl
+  case rpc:call(Node, mediator, get, [Key]) of
+    {badrpc, Reason} -> {failure, Reason};
+    Result -> Result
+  end.
+
+put(Node, Key, Context, Value) ->
+  case rpc:call(Node, mediator, put, [Key, Context, Value]) of
+    {badrpc, Reason} -> {failure, Reason};
+    Result -> Result
+  end.
+
+has_key(Node, Key) ->
+  case rpc:call(Node, mediator, has_key, [Key]) of
+    {badrpc, Reason} -> {failure, Reason};
+    Result -> Result
+  end.
+
+delete(Node, Key) ->
+  case rpc:call(Node, mediator, delete, [Key]) of
+    {badrpc, Reason} -> {failure, Reason};
+    Result -> Result
+  end.
+
+close(Node) -> erlang:disconnect(Node).
+=======
   GetFun = fun(N) ->
     case rpc:call(N, mediator, get, [Key]) of
       {badrpc, Reason} -> {failure, Reason};
@@ -65,3 +91,4 @@ robustify(Node, Fun) ->
   end,
   erlang:monitor_node(Node, false),
   R.
+>>>>>>> cliff/master:elibs/dynomite_rpc.erl

@@ -2,9 +2,9 @@
 %%% File:      dynomite.erl
 %%% @author    Cliff Moon <cliff@powerset.com> []
 %%% @copyright 2008 Cliff Moon
-%%% @doc  
+%%% @doc
 %%%
-%%% @end  
+%%% @end
 %%%
 %%% @since 2008-06-27 by Cliff Moon
 %%%-------------------------------------------------------------------
@@ -13,8 +13,8 @@
 
 -behaviour(application).
 
--include("config.hrl").
--include("common.hrl").
+-include("../include/config.hrl").
+-include("../include/common.hrl").
 
 %% Application callbacks
 -export([start/2, stop/1]).
@@ -26,12 +26,12 @@
 %% @spec start(Type, StartArgs) -> {ok, Pid} |
 %%                                 {ok, Pid, State} |
 %%                                 {error, Reason}
-%% @doc This function is called whenever an application 
+%% @doc This function is called whenever an application
 %% is started using application:start/1,2, and should start the processes
 %% of the application. If the application is structured according to the
 %% OTP design principles as a supervision tree, this means starting the
 %% top supervisor of the tree.
-%% @end 
+%% @end
 %%--------------------------------------------------------------------
 start(_Type, []) ->
   case application:get_env(config) of
@@ -40,7 +40,7 @@ start(_Type, []) ->
         true -> join_and_start(ConfigFile);
         false -> {error, ?fmt("~p does not exist.", [ConfigFile])}
       end;
-    undefined -> 
+    undefined ->
       {error, ?fmt("No config file given.", [])}
   end.
 
@@ -48,8 +48,8 @@ start(_Type, []) ->
 %% @spec stop(State) -> void()
 %% @doc This function is called whenever an application
 %% has stopped. It is intended to be the opposite of Module:start/2 and
-%% should do any necessary cleaning up. The return value is ignored. 
-%% @end 
+%% should do any necessary cleaning up. The return value is ignored.
+%% @end
 %%--------------------------------------------------------------------
 stop({_, Sup}) ->
   exit(Sup, shutdown),
@@ -78,10 +78,10 @@ alter_ulimit(U, FD) ->
 
 join_and_start(ConfigFile) ->
   case application:get_env(jointo) of
-    {ok, NodeName} -> 
+    {ok, NodeName} ->
       ?infoFmt("attempting to contact ~p~n", [NodeName]),
       case net_adm:ping(NodeName) of
-        pong -> 
+        pong ->
           ?infoFmt("Connected to ~p~n", [NodeName]),
           dynomite_sup:start_link(ConfigFile);
         pang ->

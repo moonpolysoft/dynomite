@@ -2,9 +2,9 @@
 %%% File:      dynomite_web.erl
 %%% @author    Cliff Moon <cliff@powerset.com> []
 %%% @copyright 2008 Cliff Moon
-%%% @doc  
+%%% @doc
 %%%
-%%% @end  
+%%% @end
 %%%
 %%% @since 2008-08-12 by Cliff Moon
 %%%-------------------------------------------------------------------
@@ -14,17 +14,17 @@
 %% API
 -export([start_link/0, stop/0, loop/2]).
 
--include("config.hrl").
--include("common.hrl").
+-include("../include/config.hrl").
+-include("../include/common.hrl").
 
 
 %%====================================================================
 %% API
 %%====================================================================
 %%--------------------------------------------------------------------
-%% @spec 
+%% @spec
 %% @doc
-%% @end 
+%% @end
 %%--------------------------------------------------------------------
 
 start_link() ->
@@ -48,7 +48,7 @@ loop(Req, DocRoot) ->
   case Req:get(method) of
     'GET' ->
       case filelib:is_file(DocRoot ++ "/" ++ Path) of
-        true -> 
+        true ->
           case filelib:is_file(DocRoot ++ "/" ++ Path ++ "/index.html") of
             true ->
               {ok, Data} = file:read_file(DocRoot ++ "/" ++ Path ++ "/index.html"),
@@ -78,10 +78,9 @@ rpc_invoke(Path, Req) ->
 
 get_option(Option, Options) ->
   {proplists:get_value(Option, Options), proplists:delete(Option, Options)}.
-    
+
 find_web_dir() ->
   case filelib:is_dir(WebDir1 = filename:join([filename:dirname(code:which(?MODULE)), "..", "web"])) of
     true -> WebDir1;
     false -> filename:join([filename:dirname(code:which(?MODULE)), "..", "priv", "web"])
   end.
-
