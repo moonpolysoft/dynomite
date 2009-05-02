@@ -13,32 +13,6 @@ connect(Node) ->
   end.
 
 get(Node, Key) ->
-<<<<<<< HEAD:elibs/dynomite_rpc.erl
-  case rpc:call(Node, mediator, get, [Key]) of
-    {badrpc, Reason} -> {failure, Reason};
-    Result -> Result
-  end.
-
-put(Node, Key, Context, Value) ->
-  case rpc:call(Node, mediator, put, [Key, Context, Value]) of
-    {badrpc, Reason} -> {failure, Reason};
-    Result -> Result
-  end.
-
-has_key(Node, Key) ->
-  case rpc:call(Node, mediator, has_key, [Key]) of
-    {badrpc, Reason} -> {failure, Reason};
-    Result -> Result
-  end.
-
-delete(Node, Key) ->
-  case rpc:call(Node, mediator, delete, [Key]) of
-    {badrpc, Reason} -> {failure, Reason};
-    Result -> Result
-  end.
-
-close(Node) -> erlang:disconnect(Node).
-=======
   GetFun = fun(N) ->
     case rpc:call(N, mediator, get, [Key]) of
       {badrpc, Reason} -> {failure, Reason};
@@ -46,7 +20,7 @@ close(Node) -> erlang:disconnect(Node).
     end
   end,
   robustify(Node, GetFun).
-  
+
 put(Node, Key, Context, Value) ->
   PutFun = fun(N) ->
     case rpc:call(N, mediator, put, [Key, Context, Value]) of
@@ -55,7 +29,7 @@ put(Node, Key, Context, Value) ->
     end
   end,
   robustify(Node, PutFun).
-  
+
 has_key(Node, Key) ->
   HasFun = fun(N) ->
     case rpc:call(N, mediator, has_key, [Key]) of
@@ -64,7 +38,7 @@ has_key(Node, Key) ->
     end
   end,
   robustify(Node, HasFun).
-  
+
 delete(Node, Key) ->
   DelFun = fun(N) ->
     case rpc:call(N, mediator, delete, [Key]) of
@@ -91,4 +65,4 @@ robustify(Node, Fun) ->
   end,
   erlang:monitor_node(Node, false),
   R.
->>>>>>> cliff/master:elibs/dynomite_rpc.erl
+
