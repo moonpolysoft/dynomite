@@ -34,6 +34,12 @@
 %% @end
 %%--------------------------------------------------------------------
 start(_Type, []) ->
+  case application:get_env(pidfile) of
+      {ok, Location} ->
+          Pid = os:getpid(),
+          ok = file:write_file(Location, list_to_binary(Pid));
+      undefined -> ok
+  end,
   case application:get_env(config) of
     {ok, ConfigFile} ->
       case filelib:is_file(ConfigFile) of
