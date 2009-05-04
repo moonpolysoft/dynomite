@@ -40,7 +40,7 @@ play(Server) ->
 %% Internal functions
 
 loop(State = #state{name=Name,partition=Partition,paused=Paused}) ->
-  Timeout = round((random:uniform() * 2 + 3) * 60000),
+  Timeout = round((random:uniform() * 0.5 + 1) * 3600000),
   Paused1 = receive
     pause -> true;
     play -> false
