@@ -2,7 +2,7 @@
 %%% File:      partitions.erl
 %%% @author    Cliff Moon <cliff@powerset.com> [http://www.powerset.com/]
 %%% @copyright 2008 Cliff Moon
-%%% @doc
+%%% @doc  [{Node, Partition} | _]
 %%%
 %%% @end
 %%%
@@ -46,6 +46,16 @@ diff(From, To) when length(From) =/= length(To) ->
 
 diff(From, To) ->
   diff(From , To, []).
+  
+sizes(Nodes, Partitions) ->
+  lists:reverse(lists:keysort(2,
+    lists:map(fun(Node) ->
+      Count = lists:foldl(fun
+          ({Matched,_}, Acc) when Matched == Node -> Acc+1;
+          (_, Acc) -> Acc
+        end, 0, Partitions),
+      {Node, Count}
+    end, Nodes))).
 %%====================================================================
 %% Internal functions
 %%====================================================================
@@ -100,16 +110,6 @@ map_partitions([{_Old,Part}|Parts], [Hash|Hashes], [Node|Nodes], Results) ->
     % can this happen?  hope not.
     true -> map_partitions([{_Old,Part}|Parts], Hashes, Nodes, Results)
   end.
-
-sizes(Nodes, Partitions) ->
-  lists:reverse(lists:keysort(2,
-    lists:map(fun(Node) ->
-      Count = lists:foldl(fun
-          ({Matched,_}, Acc) when Matched == Node -> Acc+1;
-          (_, Acc) -> Acc
-        end, 0, Partitions),
-      {Node, Count}
-    end, Nodes))).
 
 within(N, NodeA, NodeB, Nodes) ->
   within(N, NodeA, NodeB, Nodes, nil).

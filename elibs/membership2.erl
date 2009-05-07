@@ -13,14 +13,18 @@
 
 -behaviour(gen_server).
 
+-define(VERSION,2).
+
 %% API
--export([start_link/2]).
+-export([start_link/2, register/2, servers_for_key/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {}).
+include("../include/config.hrl").
+
+-record(state, {header=?VERSION, node, nodes, partitions, version, servers}).
 
 %%====================================================================
 %% API
@@ -48,10 +52,14 @@ start_link(Node, Nodes) ->
 init([Node, Nodes]) ->
   Config = configuration:get_config(),
   PersistentNodes = load(Node),
-  AllNodes = lists:usort(Nodes ++ PersistentNodes),
+  PartialNodes = lists:usort(Nodes ++ PersistentNodes),
   Partners = replication:partners(Node, Nodes, Config),
-  join_to(Partners),
-  {ok, #state{}}.
+  {Version, WorldNodes} = join_to(Partners),
+  PMap = partitions:create_partitions(Config#config.q, Node, WorldNodes),
+  Servers = ets:new(member_servers, [public, set, duplicate_bag]),
+  State = #state{node=Node, nodes=Nodes, partitions=PMap, version=Version, servers=Servers},
+  save(State),
+  {ok, State}.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -64,9 +72,18 @@ init([Node, Nodes]) ->
 %% @doc Handling call messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_call(_Request, _From, State) ->
-  Reply = ok,
-  {reply, Reply, State}.
+handle_call({join, OtherNode}, _From, State = #state{node=Node, nodes=Nodes}) ->
+  Config = configuration:get_config(),
+  WorldNodes = lists:usort(Nodes ++ [OtherNode]),
+  PMap = partition:create_partitions(Config#config.q, Node, WorldNodes),
+  {reply, Reply, State#state{nodes=WorldNodes, partitions=PMap}};
+
+handle_call({servers_for_key, Key}, _From, State = #state{servers=Servers}) ->
+  Config = configuration:get_config(),
+  Hash = lib_misc:hash(Key),
+  Partition = hash_to_partition(Hash, Config#config.q),
+  {_, Servers} = lists:unzip(ets:lookup(Servers, Hash)),
+  {reply, Servers, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -75,7 +92,10 @@ handle_call(_Request, _From, State) ->
 %% @doc Handling cast messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_cast(_Msg, State) ->
+handle_cast({register, Partition, Pid}, State = #state{servers=Servers}) ->
+  Ref = erlang:monitor(process, Pid),
+  ets:insert(Servers, {Partition, Pid}),
+  ets:insert(Servers, {Ref, Partition, Pid}),
   {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -85,7 +105,11 @@ handle_cast(_Msg, State) ->
 %% @doc Handling all non call/cast messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_info(_Info, State) ->
+handle_info({'DOWN', Ref, _, Pid, _}, State = #state{servers=Servers}) ->
+  erlang:demonitor(Ref),
+  [{Ref, Partition, Pid}] = ets:lookup(Servers, Ref),
+  ets:delete(Servers, Ref),
+  ets:delete_object(Servers, {Partition, Pid}),
   {noreply, State}.
 
 %%--------------------------------------------------------------------
@@ -110,3 +134,37 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
+
+%% return list of known nodes from membership file
+load(Node) ->
+  ok.
+
+%% save the list of known nodes to a file
+save(State) ->
+  ok.
+
+%% return {Version, Nodes} merged version from our partners
+join_to(Partners) ->
+  ok.
+  
+hash_to_partition(Hash, Q) ->
+  Size = partitions:partition_range(Q),
+  Factor = (Hash div Size),
+  Rem = (Hash rem Size),
+  if
+    Rem > 0 -> Factor * Size + 1;
+    true -> ((Factor-1) * Size) + 1
+  end.
+  
+int_partitions_for_node(Node, State, master) ->
+  Partitions = State#state.partitions,
+  {Matching,_} = lists:partition(fun({N,_}) -> N == Node end, Partitions),
+  lists:map(fun({_,P}) -> P end, Matching);
+
+int_partitions_for_node(Node, State, all) ->
+  %%_Partitions = State#membership.partitions,
+  Config = configuration:get_config(),
+  Nodes = replication:partners(Node, State#state.nodes, Config),
+  lists:foldl(fun(E, Acc) ->
+      lists:merge(Acc, int_partitions_for_node(E, State, master))
+    end, [], Nodes).
