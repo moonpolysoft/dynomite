@@ -12,7 +12,8 @@
 -author('cliff@powerset.com').
 
 %% API
--export([partition_range/1, create_partitions/3, map_partitions/2, diff/2, sizes/2]).
+-export([partition_range/1, create_partitions/3, map_partitions/2, diff/2,
+         sizes/2]).
 
 -define(power_2(N), (2 bsl (N-1))).
 
@@ -66,7 +67,7 @@ hash_map([], Acc) -> lists:keysort(1, Acc);
 hash_map([Item|List], Acc) ->
   hash_map(List, hash_map(500, Item, [{murmur:hash(Item),Item}|Acc])).
 
-hash_map(0, Item, Acc) ->
+hash_map(0, _Item, Acc) ->
   Acc;
 
 hash_map(N, Item, [{Seed,Item}|Acc]) ->
@@ -75,7 +76,7 @@ hash_map(N, Item, [{Seed,Item}|Acc]) ->
 do_map([{Hash,Node}|ConsHashMap], Parts) ->
   do_map({Hash,Node}, [{Hash,Node}|ConsHashMap], Parts, []).
 
-do_map({Hash,Node}, [], Parts, Mapped) ->
+do_map({_Hash,Node}, [], Parts, Mapped) ->
   lists:keysort(2, lists:map(fun(Part) -> {Node,Part} end, Parts) ++ Mapped);
 
 do_map(_, _, [], Mapped) ->
@@ -84,7 +85,7 @@ do_map(_, _, [], Mapped) ->
 do_map(First, ConsHashMap, [Part|Parts], Mapped) ->
   % ?debugFmt("do_map ~p, ConsHashMap, [~p|~p], ~p", [First, Part, Parts, Mapped]),
   case ConsHashMap of
-    [{Hash,Node}|Rest] when Part =< Hash ->
+    [{Hash,Node}|_Rest] when Part =< Hash ->
       do_map(First, ConsHashMap, Parts, [{Node,Part}|Mapped]);
     [_|Rest] ->
       do_map(First, Rest, [Part|Parts], Mapped)

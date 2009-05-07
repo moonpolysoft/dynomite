@@ -1,8 +1,9 @@
 %%%-------------------------------------------------------------------
-%%% File:      untitled.erl
+%%% File:      membership.erl
 %%% @author    Cliff Moon <cliff@powerset.com> []
 %%% @copyright 2008 Cliff Moon
-%%% @doc  Membership process keeps track of dynomite node membership.  Maintains a version history.
+%%% @doc  Membership process keeps track of dynomite node membership.
+%%%       Maintains a version history.
 %%%
 %%% @end
 %%%
@@ -14,7 +15,11 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/3, start_link/2, join_node/2, remove_node/1, nodes_for_partition/1, replica_nodes/1, servers_for_key/1, nodes_for_key/1, partitions/0, nodes/0, state/0, partitions_for_node/2, fire_gossip/1, partition_for_key/1, stop/0, stop/1, range/1, status/0, stop_gossip/0, remap/1]).
+-export([start_link/3, start_link/2, join_node/2, remove_node/1,
+         nodes_for_partition/1, replica_nodes/1, servers_for_key/1,
+         nodes_for_key/1, partitions/0, nodes/0, state/0, partitions_for_node/2,
+         fire_gossip/1, partition_for_key/1, stop/0, stop/1, range/1, status/0,
+         stop_gossip/0, remap/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -22,7 +27,8 @@
 
 -define(VERSION, 1).
 
--record(membership, {header=?VERSION, partitions, version, nodes, node, gossip, ptable}).
+-record(membership, {header=?VERSION, partitions, version, nodes, node, gossip,
+                     ptable}).
 
 -include("../include/config.hrl").
 -include("../include/common.hrl").
