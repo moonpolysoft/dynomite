@@ -1,6 +1,6 @@
 1) node event
 2) tell 2 neighbors
-3) get list of running nodes from neighbor(s)
+3) get list of known nodes from neighbor(s) - assemble a world view
 4) recalculate partition map
 5) publish new partition map
 6) receive registration from local storage
