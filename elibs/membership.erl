@@ -505,6 +505,8 @@ int_partition_for_key(Key, _State, Config) ->
   Q = Config#config.q,
   find_partition(KeyHash, Q).
 
+find_partition(0, _) ->
+  1;
 find_partition(Hash, Q) ->
   Size = partitions:partition_range(Q),
   Factor = (Hash div Size),

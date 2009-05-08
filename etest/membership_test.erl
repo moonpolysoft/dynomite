@@ -16,7 +16,8 @@ all_test_() ->
     {"test_partitions_for_node_all", ?_test(test_partitions_for_node_all())},
     {"test_initial_partition_setup", ?_test(test_initial_partition_setup())},
     {"test_recover_from_old_membership_read", ?_test(test_recover_from_old_membership_read())},
-    {"test_membership_server_throughput", test_membership_server_throughput_()}
+    {"test_membership_server_throughput", test_membership_server_throughput_()},
+    {"test_find_partition", ?_test(test_find_partition())}
   ]}.
 
 test_write_membership_to_disk() ->
@@ -28,6 +29,13 @@ test_write_membership_to_disk() ->
   ?assertEqual(64, length(State#membership.partitions)),
   membership:stop(),
   verify().
+
+test_find_partition() ->
+  ?assertEqual(1, find_partition(0, 6)),
+  ?assertEqual(1, find_partition(1, 6)),
+  ?assertEqual((2 bsl 31) - 67108863, find_partition(2 bsl 31, 6)),
+  ?assertEqual((2 bsl 30) - 67108863, find_partition((2 bsl 30)-1, 6)).
+  
 
 test_load_membership_from_disk() ->
   State = create_initial_state(node(), [node()], configuration:get_config(), ets:new(partitions, [set, public])),
