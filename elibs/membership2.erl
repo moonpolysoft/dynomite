@@ -22,9 +22,14 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
-include("../include/config.hrl").
+-include("../include/config.hrl").
+-include("../include/common.hrl").
 
 -record(state, {header=?VERSION, node, nodes, partitions, version, servers}).
+
+-ifdef(TEST).
+-include("etest/membership2_test.erl").
+-endif.
 
 %%====================================================================
 %% API
@@ -36,6 +41,12 @@ include("../include/config.hrl").
 %%--------------------------------------------------------------------
 start_link(Node, Nodes) ->
   gen_server:start_link({local, membership}, ?MODULE, [Node, Nodes], []).
+  
+register(Partition, Pid) ->
+  ok.
+  
+servers_for_key(Key) ->
+  ok.
 
 %%====================================================================
 %% gen_server callbacks
@@ -76,7 +87,7 @@ handle_call({join, OtherNode}, _From, State = #state{node=Node, nodes=Nodes}) ->
   Config = configuration:get_config(),
   WorldNodes = lists:usort(Nodes ++ [OtherNode]),
   PMap = partition:create_partitions(Config#config.q, Node, WorldNodes),
-  {reply, Reply, State#state{nodes=WorldNodes, partitions=PMap}};
+  {reply, WorldNodes, State#state{nodes=WorldNodes, partitions=PMap}};
 
 handle_call({servers_for_key, Key}, _From, State = #state{servers=Servers}) ->
   Config = configuration:get_config(),
@@ -92,6 +103,15 @@ handle_call({servers_for_key, Key}, _From, State = #state{servers=Servers}) ->
 %% @doc Handling cast messages
 %% @end 
 %%--------------------------------------------------------------------
+handle_cast({gossip, Version, Nodes, ServerList}, State = #state{node=Me}) ->
+  {MergeType, Merged} = merge_state(Version, Nodes, ServerList, State),
+  case MergeType of
+    equal -> {noreply, Merged};
+    merged ->
+      fire_gossip(Me, Merged, configuration:get_config()),
+      {noreply, Merged}
+  end;
+
 handle_cast({register, Partition, Pid}, State = #state{servers=Servers}) ->
   Ref = erlang:monitor(process, Pid),
   ets:insert(Servers, {Partition, Pid}),
@@ -143,9 +163,29 @@ load(Node) ->
 save(State) ->
   ok.
 
-%% return {Version, Nodes} merged version from our partners
 join_to(Partners) ->
   ok.
+
+merge_state(RemoteVersion, RemoteNodes, RemoteServerList, State = #state{nodes = Nodes, version = LocalVersion, servers = Servers}) ->
+  ok.
+
+fire_gossip(Me, State = #state{nodes = Nodes}, Config) ->
+  Partners = replication:partners(Me, Nodes, Config),
+  lists:foreach(fun(Node) -> gossip_with(Me, Node, State) end, Partners).
+
+gossip_with(Me, OtherNode, State = #state{version = Version, nodes = Nodes, servers = Servers}) ->
+  ServerPacket = servers_to_list(Servers),
+  gen_server:call({membership, OtherNode}, {gossip, Version, Nodes, ServerPacket}).
+  
+%% this gets everything we know of, not just locals
+servers_to_list(Servers) ->
+  L = ets:foldl(fun
+    ({Partition, Pid}, List) ->
+      [{Partition, Pid}|List];
+    ({Ref, Partition, Pid}, List) ->
+      List
+    end, [], Servers),
+  lists:keysort(1, L).
   
 hash_to_partition(Hash, Q) ->
   Size = partitions:partition_range(Q),
