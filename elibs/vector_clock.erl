@@ -29,9 +29,11 @@ resolve({ClockA, ValuesA}, {ClockB, ValuesB}) ->
     concurrent -> {merge(ClockA,ClockB), ValuesA ++ ValuesB}
   end;
 resolve(not_found, {Clock, Values}) ->
-    {Clock, Values};
+  {Clock, Values};
 resolve({Clock, Values}, not_found) ->
-    {Clock, Values}.
+  {Clock, Values};
+resolve(not_found, not_found) ->
+  not_found.
 
 merge(ClockA, ClockB) ->
   merge([], ClockA, ClockB).
