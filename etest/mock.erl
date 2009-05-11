@@ -12,7 +12,7 @@
 -author('cliff@powerset.com').
 
 %% API
--export([mock/1, proxy_call/2, proxy_call/3, expects/4, expects/5, verify_and_stop/1, verify/1, stub_proxy_call/3, stub_function/4, stop/1]).
+-export([mock/1, proxy_call/2, proxy_call/3, expects/4, expects/5, verify_and_stop/1, verify/1, stub_proxy_call/3, stop/1]).
 
 -include("common.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -89,24 +89,7 @@ verify(Module) ->
 stop(Module) ->
   gen_server:cast(mod_to_name(Module), stop),
   timer:sleep(10).
-  
-stub_function(Module, Name, Arity, Ret) when is_function(Ret) ->
-  {_, Bin, _} = code:get_object_code(Module),
-  {ok, {Module,[{abstract_code,{raw_abstract_v1,Forms}}]}} = beam_lib:chunks(Bin, [abstract_code]),
-  {Prefix, Functions} = lists:splitwith(fun(Form) -> element(1, Form) =/= function end, Forms),
-  Function = {function,1,Name,Arity,[{clause,1,generate_variables(Arity), [], generate_expression(mock, stub_proxy_call, Module, Name, Arity)}]},
-  RegName = list_to_atom(lists:concat([Module, "_", Name, "_stub"])),
-  Pid = spawn_link(fun() ->
-      stub_function_loop(Ret)
-    end),
-  register(RegName, Pid),
-  Forms1 = Prefix ++ replace_function(Function, Functions),
-  code:purge(Module),
-  code:delete(Module),
-  case compile:forms(Forms1, [binary]) of
-    {ok, Module, Binary} -> code:load_binary(Module, atom_to_list(Module) ++ ".erl", Binary);
-    Other -> Other
-  end.
+
   
 %%====================================================================
 %% gen_server callbacks

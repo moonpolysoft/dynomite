@@ -1,5 +1,5 @@
 -include_lib("eunit/include/eunit.hrl").
-
+-include("etest/test.hrl").
 
 all_test_() ->
   {foreach,
@@ -158,11 +158,6 @@ test_teardown(_) ->
   mock:stop(sync_manager),
   mock:stop(storage_manager),
   configuration:stop().
-
-priv_dir() ->
-  Dir = filename:join([t:config(priv_dir), "data", "membership"]),
-  filelib:ensure_dir(filename:join(Dir, "membership")),
-  Dir.
   
 data_file() ->
   filename:join([priv_dir(), atom_to_list(node()) ++ ".bin"]).

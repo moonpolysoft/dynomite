@@ -47,6 +47,9 @@ register(Partition, Pid) ->
   
 servers_for_key(Key) ->
   ok.
+  
+stop(Server) ->
+  gen_server:cast(Server, stop).
 
 %%====================================================================
 %% gen_server callbacks
@@ -65,10 +68,18 @@ init([Node, Nodes]) ->
   PersistentNodes = load(Node),
   PartialNodes = lists:usort(Nodes ++ PersistentNodes),
   Partners = replication:partners(Node, Nodes, Config),
-  {Version, WorldNodes} = join_to(Partners),
+  Servers = ets:new(member_servers, [public, bag]),
+  ?debugFmt("so far ~p", [{PartialNodes, Partners, Servers}]),
+  {Version, RemoteNodes} = join_to(Node, Servers, Partners),
+  WorldNodes = lists:usort(PartialNodes ++ RemoteNodes),
+  ?debugFmt("~p", [{Version, WorldNodes}]),
   PMap = partitions:create_partitions(Config#config.q, Node, WorldNodes),
-  Servers = ets:new(member_servers, [public, set, duplicate_bag]),
-  State = #state{node=Node, nodes=Nodes, partitions=PMap, version=Version, servers=Servers},
+  State = #state{
+    node=Node,
+    nodes=WorldNodes,
+    partitions=PMap,
+    version=Version,
+    servers=Servers},
   save(State),
   {ok, State}.
 
@@ -83,18 +94,24 @@ init([Node, Nodes]) ->
 %% @doc Handling call messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_call({join, OtherNode}, _From, State = #state{node=Node, nodes=Nodes}) ->
+handle_call({join, OtherNode}, _From, State = #state{node=Node, nodes=Nodes, servers=Servers}) ->
   Config = configuration:get_config(),
   WorldNodes = lists:usort(Nodes ++ [OtherNode]),
   PMap = partition:create_partitions(Config#config.q, Node, WorldNodes),
-  {reply, WorldNodes, State#state{nodes=WorldNodes, partitions=PMap}};
+  ServerList = servers_to_list(Servers),
+  NewState = State#state{nodes=WorldNodes, partitions=PMap},
+  fire_gossip(Node, NewState, Config),
+  {reply, {WorldNodes, ServerList}, NewState};
 
 handle_call({servers_for_key, Key}, _From, State = #state{servers=Servers}) ->
   Config = configuration:get_config(),
   Hash = lib_misc:hash(Key),
   Partition = hash_to_partition(Hash, Config#config.q),
   {_, Servers} = lists:unzip(ets:lookup(Servers, Hash)),
-  {reply, Servers, State}.
+  {reply, Servers, State};
+
+handle_call(state, _From, State) ->
+  {reply, State, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -116,7 +133,10 @@ handle_cast({register, Partition, Pid}, State = #state{servers=Servers}) ->
   Ref = erlang:monitor(process, Pid),
   ets:insert(Servers, {Partition, Pid}),
   ets:insert(Servers, {Ref, Partition, Pid}),
-  {noreply, State}.
+  {noreply, State};
+  
+handle_cast(stop, State) ->
+  {stop, shutdown, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_info(Info, State) -> {noreply, State} |
@@ -157,17 +177,54 @@ code_change(_OldVsn, State, _Extra) ->
 
 %% return list of known nodes from membership file
 load(Node) ->
-  ok.
+  Config = configuration:get_config(),
+  case file:consult(filename:join([Config#config.directory, lists:concat([Node, ".world"])])) of
+    {error, Reason} -> 
+      ?infoFmt("Could not load state: ~p~n", [Reason]),
+      [];
+    {ok, [Terms]} ->
+      Terms
+  end.
 
 %% save the list of known nodes to a file
 save(State) ->
-  ok.
+  Config = configuration:get_config(),
+  {ok, File} = file:open(
+    filename:join([Config#config.directory, lists:concat([State#state.node, ".world"])]),
+    [binary, write]),
+  io:format(File, "~w.~n", [State#state.nodes]),
+  file:close(File).
 
-join_to(Partners) ->
-  ok.
+%% joining is bi-directional, as opposed to gossip which is unidirectional
+%% we want to collect the list of known nodes to compute the partition map
+%% which isn't necessarily the same as the list of running nodes
+join_to(Node, Servers, Partners) ->
+  join_to(Node, Servers, Partners, {vector_clock:create(pid_to_list(self())), []}).
+  
+join_to(_, _, [], {Version, World}) ->
+  {Version, World};
+join_to(Node, Servers, [Remote|Partners], {Version, World}) ->
+  case call_join(Remote, Node) of
+    {'EXIT', _} -> World;
+    {RemoteVersion, NewNodes, ServerList} ->
+      server_list_into_table(ServerList, Servers),
+      join_to(Node, Servers, Partners, {
+        vector_clock:merge(Version, RemoteVersion), 
+        lists:usort(World ++ NewNodes)})
+  end.
+
+call_join(Remote, Node) ->
+  catch gen_server:call({membership, Remote}, {join, Node}).
 
 merge_state(RemoteVersion, RemoteNodes, RemoteServerList, State = #state{nodes = Nodes, version = LocalVersion, servers = Servers}) ->
-  ok.
+  case vector_clock:compare(RemoteVersion, LocalVersion) of
+    equal -> {equal, State};
+    _ ->
+      MergedNodes = lists:usort(RemoteNodes ++ Nodes),
+      server_list_into_table(RemoteServerList, Servers),
+      MergedClock = vector_clock:merge(RemoteVersion, LocalVersion),
+      {merged, State#state{nodes=MergedNodes,version=MergedClock}}
+  end.
 
 fire_gossip(Me, State = #state{nodes = Nodes}, Config) ->
   Partners = replication:partners(Me, Nodes, Config),
@@ -186,7 +243,14 @@ servers_to_list(Servers) ->
       List
     end, [], Servers),
   lists:keysort(1, L).
+
+server_list_into_table(ServerList, Servers) ->
+  lists:foreach(fun({Partition, Pid}) ->
+      ets:insert(Servers, {Partition, Pid})
+    end, ServerList).
   
+hash_to_partition(0, _) ->
+  1;
 hash_to_partition(Hash, Q) ->
   Size = partitions:partition_range(Q),
   Factor = (Hash div Size),
