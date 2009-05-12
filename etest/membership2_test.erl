@@ -43,9 +43,47 @@ multi_startup_sequence_test() ->
   ?assertMatch([{1,Pid1},{2,Pid2}], servers_to_list(Servers)),
   ?assertEqual(greater, vector_clock:compare(State#state.version, VersionOne)),
   ?assertEqual(greater, vector_clock:compare(State#state.version, VersionTwo)),
-  mock:verify(replication),
+  mock:verify_and_stop(replication),
   membership:stop(M),
   configuration:stop(),
   ?assertMatch({ok, [?NODES]}, file:consult(priv_file("a.world"))),
   file:delete(priv_file("a.world")).
 
+startup_and_first_servers_for_key_test() ->
+  configuration:start_link(#config{n=1,r=1,w=1,q=6,directory=priv_dir()}),
+  {ok, _} = mock:mock(replication),
+  mock:expects(replication, partners, fun({_, [a], _}) -> true end, []),
+  {ok, M} = membership2:start_link(a, [a]),
+  State = gen_server:call(M, state),
+  ?assertEqual([], membership2:servers_for_key("blah")),
+  mock:verify_and_stop(replication),
+  membership:stop(M),
+  configuration:stop(),
+  ?assertMatch({ok, [[a]]}, file:consult(priv_file("a.world"))),
+  file:delete(priv_file("a.world")).
+
+startup_and_register_test() ->
+  configuration:start_link(#config{n=1,r=1,w=1,q=0,directory=priv_dir()}),
+  {ok, _} = mock:mock(replication),
+  mock:expects(replication, partners, fun({_, [?NODEA], _}) -> true end, [], 3),
+  {ok, M} = membership2:start_link(?NODEA, [?NODEA]),
+  SServer1 = make_server(),
+  SServer2 = make_server(),
+  membership2:register(1, SServer1),
+  membership2:register(1, SServer2),
+  ?assertEqual([SServer1, SServer2], membership:servers_for_key("blah")),
+  mock:verify_and_stop(replication),
+  membership:stop(M),
+  configuration:stop(),
+  SServer1 ! stop,
+  SServer2 ! stop,
+  file:delete(priv_file("a.world")).
+
+
+
+make_server() ->
+  spawn(fun() -> 
+      receive
+        stop -> ok
+      end
+    end).

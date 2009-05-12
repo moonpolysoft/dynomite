@@ -14,8 +14,8 @@
 %% API
 -export([mock/1, proxy_call/2, proxy_call/3, expects/4, expects/5, verify_and_stop/1, verify/1, stub_proxy_call/3, stop/1]).
 
--include("common.hrl").
 -include_lib("eunit/include/eunit.hrl").
+-include("common.hrl").
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,

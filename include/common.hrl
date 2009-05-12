@@ -4,6 +4,10 @@
 -define(infoMsg(Msg), error_logger:info_msg(Msg)).
 
 -ifndef(TEST).
--define(?debugMsg(Msg), ok).
--define(?debugFmt(Msg, Args), ok).
+-ifndef(debugMsg).
+-define(debugMsg(Msg), ok).
+-endif.
+-ifndef(debugFmt).
+-define(debugFmt(Msg, Args), ok).
+-endif.
 -endif.

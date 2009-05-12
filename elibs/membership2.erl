@@ -43,10 +43,10 @@ start_link(Node, Nodes) ->
   gen_server:start_link({local, membership}, ?MODULE, [Node, Nodes], []).
   
 register(Partition, Pid) ->
-  ok.
+  gen_server:cast(membership, {register, Partition, Pid}).
   
 servers_for_key(Key) ->
-  ok.
+  gen_server:call(membership, {servers_for_key, Key}).
   
 stop(Server) ->
   gen_server:cast(Server, stop).
@@ -107,8 +107,9 @@ handle_call({servers_for_key, Key}, _From, State = #state{servers=Servers}) ->
   Config = configuration:get_config(),
   Hash = lib_misc:hash(Key),
   Partition = hash_to_partition(Hash, Config#config.q),
-  {_, Servers} = lists:unzip(ets:lookup(Servers, Hash)),
-  {reply, Servers, State};
+  ?debugFmt("getting for partition ~p", [Partition]),
+  {_, Pids} = lists:unzip(ets:lookup(Servers, Partition)),
+  {reply, Pids, State};
 
 handle_call(state, _From, State) ->
   {reply, State, State}.
@@ -129,10 +130,12 @@ handle_cast({gossip, Version, Nodes, ServerList}, State = #state{node=Me}) ->
       {noreply, Merged}
   end;
 
-handle_cast({register, Partition, Pid}, State = #state{servers=Servers}) ->
+handle_cast({register, Partition, Pid}, State = #state{servers=Servers,node=Me}) ->
+  ?debugFmt("registering ~p", [{Partition, Pid}]),
   Ref = erlang:monitor(process, Pid),
   ets:insert(Servers, {Partition, Pid}),
   ets:insert(Servers, {Ref, Partition, Pid}),
+  fire_gossip(Me, State, configuration:get_config()),
   {noreply, State};
   
 handle_cast(stop, State) ->
@@ -145,11 +148,13 @@ handle_cast(stop, State) ->
 %% @doc Handling all non call/cast messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_info({'DOWN', Ref, _, Pid, _}, State = #state{servers=Servers}) ->
+handle_info({'DOWN', Ref, _, Pid, _}, State = #state{node=Me,servers=Servers}) ->
   erlang:demonitor(Ref),
   [{Ref, Partition, Pid}] = ets:lookup(Servers, Ref),
   ets:delete(Servers, Ref),
   ets:delete_object(Servers, {Partition, Pid}),
+  ?debugFmt("Pid is down ~p", [Pid]),
+  fire_gossip(Me, State, configuration:get_config()),
   {noreply, State}.
 
 %%--------------------------------------------------------------------
