@@ -178,7 +178,7 @@ code_change(_OldVsn, State, _Extra) ->
 %% return list of known nodes from membership file
 load(Node) ->
   Config = configuration:get_config(),
-  case file:consult(filename:join([Config#config.directory, lists:concat([Node, ".world"])])) of
+  case file:consult(filename:join([Config#config.directory, lists:concat([node:name(Node), ".world"])])) of
     {error, Reason} -> 
       ?infoFmt("Could not load state: ~p~n", [Reason]),
       [];
@@ -189,9 +189,9 @@ load(Node) ->
 %% save the list of known nodes to a file
 save(State) ->
   Config = configuration:get_config(),
-  {ok, File} = file:open(
-    filename:join([Config#config.directory, lists:concat([State#state.node, ".world"])]),
-    [binary, write]),
+  Filename = filename:join([Config#config.directory, lists:concat([node:name(State#state.node), ".world"])]),
+  ?debugFmt("opening file ~p", [Filename]),
+  {ok, File} = file:open(Filename, [binary, write]),
   io:format(File, "~w.~n", [State#state.nodes]),
   file:close(File).
 
@@ -216,7 +216,7 @@ join_to(Node, Servers, [Remote|Partners], {Version, World}) ->
   end.
 
 call_join(Remote, Node) ->
-  catch gen_server:call({membership, Remote}, {join, Node}).
+  catch gen_server:call({membership, node:name(Remote)}, {join, Node}).
 
 merge_state(RemoteVersion, RemoteNodes, RemoteServerList, State = #state{nodes = Nodes, version = LocalVersion, servers = Servers}) ->
   case vector_clock:compare(RemoteVersion, LocalVersion) of
