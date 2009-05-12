@@ -112,9 +112,7 @@ handle_info(_Info, State) ->
 %% @end 
 %%--------------------------------------------------------------------
 terminate(_Reason, #state{old_code={Module,Bin,Filename}}) ->
-  code:purge(Module),
-  code:delete(Module),
-  code:load_binary(Module, Filename, Bin).
+  ok.
 
 %%--------------------------------------------------------------------
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
@@ -135,8 +133,6 @@ stub_function(Module, Function, Arity) ->
   {ok, {Module,[{abstract_code,{raw_abstract_v1,Forms}}]}} = beam_lib:chunks(Bin, [abstract_code]),
   ?debugMsg("replacing function"),
   StubbedForms = replace_function(Module, Function, Arity, Forms),
-  code:purge(Module),
-  code:delete(Module),
   case compile:forms(StubbedForms, [binary]) of
     {ok, Module, Binary} -> code:load_binary(Module, atom_to_list(Module) ++ ".erl", Binary);
     Other -> Other
