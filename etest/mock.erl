@@ -282,20 +282,18 @@ generate_function(Module, Name, Arity) ->
   {function, 1, Name, Arity, [{clause, 1, generate_variables(Arity), [], generate_expression(mock, proxy_call, Module, Name, Arity)}]}.
   
 generate_variables(0) -> [];
-  
 generate_variables(Arity) ->
   lists:map(fun(N) ->
       {var, 1, list_to_atom(lists:concat(['Arg', N]))}
     end, lists:seq(1, Arity)).
-    
+
 generate_expression(M, F, Module, Name, 0) ->
   [{call,1,{remote,1,{atom,1,M},{atom,1,F}}, [{atom,1,Module}, {atom,1,Name}]}];
-    
 generate_expression(M, F, Module, Name, Arity) ->
   [{call,1,{remote,1,{atom,1,M},{atom,1,F}}, [{atom,1,Module}, {atom,1,Name}, {tuple,1,lists:map(fun(N) ->
       {var, 1, list_to_atom(lists:concat(['Arg', N]))}
     end, lists:seq(1, Arity))}]}].
-    
+
 mod_to_name(Module) ->
   list_to_atom(lists:concat([mock_, Module])).
   

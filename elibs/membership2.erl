@@ -78,7 +78,7 @@ init([Node, Nodes]) ->
     node=Node,
     nodes=WorldNodes,
     partitions=PMap,
-    version=Version,
+    version=vector_clock:increment(pid_to_list(self()), Version),
     servers=Servers},
   save(State),
   {ok, State}.
@@ -94,14 +94,14 @@ init([Node, Nodes]) ->
 %% @doc Handling call messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_call({join, OtherNode}, _From, State = #state{node=Node, nodes=Nodes, servers=Servers}) ->
+handle_call({join, OtherNode}, _From, State = #state{version=Version, node=Node, nodes=Nodes, servers=Servers}) ->
   Config = configuration:get_config(),
   WorldNodes = lists:usort(Nodes ++ [OtherNode]),
   PMap = partition:create_partitions(Config#config.q, Node, WorldNodes),
   ServerList = servers_to_list(Servers),
   NewState = State#state{nodes=WorldNodes, partitions=PMap},
   fire_gossip(Node, NewState, Config),
-  {reply, {WorldNodes, ServerList}, NewState};
+  {reply, {Version, WorldNodes, ServerList}, NewState};
 
 handle_call({servers_for_key, Key}, _From, State = #state{servers=Servers}) ->
   Config = configuration:get_config(),
@@ -210,7 +210,9 @@ join_to(Node, Servers, [Remote|Partners], {Version, World}) ->
       server_list_into_table(ServerList, Servers),
       join_to(Node, Servers, Partners, {
         vector_clock:merge(Version, RemoteVersion), 
-        lists:usort(World ++ NewNodes)})
+        lists:usort(World ++ NewNodes)});
+    _Val ->
+      ?infoFmt("got ~p back~n", [_Val])
   end.
 
 call_join(Remote, Node) ->

@@ -14,15 +14,16 @@
 -behaviour(gen_server).
 
 %% API
--export([stub/3]).
+-export([stub/3, stub/4, proxy_call/3]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
+-include_lib("eunit/include/eunit.hrl").
 -include("../include/common.hrl").
 
--record(state, {}).
+-record(state, {old_code, module, stub, times}).
 
 %%====================================================================
 %% API
@@ -32,8 +33,19 @@
 %% @doc Starts the server
 %% @end 
 %%--------------------------------------------------------------------
+stub(Module, Function, Fun) ->
+  stub(Module, Function, Fun, 1).
+
 stub(Module, Function, Fun, Times) when is_function(Fun) ->
-  gen_server:start_link({local, generate_name(Module, Function, Fun)}, ?MODULE, [Module, Function, Fun, Times], []).
+  gen_server:start({local, name(Module, Function)}, ?MODULE, [Module, Function, Fun, Times], []).
+  
+proxy_call(_, Name, Args) ->
+  {Times, Reply} = gen_server:call(Name, {proxy_call, Args}),
+  if
+    Times =< 0 -> gen_server:cast(Name, stop);
+    true -> ok
+  end,
+  Reply.
 
 %%====================================================================
 %% gen_server callbacks
@@ -48,8 +60,13 @@ stub(Module, Function, Fun, Times) when is_function(Fun) ->
 %% @end 
 %%--------------------------------------------------------------------
 init([Module, Function, Fun, Times]) ->
-
-  {ok, #state{}}.
+  case code:get_object_code(Module) of
+    {Module, Bin, Filename} ->
+      ?debugMsg("stubbing"),
+      stub_function(Module, Function, arity(Fun)),
+      {ok, #state{module=Module,old_code={Module,Bin,Filename},times=Times,stub=Fun}};
+    error -> {stop, ?fmt("Could not get object code for module ~p", [Module])}
+  end.
 
 %%--------------------------------------------------------------------
 %% @spec 
@@ -62,9 +79,9 @@ init([Module, Function, Fun, Times]) ->
 %% @doc Handling call messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_call(_Request, _From, State) ->
-  Reply = ok,
-  {reply, Reply, State}.
+handle_call({proxy_call, Args}, _From, State = #state{stub=Fun, times=Times}) ->
+  Reply = apply(Fun, tuple_to_list(Args)),
+  {reply, {Times-1, Reply}, State#state{times=Times-1}}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -73,8 +90,8 @@ handle_call(_Request, _From, State) ->
 %% @doc Handling cast messages
 %% @end 
 %%--------------------------------------------------------------------
-handle_cast(_Msg, State) ->
-  {noreply, State}.
+handle_cast(stop, State) ->
+  {stop, shutdown, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_info(Info, State) -> {noreply, State} |
@@ -94,8 +111,10 @@ handle_info(_Info, State) ->
 %% The return value is ignored.
 %% @end 
 %%--------------------------------------------------------------------
-terminate(_Reason, _State) ->
-  ok.
+terminate(_Reason, #state{old_code={Module,Bin,Filename}}) ->
+  code:purge(Module),
+  code:delete(Module),
+  code:load_binary(Module, Filename, Bin).
 
 %%--------------------------------------------------------------------
 %% @spec code_change(OldVsn, State, Extra) -> {ok, NewState}
@@ -108,39 +127,49 @@ code_change(_OldVsn, State, _Extra) ->
 %%--------------------------------------------------------------------
 %%% Internal functions
 %%--------------------------------------------------------------------
-generate_name(Module, Function, _Fun) ->
-  list_to_atom(lists:concat([Module, Function])).
+name(Module, Function) ->
+  list_to_atom(lists:concat([Module, Function, "stub"])).
   
-stub_function(Module, Function, Arity, Ret) when is_function(Ret) ->
+stub_function(Module, Function, Arity) ->
   {_, Bin, _} = code:get_object_code(Module),
   {ok, {Module,[{abstract_code,{raw_abstract_v1,Forms}}]}} = beam_lib:chunks(Bin, [abstract_code]),
-  StubbedForms = replace_function(Function, Arity, Ret, Forms),
-  
-  
-  
-  {Prefix, Functions} = lists:splitwith(fun(Form) -> element(1, Form) =/= function end, Forms),
-  Function = {function,1,Name,Arity,[{clause,1,generate_variables(Arity), [], generate_expression(mock, stub_proxy_call, Module, Name, Arity)}]},
-  RegName = list_to_atom(lists:concat([Module, "_", Name, "_stub"])),
-  Pid = spawn_link(fun() ->
-      stub_function_loop(Ret)
-    end),
-  register(RegName, Pid),
-  Forms1 = Prefix ++ replace_function(Function, Functions),
+  ?debugMsg("replacing function"),
+  StubbedForms = replace_function(Module, Function, Arity, Forms),
   code:purge(Module),
   code:delete(Module),
-  case compile:forms(Forms1, [binary]) of
+  case compile:forms(StubbedForms, [binary]) of
     {ok, Module, Binary} -> code:load_binary(Module, atom_to_list(Module) ++ ".erl", Binary);
     Other -> Other
   end.
-  
+
 arity(Fun) when is_function(Fun) ->
   Props = erlang:fun_info(Fun),
   proplists:get_value(arity, Props).
 
-replace_function(Module, Function, Arity, Ret, Forms) ->
-  replace_function(Function, Arity, Ret, Forms, []).
+replace_function(Module, Function, Arity, Forms) ->
+  replace_function(Module, Function, Arity, Forms, []).
   
-replace_function(Module, Function, Arity, Ret, [], Acc) ->
+replace_function(Module, Function, Arity, [], Acc) ->
   lists:reverse(Acc);
-replace_function(Module, Function, Arity, Ret, [{function, Line, Function, Arity, _Clauses}|Forms], Acc) ->
-  
+replace_function(Module, Function, Arity, [{function, Line, Function, Arity, _Clauses}|Forms], Acc) ->
+  lists:reverse(Acc) ++ [{function, Line, Function, Arity, [
+    {clause,
+      Line,
+      generate_variables(Arity),
+      [],
+      generate_expression(stub,proxy_call,Module,name(Module,Function),Arity)}]}] ++ Forms;
+replace_function(Module, Function, Arity, [Form|Forms], Acc) ->
+  replace_function(Module, Function, Arity, Forms, [Form|Acc]).
+
+generate_variables(0) -> [];
+generate_variables(Arity) ->
+  lists:map(fun(N) ->
+      {var, 1, list_to_atom(lists:concat(['Arg', N]))}
+    end, lists:seq(1, Arity)).
+    
+generate_expression(M, F, Module, Name, 0) ->
+  [{call,1,{remote,1,{atom,1,M},{atom,1,F}}, [{atom,1,Module}, {atom,1,Name}]}];
+generate_expression(M, F, Module, Name, Arity) ->
+  [{call,1,{remote,1,{atom,1,M},{atom,1,F}}, [{atom,1,Module}, {atom,1,Name}, {tuple,1,lists:map(fun(N) ->
+      {var, 1, list_to_atom(lists:concat(['Arg', N]))}
+    end, lists:seq(1, Arity))}]}].
