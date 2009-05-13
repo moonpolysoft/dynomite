@@ -79,7 +79,23 @@ startup_and_register_test() ->
   SServer2 ! stop,
   file:delete(priv_file("a.world")).
 
-
+handle_local_server_outage_test() ->
+  configuration:start_link(#config{n=1,r=1,w=1,q=0,directory=priv_dir()}),
+  {ok, _} = mock:mock(replication),
+  mock:expects(replication, partners, fun({_, [?NODEA], _}) -> true end, [], 4),
+  {ok, M} = membership2:start_link(?NODEA, [?NODEA]),
+  SServer1 = make_server(),
+  SServer2 = make_server(),
+  membership2:register(1, SServer1),
+  membership2:register(1, SServer2),
+  SServer1 ! stop,
+  timer:sleep(1),
+  ?assertEqual([SServer2], membership:servers_for_key("blah")),
+  mock:verify_and_stop(replication),
+  membership:stop(M),
+  configuration:stop(),
+  SServer2 ! stop,
+  file:delete(priv_file("a.world")).
 
 make_server() ->
   spawn(fun() -> 

@@ -25,7 +25,7 @@
 -include("../include/config.hrl").
 -include("../include/common.hrl").
 
--record(state, {header=?VERSION, node, nodes, partitions, version, servers}).
+-record(state, {header=?VERSION, node, nodes, partitions, version, servers, listeners=[]}).
 
 -ifdef(TEST).
 -include("etest/membership2_test.erl").
@@ -130,6 +130,9 @@ handle_cast({gossip, Version, Nodes, ServerList}, State = #state{node=Me}) ->
       {noreply, Merged}
   end;
 
+handle_cast({listen, Pid}, State = #state{listeners=Listeners}) ->
+  {noreply, State = #state{listeners = lists:usort([Pid|Listeners])}};
+
 handle_cast({register, Partition, Pid}, State = #state{servers=Servers,node=Me}) ->
   ?debugFmt("registering ~p", [{Partition, Pid}]),
   Ref = erlang:monitor(process, Pid),
@@ -151,9 +154,10 @@ handle_cast(stop, State) ->
 handle_info({'DOWN', Ref, _, Pid, _}, State = #state{node=Me,servers=Servers}) ->
   erlang:demonitor(Ref),
   [{Ref, Partition, Pid}] = ets:lookup(Servers, Ref),
-  ets:delete(Servers, Ref),
+  ets:delete_object(Servers, {Ref, Partition, Pid}),
   ets:delete_object(Servers, {Partition, Pid}),
-  ?debugFmt("Pid is down ~p", [Pid]),
+  ?debugFmt("Pid is down ~p", [{Ref, Partition, Pid}]),
+  ?debugFmt("~p", [ets:lookup(Servers, Partition)]),
   fire_gossip(Me, State, configuration:get_config()),
   {noreply, State}.
 
