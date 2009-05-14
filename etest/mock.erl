@@ -148,7 +148,7 @@ handle_call(verify, _From, State = #state{expectations=Expects,module=Mod}) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_cast(stop, State) ->
-  {stop, shutdown, State}.
+  {stop, normal, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_info(Info, State) -> {noreply, State} |

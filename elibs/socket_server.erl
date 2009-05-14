@@ -177,7 +177,7 @@ connection_loop(Socket, Server, Ref) ->
       connection_loop(Socket, Server, Ref);
     {error, Reason} ->
       gen_tcp:close(Socket),
-      exit(shutdown)
+      exit(normal)
   end. 
   
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

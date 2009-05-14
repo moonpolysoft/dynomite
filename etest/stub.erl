@@ -91,7 +91,7 @@ handle_call({proxy_call, Args}, _From, State = #state{stub=Fun, times=Times}) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_cast(stop, State) ->
-  {stop, shutdown, State}.
+  {stop, normal, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_info(Info, State) -> {noreply, State} |

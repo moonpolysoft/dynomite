@@ -146,7 +146,7 @@ handle_cast({register, Partition, Pid}, State = #state{servers=Servers,node=Me})
   {noreply, State};
   
 handle_cast(stop, State) ->
-  {stop, shutdown, State}.
+  {stop, normal, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_info(Info, State) -> {noreply, State} |

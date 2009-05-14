@@ -126,7 +126,7 @@ handle_cast({done, Part}, State = #state{running=Running}) ->
   {noreply, State#state{running=NewRunning}};
   
 handle_cast(stop, State) ->
-  {stop, shutdown, State}.
+  {stop, normal, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_info(Info, State) -> {noreply, State} |

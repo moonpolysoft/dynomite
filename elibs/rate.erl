@@ -99,7 +99,7 @@ handle_cast({datapoint, {Value, Time}}, State = #rate{datapoints=DataPoints,peri
   {noreply, State#rate{datapoints=ModifiedDP}};
   
 handle_cast(close, State) ->
-  {stop, shutdown, State}.
+  {stop, normal, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_info(Info, State) -> {noreply, State} |

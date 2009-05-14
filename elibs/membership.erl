@@ -215,7 +215,7 @@ handle_call(status, _From, State = #membership{node = Node, nodes=Nodes, partiti
   {reply, Reply, State};
 
 handle_call(stop, _From, State) ->
-  {stop, shutdown, ok, State}.
+  {stop, normal, ok, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
@@ -252,7 +252,7 @@ handle_cast({gossip_with, Server}, State = #membership{nodes = _Nodes}) ->
   {noreply, State};
 
 handle_cast(stop, State) ->
-    {stop, shutdown, State}.
+    {stop, normal, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_info(Info, State) -> {noreply, State} |

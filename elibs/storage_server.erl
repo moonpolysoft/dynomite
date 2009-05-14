@@ -269,7 +269,7 @@ handle_call(rebuild_tree, {FromPid, _Tag}, State = #storage{dbkey=DbKey,table=Ta
   {reply, ok, State};
 	
 handle_call(close, _From, State) ->
-	{stop, shutdown, ok, State}.
+	{stop, normal, ok, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |

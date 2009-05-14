@@ -242,7 +242,7 @@ handle_cast({delete, Key}, DM = #dmerkle{tree=Tree,root=Root}) ->
   {noreply, DM#dmerkle{root=RetNode}};
 
 handle_cast(close, Tree) ->
-    {stop, shutdown, Tree}.
+    {stop, normal, Tree}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_info(Info, State) -> {noreply, State} |

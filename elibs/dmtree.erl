@@ -189,7 +189,7 @@ handle_call(state, _From, State) ->
 %% @end 
 %%--------------------------------------------------------------------
 handle_cast(close, State) ->
-    {stop, shutdown, State}.
+    {stop, normal, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_info(Info, State) -> {noreply, State} |

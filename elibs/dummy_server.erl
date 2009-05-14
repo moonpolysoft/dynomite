@@ -22,7 +22,7 @@ handle_call(connections, _From, State) ->
   {reply, 0, State}.
 
 handle_cast(stop, State) ->
-  {stop, shutdown, State};
+  {stop, normal, State};
 
 handle_cast(_Req, State) ->
   {noreply, State}.

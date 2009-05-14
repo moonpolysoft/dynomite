@@ -83,7 +83,7 @@ handle_call({mock_expects_call, Args, Fun, Times}, From, State = #state{call_exp
   {reply, ok, State#state{call_expects=add_expectation(Args, Fun, Times, Expects)}};
 
 handle_call(mock_stop, From, State) ->
-  {stop, shutdown, ok, State};
+  {stop, normal, ok, State};
 
 handle_call(Request, From, State = #state{call_stubs=Stubs,call_expects=Expects}) ->
   % expectations have a higher priority

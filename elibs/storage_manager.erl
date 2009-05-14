@@ -105,7 +105,7 @@ handle_call({load, Nodes, Partitions, PartsForNode, Bootstrap}, _From, #state{pa
 %% @end 
 %%--------------------------------------------------------------------
 handle_cast(stop, State) ->
-    {stop, shutdown, State}.
+    {stop, normal, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_info(Info, State) -> {noreply, State} |

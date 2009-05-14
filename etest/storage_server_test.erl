@@ -94,7 +94,7 @@ mnesia_storage_test() ->
     {ok,false} = storage_server:has_key(store2, "key_one"),
     {ok,true} = storage_server:has_key(store2, "key_two"),
     storage_server:delete(store2, "key_two"),
-    exit(Pid, shutdown),
+    exit(Pid, normal),
     configuration:stop(),
     timer:sleep(1),
     receive _ -> true end.
@@ -212,7 +212,7 @@ buffered_small_write_test() ->
   mock:verify_and_stop(dmerkle),
   mock:verify_and_stop(dets_storage),
   ?assertEqual(true, interrogate_test_loop(Pid)),
-  exit(Pid, shutdown),
+  exit(Pid, normal),
   configuration:stop(),
   timer:sleep(1),
   storage_server:close(Store).
@@ -243,7 +243,7 @@ buffered_stream_write_test() ->
   mock:verify_and_stop(dmerkle),
   mock:verify_and_stop(dets_storage),
   ?assertEqual(true, interrogate_test_loop(Pid)),
-  exit(Pid, shutdown),
+  exit(Pid, normal),
   configuration:stop(),
   timer:sleep(1),
   storage_server:close(Store).

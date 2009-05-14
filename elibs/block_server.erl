@@ -108,7 +108,7 @@ handle_call({write_key, Offset, Key}, _From, State = #state{keys=Keys}) ->
   {reply, {file:write(Keys, Key ++ [0]), Position}, State};
   
 handle_call(close, _From, State) ->
-  {stop, shutdown, ok, State}.
+  {stop, normal, ok, State}.
 
 %%--------------------------------------------------------------------
 %% @spec handle_cast(Msg, State) -> {noreply, State} |
