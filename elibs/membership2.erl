@@ -50,6 +50,9 @@ servers_for_key(Key) ->
   
 stop(Server) ->
   gen_server:cast(Server, stop).
+  
+listen(Pid) ->
+  gen_server:call(membership, {listen, Pid}).
 
 %%====================================================================
 %% gen_server callbacks
@@ -103,6 +106,9 @@ handle_call({join, OtherNode}, _From, State = #state{version=Version, node=Node,
   fire_gossip(Node, NewState, Config),
   {reply, {Version, WorldNodes, ServerList}, NewState};
 
+handle_call({listen, Pid}, _From, State = #state{listeners=Listeners, partitions=PMap}) ->
+  {reply, PMap, State#state{listeners=lists:usort([Pid|Listeners])}};
+
 handle_call({servers_for_key, Key}, _From, State = #state{servers=Servers}) ->
   Config = configuration:get_config(),
   Hash = lib_misc:hash(Key),
@@ -127,11 +133,9 @@ handle_cast({gossip, Version, Nodes, ServerList}, State = #state{node=Me}) ->
     equal -> {noreply, Merged};
     merged ->
       fire_gossip(Me, Merged, configuration:get_config()),
+      publish_map_to_listeners(Merged),
       {noreply, Merged}
   end;
-
-handle_cast({listen, Pid}, State = #state{listeners=Listeners}) ->
-  {noreply, State = #state{listeners = lists:usort([Pid|Listeners])}};
 
 handle_cast({register, Partition, Pid}, State = #state{servers=Servers,node=Me}) ->
   ?debugFmt("registering ~p", [{Partition, Pid}]),
@@ -209,7 +213,7 @@ save(State) ->
 %% which isn't necessarily the same as the list of running nodes
 join_to(Node, Servers, Partners) ->
   join_to(Node, Servers, Partners, {vector_clock:create(pid_to_list(self())), []}).
-  
+
 join_to(_, _, [], {Version, World}) ->
   {Version, World};
 join_to(Node, Servers, [Remote|Partners], {Version, World}) ->
@@ -243,8 +247,11 @@ fire_gossip(Me, State = #state{nodes = Nodes}, Config) ->
 
 gossip_with(Me, OtherNode, State = #state{version = Version, nodes = Nodes, servers = Servers}) ->
   ServerPacket = servers_to_list(Servers),
-  gen_server:call({membership, OtherNode}, {gossip, Version, Nodes, ServerPacket}).
+  call_gossip(OtherNode, Version, Nodes, ServerPacket).
   
+call_gossip(OtherNode, Version, Nodes, ServerPacket) ->
+  gen_server:call({membership, OtherNode}, {gossip, Version, Nodes, ServerPacket}).
+
 %% this gets everything we know of, not just locals
 servers_to_list(Servers) ->
   L = ets:foldl(fun
@@ -259,7 +266,7 @@ server_list_into_table(ServerList, Servers) ->
   lists:foreach(fun({Partition, Pid}) ->
       ets:insert(Servers, {Partition, Pid})
     end, ServerList).
-  
+
 hash_to_partition(0, _) ->
   1;
 hash_to_partition(Hash, Q) ->
@@ -270,7 +277,12 @@ hash_to_partition(Hash, Q) ->
     Rem > 0 -> Factor * Size + 1;
     true -> ((Factor-1) * Size) + 1
   end.
-  
+
+publish_map_to_listeners(#state{partitions=PMap,listeners=Listeners,node=Node}) ->
+  lists:foreach(fun(Pid) ->
+      gen_server:cast(Pid, {remap, Node, PMap})
+    end, Listeners).
+
 int_partitions_for_node(Node, State, master) ->
   Partitions = State#state.partitions,
   {Matching,_} = lists:partition(fun({N,_}) -> N == Node end, Partitions),

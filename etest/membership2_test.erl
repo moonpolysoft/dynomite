@@ -96,6 +96,12 @@ handle_local_server_outage_test() ->
   configuration:stop(),
   SServer2 ! stop,
   file:delete(priv_file("a.world")).
+  
+full_gossip_test() ->
+  configuration:start_link(#config{n=1,r=1,w=1,q=2,directory=priv_dir()}),
+  {ok, _} = mock:mock(replication),
+  mock:expects(replication, partners, fun({_, ?NODES, _}) -> true end, [?NODEB, ?NODEC],4),
+  
 
 make_server() ->
   spawn(fun() -> 
