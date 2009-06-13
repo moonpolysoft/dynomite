@@ -15,7 +15,7 @@ Documentation
 IRC
 ---
 
-#dynomite on irc.freenode.net
+channel #dynomite on irc.freenode.net
 
 Mailing List
 ---
