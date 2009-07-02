@@ -12,6 +12,11 @@ Documentation
 * [Getting Started](http://wiki.github.com/cliffmoon/dynomite/getting-started)
 * [Clustering Guide](http://wiki.github.com/cliffmoon/dynomite/clustering-guide)
 
+IRC
+---
+
+channel #dynomite on irc.freenode.net
+
 Mailing List
 ---
 

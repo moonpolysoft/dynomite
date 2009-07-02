@@ -2,10 +2,10 @@
   {"dynomite_rel", "dynomite_?VERSION"},
   {erts, "5.6.3"},
   [
-    {kernel, "2.12.3"},
-    {crypto, "1.5.2"},
-    {stdlib, "1.15.3"},
-    {sasl, "2.1.5.3"},
+    {kernel, "2.13.1"},
+    {crypto, "1.6"},
+    {stdlib, "1.16.1"},
+    {sasl, "2.1.6"},
     {mochiweb, "0.01"},
     {thrift, "0.1"},
     {dynomite, "?VERSION"}

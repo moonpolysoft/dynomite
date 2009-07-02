@@ -30,6 +30,10 @@ OptionParser.new do |opts|
   opts.on('-d', "--detached", "run detached from the shell") do |detached|
     options[:detached] = '-detached'
   end
+
+  opts.on('-p', "--pidfile PIDFILE", "write pidfile to PIDFILE") do |pidfile|
+    options[:pidfile] = %Q(-dynomite pidfile "'#{pidfile}'")
+  end
 end.parse!
 
 cookie = Digest::MD5.hexdigest(options[:cluster] + "NomMxnLNUH8suehhFg2fkXQ4HVdL2ewXwM")
@@ -51,6 +55,7 @@ str = "erl \
   -setcookie #{cookie} \
   #{options[:startup]} \
   #{options[:detached]} \
+  #{options[:pidfile]} \
   #{options[:profile]}"
 puts str
 exec str

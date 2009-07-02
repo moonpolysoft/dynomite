@@ -15,3 +15,4 @@ priv/*.so
 c/*.o
 build/*
 releases/dynomite-*
+*.pid
