@@ -182,7 +182,7 @@ handle_call({get, Key}, {RemotePid, _Tag}, State = #storage{module=Module,table=
   R = case Result of
     {ok, {Context, Values}} -> 
       Size = iolist_size(Values),
-      % stats_server:request(get, Size),
+      stats_server:request(get, Size),
       if
         (Size > ?CHUNK_SIZE) and (node(RemotePid) /= node()) ->
           Ref = make_ref(),
@@ -379,7 +379,7 @@ internal_put(Key, Context, Values, Tree, Table, Module, State) ->
   ?forp(put),
   case TableResult of
     {ok, ModifiedTable} ->
-      % stats_server:request(put, iolist_size(Values)),
+      stats_server:request(put, iolist_size(Values)),
       {ok, State#storage{table=ModifiedTable}};
     Failure -> {Failure, State}
   end.
