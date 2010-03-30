@@ -1,5 +1,19 @@
+NOTICE
+========
+
+If the lack of commits over the past year isn't a clue, this is your warning that Dynomite is a dead project and is no longer
+being maintained.  At some point in the future my employer may allow me to push out the improvements that I've made
+since I was barred from pushing code publicly.  But I would not count on it, and I would not recommend you use Dynomite
+for anything other than a functional design document on how to build a Dynamo clone.
+
+If you need an erlang Dynamo clone for production use I would recommend Riak: http://riak.basho.com/
+
+If you need something with a bigtable style data model then I recommend Cassandra: http://cassandra.apache.org/
+
+
+
 Dynomite
-===
+-------
 
 This is dynomite.  It is a clone of the amazon dynamo key value store written in Erlang.
 
