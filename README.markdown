@@ -6,9 +6,9 @@ being maintained.  At some point in the future my employer may allow me to push 
 since I was barred from pushing code publicly.  But I would not count on it, and I would not recommend you use Dynomite
 for anything other than a functional design document on how to build a Dynamo clone.
 
-If you need an erlang Dynamo clone for production use I would recommend Riak: http://riak.basho.com/
+If you need an erlang Dynamo clone for production use I would recommend [Riak](http://riak.basho.com/).
 
-If you need something with a bigtable style data model then I recommend Cassandra: http://cassandra.apache.org/
+If you need something with a bigtable style data model then I recommend [Cassandra](http://cassandra.apache.org/).
 
 
 
